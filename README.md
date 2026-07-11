@@ -28,6 +28,7 @@ The architectural bet: **one interaction layer, two products.** Training modules
 | ✋ **Skeleton-agnostic hand poses** | Poses stored as curl/splay values, retargeted per skeleton + fingertip IK — one pose library survives hand-mesh swaps and any player hand size. |
 | 🎯 **Zero-setup detection** | Registry-based broad phase with activation radii; no per-object collision configuration, ever. |
 | 📋 **SOP step graph** | A judge, not a controller — the world stays interactive, the graph watches and validates. Branching, parallel steps, Guided/Practice/Exam modes, session reports. |
+| 🚶 **Comfort-first locomotion** | One component, every mode — teleport (room-scale origin so your head lands on target), smooth move, snap/smooth turn, comfort vignette; hand-tracking gesture parity with automatic teleport fallback. |
 | ✨ **Premium authoring UX** | Presets, viewport gizmos, ghost-hand previews, in-VR pose recorder, author-time validation panel. |
 
 ---
@@ -35,15 +36,16 @@ The architectural bet: **one interaction layer, two products.** Training modules
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│  FXR_Training   (optional — SOP layer)      │  knows about Interaction
-├─────────────────────────────────────────────┤
-│  FXR_UI         (spatial UI kit, motion)    │
-├─────────────────────────────────────────────┤
-│  FXR_Interaction (components + solvers)     │  knows nothing about Training
-├─────────────────────────────────────────────┤
-│  FXR_Core       (platform / OpenXR layer)   │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  FXR_Training     (optional — SOP layer)                    │  knows about everything below
+├──────────────────────────────┬──────────────────────────────┤
+│  FXR_UI                      │  FXR_Locomotion              │  siblings
+│  (spatial UI kit, motion)    │  (teleport, smooth, turn)    │
+├──────────────────────────────┴──────────────────────────────┤
+│  FXR_Interaction  (components + solvers + detection)        │  knows nothing about Training
+├─────────────────────────────────────────────────────────────┤
+│  FXR_Core         (platform / OpenXR layer)                 │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **Full design document:** [`Docs/FlexXR_Architecture.md`](Docs/FlexXR_Architecture.md)
@@ -86,6 +88,7 @@ Right-click `FlexXR.uproject` → **Generate Visual Studio project files** → o
 
 - [ ] **Phase 1 — FXR_Core** · pawn/rig, `IFXR_Interactor`, input mapping, capability detection, event bus, MR flags
 - [ ] **Phase 2 — Interaction core** · detection subsystem, constraint solver, Grab / Latch / Press, grip points, pose retargeting
+- [ ] **Phase 2.5 — FXR_Locomotion** · teleport (arc + validation, room-scale origin), smooth move, snap/smooth turn, comfort vignette, anchors + blockers
 - [ ] **Phase 3 — FXR_UI** · spatial UI kit, ray targeting + focus manager, sockets, highlight system
 - [ ] **Phase 4 — FXR_Training** · SOP step graph, modes, reporting + fire safety demo
 - [ ] **Phase 5 — Optimization** · Quest standalone build, Unreal Insights performance case study
