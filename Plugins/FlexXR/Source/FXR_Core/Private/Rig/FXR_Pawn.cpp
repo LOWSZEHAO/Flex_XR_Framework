@@ -128,6 +128,15 @@ IFXR_Interactor* AFXR_Pawn::GetActiveInteractor(EFXR_HandSide Side) const
 	return nullptr;
 }
 
+float AFXR_Pawn::GetHandGripAlpha(EFXR_HandSide Side) const
+{
+	if (IFXR_Interactor* Interactor = GetActiveInteractor(Side))
+	{
+		return Interactor->GetSelectValue();
+	}
+	return 0.f;
+}
+
 UFXR_XRSubsystem* AFXR_Pawn::GetXRSubsystem() const
 {
 	if (const UWorld* World = GetWorld())

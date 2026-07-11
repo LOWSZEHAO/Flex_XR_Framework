@@ -40,6 +40,10 @@ public:
 	/** The active interactor for a hand (controller / tracked hand / desktop-sim, per capabilities). */
 	IFXR_Interactor* GetActiveInteractor(EFXR_HandSide Side) const;
 
+	/** BlueprintPure fallback for Anim BPs without UFXR_HandVisual: the active interactor's grip (Select) value 0..1. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Rig")
+	float GetHandGripAlpha(EFXR_HandSide Side) const;
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
 	TObjectPtr<USceneComponent> VROrigin;
