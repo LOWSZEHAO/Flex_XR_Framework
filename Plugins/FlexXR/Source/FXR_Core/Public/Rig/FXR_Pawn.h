@@ -8,6 +8,7 @@
 #include "FXR_Pawn.generated.h"
 
 class UCameraComponent;
+class UMotionControllerComponent;
 class UFXR_ControllerInteractor;
 class UFXR_HandInteractor;
 class UFXR_DesktopSimInteractor;
@@ -56,6 +57,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
 	TObjectPtr<USceneComponent> RightHandRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
+	TObjectPtr<UMotionControllerComponent> LeftMotionController;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
+	TObjectPtr<UMotionControllerComponent> RightMotionController;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_ControllerInteractor> LeftController;

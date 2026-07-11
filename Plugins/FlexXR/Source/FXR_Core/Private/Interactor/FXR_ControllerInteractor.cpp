@@ -2,36 +2,11 @@
 
 #include "Interactor/FXR_ControllerInteractor.h"
 #include "Input/FXR_InputConfig.h"
-#include "MotionControllerComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-
-UFXR_ControllerInteractor::UFXR_ControllerInteractor()
-{
-	MotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("MotionController"));
-	if (MotionController)
-	{
-		MotionController->SetupAttachment(this);
-	}
-}
-
-void UFXR_ControllerInteractor::BeginPlay()
-{
-	Super::BeginPlay();
-
-	if (MotionController)
-	{
-		MotionController->SetTrackingMotionSource(HandSide == EFXR_HandSide::Left ? FName("Left") : FName("Right"));
-	}
-}
-
-FTransform UFXR_ControllerInteractor::GetTrackedTransform() const
-{
-	return MotionController ? MotionController->GetComponentTransform() : Super::GetTrackedTransform();
-}
 
 void UFXR_ControllerInteractor::BindInput(UEnhancedInputComponent* InputComponent, const UFXR_InputConfig* InputConfig)
 {

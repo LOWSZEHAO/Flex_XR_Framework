@@ -11,6 +11,7 @@
 #include "Types/FXR_LogChannels.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
+#include "MotionControllerComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
@@ -40,12 +41,23 @@ AFXR_Pawn::AFXR_Pawn()
 	RightHandRoot = CreateDefaultSubobject<USceneComponent>(TEXT("RightHandRoot"));
 	RightHandRoot->SetupAttachment(VROrigin);
 
+	// The pawn owns the motion controllers (never nest a default subobject inside another
+	// component — Blueprint subclassing then mismatches the attach-parent). The controller
+	// interactors parent under them and inherit the tracked pose.
+	LeftMotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("LeftMotionController"));
+	LeftMotionController->SetupAttachment(LeftHandRoot);
+	LeftMotionController->SetTrackingMotionSource(FName("Left"));
+
+	RightMotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("RightMotionController"));
+	RightMotionController->SetupAttachment(RightHandRoot);
+	RightMotionController->SetTrackingMotionSource(FName("Right"));
+
 	LeftController = CreateDefaultSubobject<UFXR_ControllerInteractor>(TEXT("LeftController"));
-	LeftController->SetupAttachment(LeftHandRoot);
+	LeftController->SetupAttachment(LeftMotionController);
 	LeftController->SetHandSide(EFXR_HandSide::Left);
 
 	RightController = CreateDefaultSubobject<UFXR_ControllerInteractor>(TEXT("RightController"));
-	RightController->SetupAttachment(RightHandRoot);
+	RightController->SetupAttachment(RightMotionController);
 	RightController->SetHandSide(EFXR_HandSide::Right);
 
 	LeftHand = CreateDefaultSubobject<UFXR_HandInteractor>(TEXT("LeftHand"));
