@@ -344,7 +344,7 @@ Step 3: "Pull the safety pin"
 
 **Output:** session report — time per step, mistakes, hints consumed, score; replay powered by the deterministic solver.
 
-**Implementation choice at Phase 4 kickoff:** UE **StateTree** (fast, proven) vs. custom graph asset + editor (stronger tooling-portfolio flex, more work). The event-bus contract is identical either way.
+**Implementation choice (decided — ADR-004):** a custom lightweight step runtime (`FFXR_StepRunner`) consuming a compiled step array, authored via `UFXR_StepGraph` DataAssets — **not** UE StateTree, and no bespoke node editor yet. The authoring format is deliberately separated from the runtime, so front-ends (DataAsset, CSV/JSON import for client SOPs, a future visual graph editor) are swappable with zero runtime churn. See `Docs/adr/ADR-004-sop-step-graph.md`.
 
 ---
 
@@ -444,7 +444,7 @@ Day-one in FXR_Core: `EFXR_Mode { VR, MR }` threaded through pawn/rig and render
 | **1 — FXR_Core** | Repo scaffolding (README skeleton, `CODING_STANDARDS.md`, CI, ADR seed); pawn/rig, `IFXR_Interactor` (controller + tracked hand + desktop sim), input mapping, capability detection, event bus, MR flags | 3–4 wks |
 | **2 — Interaction core** | `UFXR_InteractionSubsystem` + detection pipeline, `FFXR_ConstraintSolver`, InteractableBase (enable API, driven-component rule), FXR_Grab (+ use events, two-hand), FXR_GripPoint + pose pipeline + retargeting, FXR_Latch, FXR_Press | 4–6 wks |
 | **3 — FXR_UI + presentation** | Spatial UI kit, motion-design spec, FXR_RayTarget + focus manager, FXR_Socket, highlight system (3 styles, per-tier impls), guidance primitives, validation panel | 3–4 wks |
-| **4 — FXR_Training + SOP demo** | Step graph (StateTree vs custom decision), modes, reporting; **fire safety training demo** built entirely on FlexXR | 4–6 wks |
+| **4 — FXR_Training + SOP demo** | Step graph (`FFXR_StepRunner` + `UFXR_StepGraph` DataAssets, per ADR-004), modes, reporting; **fire safety training demo** built entirely on FlexXR | 4–6 wks |
 | **5 — Optimization + standalone** | Quest build, Insights profiling, budget enforcement, **performance case study** | 3–4 wks |
 | **6 — MR pass + game demo** | Passthrough, planes, anchors; **small action game demo** on FlexXR | 4–6 wks |
 
@@ -496,6 +496,7 @@ Every non-obvious decision gets a short ADR in `Docs/adr/` (context → decision
 - **ADR-001** — kinematic-while-held, physics-on-release solver (over physics constraints)
 - **ADR-002** — registry detection over physics overlap events
 - **ADR-003** — no separate interactable interface (§5.7)
+- **ADR-004** — custom SOP step runtime + DataAsset authoring, over StateTree / a node editor (§7)
 
 ADRs are the written answer to "can you explain your architecture?" — considered-and-rejected beats cargo-culted-in.
 
