@@ -95,4 +95,5 @@ Right-click `FlexXR.uproject` → **Generate Visual Studio project files** → o
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+All rights reserved — see [LICENSE](LICENSE). This repository is public for
+portfolio review; no usage license is granted.
