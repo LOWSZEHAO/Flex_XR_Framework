@@ -23,6 +23,11 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		}
 		// Driven == HeldOffset * Grip, so HeldOffset reconstructs the hold as the grip moves.
 		HeldOffset = Driven->GetComponentTransform().GetRelativeTransform(Interactor->GetGripTransform());
+
+		LastLocation = Driven->GetComponentLocation();
+		LastRotation = Driven->GetComponentQuat();
+		TrackedLinearVelocity = FVector::ZeroVector;
+		TrackedAngularVelocity = FVector::ZeroVector;
 	}
 }
 
@@ -33,9 +38,35 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		return;
 	}
 
-	if (UPrimitiveComponent* Driven = HeldComponent.Get())
+	UPrimitiveComponent* Driven = HeldComponent.Get();
+	if (!Driven)
 	{
-		Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+		return;
+	}
+
+	Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Track hand velocity from the driven motion so release can hand it off (ADR-001 release step).
+	if (DeltaTime > SMALL_NUMBER)
+	{
+		const FVector NewLocation = Driven->GetComponentLocation();
+		const FQuat NewRotation = Driven->GetComponentQuat();
+
+		TrackedLinearVelocity = (NewLocation - LastLocation) / DeltaTime;
+
+		FQuat DeltaQuat = NewRotation * LastRotation.Inverse();
+		DeltaQuat.Normalize();
+		FVector Axis;
+		float Angle;
+		DeltaQuat.ToAxisAndAngle(Axis, Angle);
+		if (Angle > PI)
+		{
+			Angle -= 2.f * PI;
+		}
+		TrackedAngularVelocity = Axis * (Angle / DeltaTime);
+
+		LastLocation = NewLocation;
+		LastRotation = NewRotation;
 	}
 }
 
@@ -46,10 +77,14 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 		if (bRestorePhysics)
 		{
 			Driven->SetSimulatePhysics(true);
+			Driven->SetPhysicsLinearVelocity(TrackedLinearVelocity * ThrowVelocityScale);
+			Driven->SetPhysicsAngularVelocityInRadians(TrackedAngularVelocity);
 		}
 	}
 
 	HeldComponent = nullptr;
 	bRestorePhysics = false;
+	TrackedLinearVelocity = FVector::ZeroVector;
+	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
 }

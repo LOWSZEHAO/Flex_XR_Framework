@@ -26,8 +26,18 @@ public:
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime) override;
 	virtual void OnEnd(EFXR_EndReason Reason) override;
 
+protected:
+	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
+	float ThrowVelocityScale = 1.f;
+
 private:
 	FTransform HeldOffset = FTransform::Identity;
 	bool bRestorePhysics = false;
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
+
+	FVector LastLocation = FVector::ZeroVector;
+	FQuat LastRotation = FQuat::Identity;
+	FVector TrackedLinearVelocity = FVector::ZeroVector;
+	FVector TrackedAngularVelocity = FVector::ZeroVector;
 };
