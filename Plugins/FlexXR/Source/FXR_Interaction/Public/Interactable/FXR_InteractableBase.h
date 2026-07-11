@@ -31,6 +31,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** The everyday gameplay switch (cutscene disable, quest unlock, ...). */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Interaction")
@@ -72,6 +73,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Training", meta = (EditCondition = "bExposeToTraining"))
 	FName InteractionId;
+
+	/** Draw the activation radius at runtime (green = held, orange = available, red = disabled). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction|Debug")
+	bool bDrawDebugRadius = false;
 
 	bool bHeld = false;
 };

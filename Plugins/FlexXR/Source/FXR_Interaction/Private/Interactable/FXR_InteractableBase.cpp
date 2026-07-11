@@ -6,10 +6,13 @@
 #include "Events/FXR_EventBus.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
+#include "DrawDebugHelpers.h"
 
 UFXR_InteractableBase::UFXR_InteractableBase()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// Tick exists only for the optional debug draw; disabled unless bDrawDebugRadius is set.
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
 void UFXR_InteractableBase::BeginPlay()
@@ -19,6 +22,22 @@ void UFXR_InteractableBase::BeginPlay()
 	if (UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this))
 	{
 		Subsystem->RegisterInteractable(this);
+	}
+
+	SetComponentTickEnabled(bDrawDebugRadius);
+}
+
+void UFXR_InteractableBase::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (bDrawDebugRadius)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
+			DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
+		}
 	}
 }
 
