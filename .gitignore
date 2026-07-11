@@ -38,3 +38,7 @@ desktop.ini
 # ── Local / secrets ────────────────────────────────────────────
 *.local
 .env
+
+# ── Third-party / engine template content (migrate locally, not redistributed) ──
+# UE VR Template "MannequinsXR" hands are Epic sample content — kept out of the repo.
+Content/XRMannequins/
