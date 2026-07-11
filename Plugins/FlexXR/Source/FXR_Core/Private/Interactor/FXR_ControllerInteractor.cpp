@@ -40,15 +40,19 @@ void UFXR_ControllerInteractor::BindInput(UEnhancedInputComponent* InputComponen
 		return;
 	}
 
-	if (InputConfig->SelectAction)
+	const bool bLeft = (HandSide == EFXR_HandSide::Left);
+	UInputAction* SelectAction = bLeft ? InputConfig->SelectActionLeft : InputConfig->SelectActionRight;
+	UInputAction* UseAction = bLeft ? InputConfig->UseActionLeft : InputConfig->UseActionRight;
+
+	if (SelectAction)
 	{
-		InputComponent->BindAction(InputConfig->SelectAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleSelect);
-		InputComponent->BindAction(InputConfig->SelectAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleSelect);
+		InputComponent->BindAction(SelectAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleSelect);
+		InputComponent->BindAction(SelectAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleSelect);
 	}
-	if (InputConfig->UseAction)
+	if (UseAction)
 	{
-		InputComponent->BindAction(InputConfig->UseAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleUse);
-		InputComponent->BindAction(InputConfig->UseAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleUse);
+		InputComponent->BindAction(UseAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleUse);
+		InputComponent->BindAction(UseAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleUse);
 	}
 }
 

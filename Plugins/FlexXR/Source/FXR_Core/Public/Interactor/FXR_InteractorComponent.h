@@ -44,6 +44,9 @@ public:
 	/** Set whether this interactor is the active source for its hand (driven by UFXR_XRSubsystem hot-swap). */
 	void SetInteractorActive(bool bActive) { bInteractorActive = bActive; }
 
+	/** Set which hand this interactor drives (configured by the owning rig at construction). */
+	void SetHandSide(EFXR_HandSide Side) { HandSide = Side; }
+
 protected:
 	/** Transform the poses derive from — this component's transform by default; hand tracking overrides it. */
 	virtual FTransform GetTrackedTransform() const;

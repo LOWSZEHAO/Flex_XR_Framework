@@ -45,3 +45,13 @@ enum class EFXR_InteractionPhase : uint8
 	Updated UMETA(DisplayName = "Updated"),
 	Ended   UMETA(DisplayName = "Ended")
 };
+
+/** Override for which interactor set AFXR_Pawn activates. Auto decides from device capabilities; the Force modes aid testing. */
+UENUM(BlueprintType)
+enum class EFXR_InteractorPreference : uint8
+{
+	Auto             UMETA(DisplayName = "Auto (by capabilities)"),
+	ForceControllers UMETA(DisplayName = "Force Controllers"),
+	ForceHands       UMETA(DisplayName = "Force Tracked Hands"),
+	ForceDesktop     UMETA(DisplayName = "Force Desktop Sim")
+};
