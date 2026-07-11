@@ -1,0 +1,37 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main, 'phase-*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  standards:
+    name: Coding standards checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No raw new/delete in framework source
+        run: |
+          if grep -rnE '\b(new|delete)\s' --include='*.cpp' --include='*.h' Plugins/FlexXR/Source 2>/dev/null \
+             | grep -vE 'NewObject|delete\[\]\s*//|// allowed'; then
+            echo "::error::Raw new/delete found — see CODING_STANDARDS.md §2"; exit 1
+          fi
+
+      - name: Naming convention (FXR_ prefix on public types)
+        run: |
+          # Warn-only for now; tightened as the API stabilises.
+          grep -rn --include='*.h' -E 'class\s+FLEXXR_API\s+U(?!FXR_)' Plugins/FlexXR/Source || true
+
+      - name: Trailing whitespace
+        run: |
+          if grep -rn '[[:blank:]]$' --include='*.cpp' --include='*.h' Plugins/FlexXR/Source 2>/dev/null; then
+            echo "::error::Trailing whitespace"; exit 1
+          fi
+
+# NOTE: Compiling Unreal and running Automation tests requires an engine installation
+# (~100 GB) and is not feasible on GitHub-hosted runners. Automation tests
+# (solver determinism, detection scoring, pose retargeting) run on a self-hosted
+# runner — see Docs/CI.md. This workflow enforces the cheap, portable checks.

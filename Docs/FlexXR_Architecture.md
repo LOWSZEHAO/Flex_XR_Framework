@@ -1,0 +1,535 @@
+# FlexXR Framework — Architecture Summary
+
+**Version:** 0.3 (Design Complete + Engineering Standards Pass)
+**Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
+**Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
+**Author:** [your name]
+
+---
+
+## 1. Vision & Positioning
+
+FlexXR is a premium, dual-purpose XR interaction framework for Unreal Engine:
+
+1. **SOP-driven industrial training** — step-based procedure training (e.g. fire safety), with validation, mistake tracking, scoring, and replay.
+2. **High-fidelity VR games** — Alyx-grade hand interaction feel, deterministic physics behavior, hand tracking + controller parity.
+
+The core bet: **one interaction layer serves both.** Training modules sit *on top of* the interaction layer and only observe it — games simply never load them.
+
+**Identity statement for the portfolio:**
+> FlexXR proves AAA-*capable* interaction fidelity (physics hands, deterministic feel, 90 fps discipline) plus enterprise training infrastructure — in one plugin architecture. FlexXR does **not** ship gameplay systems (combat, AI, inventory); its job ends at "hands touch world, world responds beautifully."
+
+---
+
+## 2. Design Principles — the "Apple Vibe" Contract
+
+| Principle | Meaning in practice |
+|---|---|
+| **Zero-code common path** | A door, a lever, a grabbable prop: add one component, pick a preset, done. |
+| **Enabled & automatic by default** | Drop FXR_Grab → grabbable immediately. Default highlight appears on hover with no setup. Components exist to *customize*, never to switch basics on. |
+| **Presets first** | Ship a library of tuned presets (Door — Heavy, Power Grip, Breaker Switch). Designers start from feel, not numbers. |
+| **Visual authoring** | Swing-arc gizmos with draggable limit handles, ghost-hand pose preview in viewport. Tune by looking, not typing. |
+| **One component per behavior** | Users never add "helper" components that exist for code-architecture reasons (two-hand grab is a checkbox, not a component; the interaction laser is a framework service, not a component). |
+| **Consistent feel enforced centrally** | All constrained motion runs through one shared solver; all highlights through one focus manager → every project feels like the same product. |
+| **Rich surface, minimal core** | Many components visible; few real systems underneath (one solver, one hand pipeline, one detection/focus pipeline, one input abstraction). |
+| **Author-time validation** | The FlexXR editor panel flags misconfiguration (ambiguous driven mesh, missing collision on physics props) at edit time — never as a headset mystery. |
+| **Desktop simulation mode** | Mouse-drive interactions in PIE without a headset for instant feel iteration. |
+
+---
+
+## 3. Module Architecture
+
+One plugin, four modules, **strictly one-way dependencies**:
+
+```
+┌─────────────────────────────────────────────┐
+│  FXR_Training   (optional — SOP layer)      │  knows about Interaction
+├─────────────────────────────────────────────┤
+│  FXR_UI         (spatial UI kit, motion)    │
+├─────────────────────────────────────────────┤
+│  FXR_Interaction (components + solvers +    │  knows nothing about Training
+│                   detection + highlight)    │
+├─────────────────────────────────────────────┤
+│  FXR_Core       (platform / OpenXR layer)   │
+└─────────────────────────────────────────────┘
+```
+
+### 3.1 FXR_Core — platform layer
+- OpenXR abstraction; runtime **device capability detection** (hands? controllers? standalone or PCVR? passthrough?).
+- `IFXR_Interactor` — unified input interface. Controller, tracked hand, hand-ray, and desktop-sim mouse all implement it; interaction code never knows which is active. Hot-swaps when the user puts controllers down (Quest).
+- Each interactor owns the framework-managed **query shapes**: grab sphere, fingertip probes, far ray (§5.4).
+- Input mapping: trigger/grip on controllers ⇄ pinch/index-squeeze on tracked hands.
+- **MR-readiness flags** (§10): `EFXR_Mode { VR, MR }`, passthrough toggle, spatial-anchor abstraction.
+- FXR event bus: interactions broadcast `InteractionId` events (training subscribes; games ignore).
+
+### 3.2 FXR_Interaction — the heart
+User-facing components (§4), the internal systems powering them (§5), the detection/focus pipeline, and the highlight system.
+
+### 3.3 FXR_UI — where the premium feel lives
+- Spatial UI kit: panels, buttons, sliders, keypads (auto ray-targetable).
+- **One motion-design spec** (durations, easing, spatial-audio ticks, micro-haptics) enforced framework-wide.
+- Diegetic guidance primitives: ghost-hand demonstrations, directional arrows (consumed by FXR_Training, usable by games).
+
+### 3.4 FXR_Training — the SOP layer (optional)
+Data-driven step graph that **watches** `InteractionId` events and validates them (§7). Scoring, mistake analytics, reports, replay. Games never load it.
+
+---
+
+## 4. Component Reference (user-facing)
+
+### 4.0 UFXR_InteractableBase — the shared foundation
+
+FXR_Grab, FXR_Latch, FXR_Press, FXR_Socket, and FXR_Use all inherit from one base class, so **every interactable shows the same core properties** in its detail panel:
+
+```
+Interaction
+├─ ☑ Interaction Enabled          (default ON — drop the component, it works)
+├─ Interactor Filter:  Any ▾      (hand side / interactor type / gameplay-tag
+│                                  conditions, e.g. "State.HasGloves")
+├─ Driven Component:   Auto ▾     (see resolution rule below)
+Highlight
+├─ Highlight Style:    Outline ▾  (Outline / Inner Blink / Sweep /
+│                                  Project Default / None)
+├─ Highlight Color:    ▉ Bright Yellow (default)
+└─ Sweep Direction:    Left → Right ▾   (shown only when Style = Sweep)
+Training
+├─ ☐ Expose to Training
+└─ InteractionId:      "Open_FireDoor_A"
+```
+
+**Runtime control API (Blueprint-callable on every interactable):**
+- `SetInteractionEnabled(bool)` — the everyday gameplay switch (cutscene → disable; quest unlock → enable).
+- **Already-Held Policy** when disabling mid-grab: `FinishNaturally` (can't re-grab after release) or `ForceRelease` (ripped from hand — disarm, stun).
+- `ForceRelease()` standalone.
+- Disabled objects automatically suppress hover highlights and grip attraction — the UI never advertises what you can't do.
+- Games gate with this API; FXR_Training hard-lock steps call **the same API** — one mechanism, two callers.
+
+**Driven Component resolution rule** ("which mesh do I move/affect?"):
+1. **Auto (default):** the component's attach parent if it's a mesh/primitive; otherwise the actor's root primitive. Natural setups need zero assignment.
+2. **Explicit:** multi-mesh actors → dropdown lists the actor's primitives, pick one. The editor validation panel flags ambiguity at author time.
+3. Pivot/mechanism transforms are **cached in actor space at initialization** — so a latch component that is a child of the mesh it rotates never orbits its own pivot (circular-parenting trap, pre-solved).
+
+**Highlight resolution order:** FXR_Highlight component (if present) → the interactable's own dropdown → project settings.
+
+---
+
+### FXR_Grab
+Free 6-DOF hold.
+- Physics or kinematic hold, snap-to-pose via FXR_GripPoint.
+- `☑ Allow Two-Handed` + secondary grip slots (internally the shared two-hand solver — **not** a separate user component).
+- **Built-in use events** for the 80% case ("hold grip, pull trigger"): `OnUseStarted / OnUseEnded / UseValue (0–1)`. Trigger on controllers, index-squeeze on tracked hands. A gun or flashlight needs *only* FXR_Grab.
+- On release: full physics simulation with inherited velocity.
+
+### FXR_Latch
+Constrained motion. **The component is a SceneComponent and its own transform IS the pivot** — attach it, drag it to the hinge edge, done. The swing-arc/travel gizmo draws from the component and redraws live.
+
+```
+Motion
+├─ Motion Type:  Rotational ▾   (Rotational / Linear)
+├─ Motion Axis:  Local Z ▾      (Local X / Y / Z — relative to the
+│                                component's own transform, so odd angled
+│                                hinges = just rotate the component)
+├─ Limits:       0° … 110°      (draggable gizmo handles)
+├─ ☑ Allow Palm Push            (push-only rule enforced by solver)
+└─ ☑ Allow Two-Handed
+```
+
+Internally only **two motion primitives** — rotational and linear — everything else is preset configuration:
+
+| Preset | Primitive | Configuration |
+|---|---|---|
+| Door | Rotational | Continuous; limits; detent at 0° (unlatch pop); `LatchValue 0–1` |
+| Lever / Switch | Rotational | `bSnapToStates`; state array; spring-to-nearest; `OnStateChanged(int)` |
+| Dial / Valve | Rotational | Unlimited/multi-turn; optional detents |
+| Slide / Drawer | Linear | Limits, resistance, detents |
+
+Grip drive (handle) and contact drive (palm) feed the **same solver** — identical weight and damping either way. Grabbing near the pivot vs. the handle naturally yields coarse vs. fine control (real leverage, free).
+
+### FXR_Press
+Poke interactions: buttons, keypads, touchscreens. Fingertip-depth driven, press travel + haptic tick + audio from the motion spec.
+
+### FXR_Socket
+Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **ghost preview** appears if the object passes the filter → release in zone (or auto-snap on proximity, per setting) → detaches from hand, attaches to socket. Re-grab pulls it back out.
+- Options: accepted-object tag filter, required orientation alignment (plug must face the right way), lock-in (explicit release action to remove).
+- Events on both sides: `OnHoverStart/End`, `OnSocketed`, `OnRemoved` — each emits `InteractionId`s ("docked extinguisher on wall mount" is a validatable SOP step).
+
+### FXR_Use *(optional child component)*
+> **Rule of thumb:** using the thing is simple → FXR_Grab's built-in events. The usable part is a **physical mechanism on** the thing, or needs its own training ID → add FXR_Use where the mechanism lives.
+
+**Flashlight (no FXR_Use):** add FXR_Grab; bind `OnUseStarted` → toggle light. Done.
+
+**Fire extinguisher (what FXR_Use is for):**
+1. FXR_Grab on the body → holdable.
+2. FXR_Use child at the squeeze handle; preset **"Squeeze Lever"** (a spring-loaded mini-latch on the rotation solver: travel, resistance, haptics).
+3. Assign the handle mesh (Driven Component) → the lever *visually moves* under trigger pull / finger curl.
+4. Bind `OnUseValue (0–1)` → spray intensity. `InteractionId = "Squeeze_Handle_Ext01"`.
+
+Justifications: real travel + spring feel; multiple distinct use points per object (pin + handle + nozzle); per-affordance SOP validation.
+
+### FXR_RayTarget
+**Not a laser-grab component — the "you can point at me from far away" marker.** The laser itself lives on the interactor (FXR_Core service); the focus manager controls its visibility (UI pointing, deliberate point gesture). Behavior composes with what else is on the object:
+
+| On the object | Point + pinch/trigger does |
+|---|---|
+| RayTarget alone | Select/focus: hover highlight, `OnRaySelected` (training: "point to the correct extinguisher"; games: examine/scan) |
+| RayTarget + FXR_Grab | **Distance grab**: object pulls/flicks to the hand, then **FXR_Grab takes over completely** — same grip point, pose blend, everything (gravity-gloves style) |
+| FXR_UI panels | Pointer events route into UMG automatically (no manual RayTarget needed) |
+
+**Deliberately no laser-Latch:** dragging doors/valves by ray feels cheap and destroys training fidelity (a trainee who laser-opened a valve learned nothing). Ray-select a latch object = fine; ray-drive it = a game-side custom interactable if truly wanted.
+
+**Far Interaction Policy** (`FXR_ProjectSettings`): games may enable distance-grab everywhere; training sims may restrict rays to UI + selection, forcing physical performance of every motion. Same framework, one toggle.
+
+### FXR_GripPoint
+"A sticker on the object: hands go here, shaped like this."
+- Stores: allowed hand (**Left Only / Right Only / Both**), `UFXR_HandPose` asset, priority, activation radius.
+- **Left/right at different positions → add two GripPoints with hand filters** (rifle: right hand on pistol grip, left on foregrip). The scorer filters by hand side, so each hand only lands on its own point. **Both** = symmetric spots (mug handle); pose auto-mirrors for whichever hand arrives.
+- **Rail variant:** an axis extent — hands grab anywhere along a handrail/hose and slide.
+- Runtime scoring (distance + approach angle + side + priority) picks the best point; displayed hand blends into the authored pose over ~100 ms.
+- No GripPoint → **procedural grip fallback** (fingers sphere-cast and curl until contact).
+
+### FXR_Highlight *(optional)*
+Every interactable already gets the default highlight automatically (Outline, bright yellow) — this component exists only to customize further:
+
+```
+├─ Per-state style overrides   (Hover / Guidance / Selected → any style)
+├─ Color, intensity, pulse rate
+└─ Scope:  Everything ▾   (Everything / Parent Only)
+```
+
+- **Everything** *(default)* — all primitives on the actor + attached children glow as one object (extinguisher incl. pin, handle, hose). Hand meshes and other actors auto-excluded.
+- **Parent Only** — only the driven/parent mesh: "look at this *part*" (SOP guidance on just the safety pin).
+
+**Three highlight styles**, each bound to a semantic state so training and games speak the same language:
+
+| Style | Effect | Default state mapping |
+|---|---|---|
+| **Outline** | Silhouette edge glow, bright yellow | Hover — "you can interact with this" *(framework default style)* |
+| **Inner Blink** | Whole-mesh emissive pulse | Guidance — "interact with this NOW" (SOP attention) |
+| **Sweep** | Gradient band travels across the object (direction configurable) | Selected/confirm, scan effects, "correct item" feedback |
+
+State→style mapping lives in project settings; FXR_Training only ever says "highlight the pin, Guidance state" — never hardcoding visuals.
+
+---
+
+## 5. Core Internal Systems
+
+Many components on the surface, **four real systems** underneath: the constraint solver, the hand presentation pipeline, the detection & focus pipeline, and the input abstraction.
+
+### 5.1 FFXR_ConstraintSolver — kinematic-while-held, physics-on-release
+
+> **While you're touching it, it's a puppet. When you let go, it becomes a real object again.**
+
+Pure physics constraints (`UPhysicsConstraintComponent` + physics handle) are rejected: jitter at 90 Hz, doors shoved through walls, constraint explosions, limit overshoot, non-determinism (poisons SOP validation and replay), wasted Quest CPU.
+
+**While held/touched (per frame):**
+1. **Project** the interactor's position onto the constraint manifold — for a hinge: "what angle around my axis (from the cached actor-space pivot) does the hand correspond to?" One scalar; hand-to-pivot distance handled implicitly (real leverage for free).
+2. **Feel model:** inertia + damping (= perceived weight), resistance curves, detent torque wells, state springs for levers.
+3. **Drive via kinematic physics target** (`SetKinematicTarget`, never raw `SetWorldTransform`) so a moving door still pushes physics bodies and characters correctly.
+
+**Input sources (same solver, same feel):**
+- **Grip drive** — hand on a GripPoint; push and pull both valid.
+- **Contact drive** — open palm on the surface; targets accepted only in the push direction (a palm can't pull).
+
+**On release:** hand off tracked velocity → doors get a damped kinematic swing integrator; levers spring to nearest state; free props go fully simulated with inherited velocity.
+
+Deterministic, stable, identical on PCVR and Quest; haptic tick per detent for free. Consumers: FXR_Latch, FXR_Use mechanisms, FXR_Grab constrained modes.
+
+### 5.2 Hand Presentation Pipeline (displayed hand ≠ real hand)
+- Displayed hand glues to the grip point and obeys constraints; the real tracked hand keeps moving.
+- **Tension model:** divergence drives stretch visuals + haptic scaling; past ~25–30 cm the grab breaks. The divergence scalar doubles as "how hard am I pulling" input to the solver.
+- ~100 ms pose blend on grab (live → authored). Instant snapping looks cheap; the blend sells the wrap.
+- Shared by Grab, Latch, and Use.
+
+### 5.3 Pose Data & Retargeting — UFXR_HandPose
+
+**Problem:** two hand skeletons — the chosen controller hand mesh (arbitrary bones) and the OpenXR tracked skeleton (26 standardized joints, scaled to the player's real hand). Different bone names/counts, rest poses, axis conventions; some runtimes omit metacarpal rotations. Raw bone-rotation poses break on every mesh swap and clip on every hand size.
+
+**Solution — store the idea, not the bones:**
+```
+UFXR_HandPose  (~11 skeleton-agnostic values: 5 curls, 5 splays, thumb opposition)
+        ↓
+Retarget profile for the active skeleton   (one-time setup per skeleton)
+        ↓
+Actual bone rotations
+        ↓
+Fingertip micro-IK: tips cast to the surface, final curl adjusted
+        → exact contact for any hand size; nobody clips
+```
+
+Free wins: in-VR recorded poses work on controller meshes instantly; L/R mirroring trivial; mesh swap = one new profile, whole pose library survives. Known cost: one fiddly profile per skeleton (axis flips, rest-pose offsets) — suffered once per skeleton, not per pose.
+
+### 5.4 Detection & Focus Pipeline
+
+Classic **broad phase + narrow phase**, run as a framework service — never per-object collision setup.
+
+**Interactor query shapes (framework-created, designer never touches):**
+- **Grab sphere** (~8–10 cm around the palm) → Grab/Latch/Socket/Use candidates
+- **Fingertip probes** (tiny sphere casts) → FXR_Press travel, procedural grip, palm-contact points
+- **Far ray/cone** → FXR_RayTarget channel
+
+**Broad phase — registry, not physics events.** Every FXR component auto-registers into `UFXR_InteractionSubsystem` (world subsystem + spatial hash). Each frame the grab sphere queries: "which activation radii am I inside?" Why this beats `OnComponentBeginOverlap`:
+- **Detection primitive = the GripPoint's activation radius**, not the render mesh — a tiny pin gets a generous grab radius; a huge door doesn't light up at its far corner. Detection shape ≠ visual shape is a major feel win.
+- **Zero designer setup** — deletes the #1 VR bug class ("mesh had the wrong collision preset, can't grab").
+- **Deterministic order** — overlap events fire unpredictably; polling a small list is stable (SOP replay needs this).
+- **Quest-friendly** — sphere-vs-hash checks are near-free; no physics broadphase churn.
+
+**Narrow phase — scoring (where premium feel lives).** Candidates scored by distance, approach angle vs. point facing, hand-side filter, designer priority, enabled state. Winner gets hover (highlight + grip attraction), then the grab claim. Two make-or-break details:
+- **Hysteresis** — current best keeps a small score bonus → no highlight flicker between neighbors.
+- **Claim locking** — once a hand begins a grab, the candidate locks to it; the other hand can't steal mid-blend.
+
+**The one custom trace channel, `FXR_Interaction`** — for genuinely mesh-accurate hits only: FXR_RayTarget traces, fingertip probes, procedural-grip contact. The framework adds the channel via config and sets responses on its own query components at runtime. Designers touch nothing; if something isn't ray-targetable, that's a framework bug by definition.
+
+### 5.5 Collision Policy (what designers actually do: almost nothing)
+
+| Situation | Designer action |
+|---|---|
+| Grab / Latch / Socket detection | **Nothing.** Activation radii do detection; mesh collision is irrelevant to grabbing. |
+| Physics after release (dropped/thrown props) | Normal UE prop setup: simple collision hull + physics enabled — standard asset work, nothing FlexXR-specific. Auto-generated hulls fine. |
+| Finger-accurate contact (palm push, Press, procedural grip) | Default simple collision fine for ~90% of objects. Refine the hull only where fingers must conform closely **and** no authored GripPoint pose covers it. |
+| FXR_Interaction trace channel | **Nothing** — auto-configured at registration. |
+
+The editor validation panel backs this up: e.g. *"FXR_Grab with physics-on-release but no simple collision"* flagged at author time.
+
+### 5.6 Shared Utility Systems
+- **FFXR_TwoHandSolver** — blends two interactor transforms, twist torque, secondary grips. Surfaced only as a checkbox.
+- **Focus & Ray Manager** — single source of truth for hover/focus/selection and laser visibility.
+- **Highlight Manager** — applies state→style mapping (§4, FXR_Highlight); per-tier rendering in §9.
+- **FXR Event Bus** — `☑ Expose to Training` interactions broadcast `InteractionId`; SOP graph, analytics, or game quest systems subscribe.
+
+### 5.7 Extension Contract — ADR-003: no separate interactable interface
+
+**Decision:** FlexXR does **not** ship an `IFXR_Interactable` interface. `UFXR_InteractableBase`'s virtual lifecycle — `CanBegin / OnBegin / OnUpdate / OnEnd(EFXR_EndReason)` — **is** the extension contract: subclass the base, override the lifecycle, and inherit registration, highlighting, enable/disable semantics, and event emission for free.
+
+**Rationale:** a raw interface would uniquely serve only implementers who *cannot* inherit the base (single-inheritance conflict with another SDK) — a user that does not exist for this project. An interface with exactly one implementer is speculative abstraction; UE interface boilerplate and a second documented extension path carry a small permanent cost. Test mocks simply subclass the base inside the test module.
+
+**Reversal path (cheap):** the detection subsystem is the interface's only would-be consumer. If a non-inheriting implementer ever appears, extracting `IFXR_Interactable` (native-only, single `End(Reason)` exit — no separate `Cancel`) from the existing virtuals is a mechanical refactor. Recorded in `Docs/adr/ADR-003.md`.
+
+---
+
+## 6. Hand Pose Authoring — three tiers of effort
+
+| Tier | Workflow | Time |
+|---|---|---|
+| **1 — Preset library** | Drop FXR_GripPoint, pick "Power Grip" / "Pinch" / "Trigger Grip" / "Flat Palm", nudge the ghost-hand gizmo. | ~30 s, most objects |
+| **2 — Pose editor** | Posable ghost hand on the object; **5 curl sliders + splay**; auto-mirror L↔R; preview at multiple hand scales; save as reusable `UFXR_HandPose`. | minutes |
+| **3 — In-VR pose recorder** | Wear the headset, grip the actual mesh the way it should look, pinch the off-hand → curls snapshot into the asset. | seconds; flagship demo clip |
+
+Zero-authoring fallbacks: procedural grip (curl until contact) and grip rails.
+
+---
+
+## 7. FXR_Training — the SOP Step Graph
+
+> **A judge, not a controller.** The world stays fully interactive; the graph *watches* `InteractionId` events and validates the performance.
+
+Why watch-mode beats enable/disable gating:
+- **Mistakes are the product.** Gated worlds can't record "would have grabbed the extinguisher before the safety check" — watch-mode logs exactly that, and that data is what a safety manager buys.
+- The world feels real, not a locked-door theme-park ride.
+- Games inherit nothing weird.
+
+**Anatomy of one step** (DataAsset; designers fill a form):
+```
+Step 3: "Pull the safety pin"
+├─ Complete when:  event == "Pull_Pin_Extinguisher01"
+├─ Guidance:       Guidance-state highlight on the pin (Inner Blink),
+│                  ghost-hand demo, voice line
+├─ Wrong actions:  "Squeeze_Handle" → warn "Pin first!", log mistake
+├─ Timeout 30 s:   escalate hint (arrow + stronger highlight)
+└─ On complete:    → Step 4
+```
+
+**Graph, not list:** branching (wrong extinguisher on electrical fire → consequence + re-teach path), parallel steps ("gloves AND goggles, any order"), and modes — *Guided* (full hints) / *Practice* (hints on mistakes) / *Exam* (no hints, scored) — same graph, three dials.
+
+**Opt-in hard-lock** per step (`☑ Hard-lock until reached`) for legally mandated interlocks — implemented via the same `SetInteractionEnabled` API games use. Gating is the exception, never the philosophy.
+
+**Output:** session report — time per step, mistakes, hints consumed, score; replay powered by the deterministic solver.
+
+**Implementation choice at Phase 4 kickoff:** UE **StateTree** (fast, proven) vs. custom graph asset + editor (stronger tooling-portfolio flex, more work). The event-bus contract is identical either way.
+
+---
+
+## 8. Interaction Model & Platform Support
+
+### 8.1 Two axes, one pipeline
+
+**Input device** (controller / tracked hand / desktop sim) × **interaction range** (near / far) — every cell works because both axes pass through `IFXR_Interactor` and the far path *funnels into* the near path (distance-grab ends in a normal FXR_Grab hold):
+
+| | Near | Far (ray) |
+|---|---|---|
+| **Controller** | Grip button on object | Aim ray + trigger |
+| **Tracked hand** | Physically pinch/close on object | Point-gesture ray + pinch |
+| **Desktop sim** | Mouse hover + click | Cursor as ray |
+
+An object configured once works via all six cells, zero per-method setup. **Far Interaction Policy** (project setting) dials the far column per market: games → distance-grab everywhere; training → ray for UI/selection only, physical motions mandatory.
+
+### 8.2 Platform matrix
+
+| Platform / runtime | Controllers | Hand tracking | Notes |
+|---|---|---|---|
+| PCVR — Quest Link/Air Link | ✅ | ✅ (Meta path) | Primary hand-tracking dev target on PC |
+| PCVR — SteamVR (Index, Vive) | ✅ | ❌ native | No XR_EXT_hand_tracking exposed; Ultraleap add-on only |
+| PCVR — Varjo | ✅ | ✅ | XR_EXT_hand_tracking via built-in OpenXRHandTracking |
+| Quest standalone | ✅ | ✅ | Scalability tier; smoke-tested every phase, never "ported later" |
+
+No interaction may ever assume a specific input device; capability detection selects the interactor set at startup and hot-swaps at runtime.
+
+---
+
+## 9. Rendering & Performance Strategy
+
+- **Forward renderer + MSAA** baseline; scalability tiers on one codebase: *PCVR high tier* (Lumen permitted, budgeted) and *Quest tier* (baked lighting, mobile feature set, strict draw-call/shader budgets).
+- **Highlight rendering, two implementations behind one API:**
+  - *Outline* — PCVR: custom depth + post-process material (crisp). Quest: auto-swaps to inverted-hull outline mesh (full-screen post-process is a Quest frame-budget killer).
+  - *Inner Blink & Sweep* — UE5 per-mesh **Overlay Material** slot (cheap on both tiers); Sweep = moving gradient mask in the overlay shader, direction is a vector parameter.
+- 90 fps discipline as a framework value: per-tier frame budgets documented; Unreal Insights profiling from Phase 2, not as an afterthought.
+- Solver, detection pipeline, and hand pipeline allocation-free per frame; registry queries are sphere-vs-spatial-hash (no physics broadphase churn); hand meshes instanced where possible.
+- Phase 5 produces the formal **performance case study** (Portfolio Project 4): Insights captures, budget tables, before/after optimization, PCVR-vs-Quest comparison.
+
+---
+
+## 10. MR Readiness
+
+**Decision:** architectural commitment now, feature pass later. Enterprise training is moving to passthrough (SOPs practiced in the real facility with virtual hazards overlaid); retrofitting MR kills projects, deferring features doesn't.
+
+Day-one in FXR_Core: `EFXR_Mode { VR, MR }` threaded through pawn/rig and rendering setup; passthrough compositing toggle; spatial-anchor abstraction (OpenXR anchor extensions behind an interface). Later MR phase ships: room-aware placement, plane detection + snapping, anchored SOP scenes in real spaces.
+
+---
+
+## 11. Event & Data Flow (one picture)
+
+```
+ Player hand / controller / desktop sim
+        │  (IFXR_Interactor: grab sphere · fingertip probes · far ray)
+        ▼
+ UFXR_InteractionSubsystem  — broad-phase registry (activation radii, spatial hash)
+        │
+        ▼  scored narrow phase (distance · angle · side · priority · hysteresis)
+ FXR interactable (Grab / Latch / Press / Socket / Use / RayTarget)
+        │
+        ├─► Highlight Manager ─► state→style (Outline/Blink/Sweep) per tier
+        │
+        ├─► FFXR_ConstraintSolver ─► kinematic physics target ─► world responds
+        │
+        ├─► Hand Presentation Pipeline ─► pose blend, tension, break
+        │
+        └─► FXR Event Bus: broadcast InteractionId ("Pull_Pin_Extinguisher01")
+                    │
+        ┌───────────┴─────────────┐
+        ▼                         ▼
+  FXR_Training step graph   Game systems (quests, scoring)
+  (validate, guide, score)  — or nothing at all
+```
+
+---
+
+## 12. Naming Conventions
+
+| Thing | Convention | Examples |
+|---|---|---|
+| User-facing components | `FXR_` + behavior | `FXR_Grab`, `FXR_Latch`, `FXR_Press`, `FXR_Socket`, `FXR_Use`, `FXR_RayTarget`, `FXR_GripPoint`, `FXR_Highlight` |
+| C++ component classes | UE prefix + FXR name | `UFXR_Grab`, `UFXR_GripPoint`, `UFXR_InteractableBase` |
+| Subsystems / internal systems | `UFXR_` / `FFXR_` | `UFXR_InteractionSubsystem`, `FFXR_ConstraintSolver`, `FFXR_TwoHandSolver`, `FFXR_InteractorState` |
+| Interfaces | `IFXR_` | `IFXR_Interactor` |
+| Data assets / settings | `UFXR_` | `UFXR_HandPose`, `UFXR_LatchPreset`, `UFXR_StepGraph`, `UFXR_ProjectSettings` |
+| Enums | `EFXR_` | `EFXR_Mode`, `EFXR_EndReason`, `EFXR_HighlightStyle`, `EFXR_HighlightScope` |
+| Plugin modules | `FXR_` | `FXR_Core`, `FXR_Interaction`, `FXR_UI`, `FXR_Training` |
+| Trace channel | `FXR_` | `FXR_Interaction` |
+
+---
+
+## 13. Development Roadmap
+
+| Phase | Scope | Est. |
+|---|---|---|
+| **1 — FXR_Core** | Repo scaffolding (README skeleton, `CODING_STANDARDS.md`, CI, ADR seed); pawn/rig, `IFXR_Interactor` (controller + tracked hand + desktop sim), input mapping, capability detection, event bus, MR flags | 3–4 wks |
+| **2 — Interaction core** | `UFXR_InteractionSubsystem` + detection pipeline, `FFXR_ConstraintSolver`, InteractableBase (enable API, driven-component rule), FXR_Grab (+ use events, two-hand), FXR_GripPoint + pose pipeline + retargeting, FXR_Latch, FXR_Press | 4–6 wks |
+| **3 — FXR_UI + presentation** | Spatial UI kit, motion-design spec, FXR_RayTarget + focus manager, FXR_Socket, highlight system (3 styles, per-tier impls), guidance primitives, validation panel | 3–4 wks |
+| **4 — FXR_Training + SOP demo** | Step graph (StateTree vs custom decision), modes, reporting; **fire safety training demo** built entirely on FlexXR | 4–6 wks |
+| **5 — Optimization + standalone** | Quest build, Insights profiling, budget enforcement, **performance case study** | 3–4 wks |
+| **6 — MR pass + game demo** | Passthrough, planes, anchors; **small action game demo** on FlexXR | 4–6 wks |
+
+Standing rule: Quest build smoke-tested at the end of every phase from Phase 2 onward.
+
+---
+
+## 14. Portfolio Mapping & Scope Boundaries
+
+| Portfolio project | Delivered by |
+|---|---|
+| Project 1 — Custom XR Runtime Framework | FlexXR itself (FXR_Core + FXR_Interaction) |
+| Project 2 — VR Fire Safety SOP Training Sim | Phase 4 demo on FlexXR |
+| Project 3 — PC/VR Game Dev Proof | Phase 6 game demo on FlexXR (gameplay systems live in the game project, e.g. GAS — not in FlexXR) |
+| Project 4 — Performance & Optimization Case Study | Phase 5 report |
+| Project 5 — XR Plugin / Tooling System | FlexXR's plugin architecture, pose editor, in-VR recorder, gizmos, presets, validation panel |
+
+**Explicit non-goals (scope protection):**
+- No combat framework, AI, or inventory — those belong to game projects built on FlexXR.
+- No claim of "AAA framework" — the claim is **AAA-capable interaction fidelity**, evidenced by the solver, hand pipeline, detection design, and performance discipline.
+- SteamVR native hand tracking out of scope (runtime limitation, documented, not fought).
+- No default ray-driven Latch (feel + training-fidelity decision, documented in §4).
+
+**Marquee demo clips to record along the way:** in-VR pose recorder ("I record grab poses by grabbing"), palm-push vs handle-pull on the same door, broken-vs-retargeted pose before/after, hysteresis on/off comparison, Guided-vs-Exam split screen, PCVR-vs-Quest side-by-side, highlight styles showcase (Outline → Blink → Sweep).
+
+---
+
+## 15. Engineering Standards & Repository Discipline
+
+### 15.1 C++ Quality Bar (binding, not aspirational)
+- **Epic Coding Standard** compliance: naming, brace style, `F/U/A/E/I` prefixes — the first thing studio reviewers judge.
+- **Const-correctness & explicit ownership**: UE smart pointers and UObject lifetime rules; never raw `new/delete`.
+- **Hot paths allocation-free**: solver, detection queries, and hand pipeline never heap-allocate per frame; pre-sized containers, no per-tick `TArray` churn.
+- **Solver as plain C++** (POD structs + pure functions, thin UObject wrapper) → deterministic *and* unit-testable via UE Automation; tests ship in the repo.
+- **Module hygiene**: the §3 dependency diagram enforced in `Build.cs`; editor-only code (pose editor, gizmos, validation panel) split into `FXR_*Editor` modules so runtime stays lean.
+- **API surface quality**: documented public headers; tidy `UPROPERTY` categories and meta specifiers — this is what makes the detail panels feel designed, not dumped.
+- **Insights instrumentation from day one**: `TRACE_CPUPROFILER_EVENT_SCOPE` on every subsystem; Phase 5's case study depends on it.
+- `CODING_STANDARDS.md` lands in the repo at Phase 1 and is binding for every commit after it.
+
+### 15.2 Repository & Commit Discipline
+- **Commit convention**: imperative mood + module scope — `[FXR_Interaction] Add detection subsystem with spatial hash broad phase`. One coherent system change per commit; never `fix` / `update` / end-of-day dumps.
+- **Branch-per-phase, PR into main** (even solo) with real descriptions — a solo repo with clean PRs reads as team-ready workflow.
+- **Release tag per phase** (`v0.1-core`, `v0.2-interaction`, …) so project persistence is visible in the release timeline, not just the contribution graph.
+- **README from day one**: overview, features, architecture diagram, GIFs (the §14 marquee clips), build instructions, roadmap — sections filled as phases complete.
+- **CI**: GitHub Actions runs the solver automation tests on push. An Unreal plugin with CI-run unit tests is a rare, noticed portfolio signal.
+
+### 15.3 Architecture Decision Records
+Every non-obvious decision gets a short ADR in `Docs/adr/` (context → decision → consequences → reversal path). Seeded with:
+- **ADR-001** — kinematic-while-held, physics-on-release solver (over physics constraints)
+- **ADR-002** — registry detection over physics overlap events
+- **ADR-003** — no separate interactable interface (§5.7)
+
+ADRs are the written answer to "can you explain your architecture?" — considered-and-rejected beats cargo-culted-in.
+
+---
+
+## 16. Future-Proofing — UE6, Verse & Scene Graph
+
+**Context (announced June 2026):** UE6 merges UE5 + UEFN around a Verse-based Scene Graph gameplay framework. Early Access targeted end of 2027, full release ~12–18 months later. Actors and Blueprints are supported in early UE6 releases and deprecated only after the new framework matures, with conversion tools promised. UE 5.8 is the last planned UE5 release (a 5.9 is reserved).
+
+**Position:** FlexXR ships on UE 5.8. UE6 is *not* a design target — Scene Graph APIs don't yet exist to target. Two disciplines already binding elsewhere in this doc are the portability insurance:
+1. **Pure-logic core** (§15.1): solver math, detection/scoring, and retargeting live in plain C++ operating on transforms — engine-version-agnostic algorithms and data.
+2. **Thin exposure layer**: framework logic never lives in Blueprint graphs; Blueprints (later: Verse) are only the user-facing binding surface — swappable by design.
+
+**Migration outlook, when the day comes:** data assets (poses, presets, step graphs) and core algorithms port untouched. The real work is re-housing components in the Scene Graph entity model and re-exposing the API to Verse — the *entity model*, not Blueprints, is the actual moving part. Editor tooling (Slate) is the most fragile layer. Estimated as adapter work, not a rewrite. A "FlexXR UE5→UE6 migration case study" is earmarked as a future portfolio piece.
+
+---
+
+## Changelog
+
+**v0.3 — Engineering Standards Pass**
+- New §15: binding C++ quality bar (Epic standard, allocation-free hot paths, plain-C++ solver + automation tests, `Build.cs`-enforced module boundaries, editor-module split, Insights instrumentation), repository discipline (commit convention, branch-per-phase PRs, per-phase release tags, README skeleton, CI-run tests), and the ADR practice.
+- New §5.7 / ADR-003: no separate `IFXR_Interactable` interface — the base class virtuals are the extension contract, with a documented mechanical reversal path.
+- New §16: UE6/Verse/Scene Graph position — ship on UE 5.8; portability via pure-logic core + thin exposure layer; migration outlook and future case-study note.
+- Phase 1 scope now includes repo scaffolding (README, `CODING_STANDARDS.md`, CI, ADR seed).
+
+**v0.2 — Interaction Detail Pass**
+- New §4.0 `UFXR_InteractableBase`: shared detail-panel properties, enabled-by-default, `SetInteractionEnabled` + Already-Held Policy + `ForceRelease`, interactor filters, Driven Component Auto-resolution + actor-space pivot caching.
+- Highlight system: automatic default highlight (Outline, bright yellow, color adjustable per interactable); optional FXR_Highlight for per-state overrides; Scope enum (Everything / Parent Only); three styles (Outline / Inner Blink / Sweep w/ direction); semantic state mapping; per-tier rendering implementations.
+- FXR_Latch: component-transform-as-pivot method, Motion Axis dropdown (Local X/Y/Z), leverage note.
+- FXR_GripPoint: L/R-at-different-positions pattern (two filtered points) vs. Both (auto-mirror).
+- FXR_Socket: full Grab pairing flow (ghost preview, options, events).
+- FXR_Use: setup walkthrough (flashlight vs. extinguisher) + rule of thumb.
+- FXR_RayTarget: clarified as far-field marker; behavior-by-composition table; no ray-driven Latch; Far Interaction Policy.
+- New §5.4 Detection & Focus Pipeline (registry broad phase, scored narrow phase, hysteresis, claim locking, `FXR_Interaction` trace channel) and §5.5 Collision Policy.
+- New §8.1 input-device × interaction-range matrix.
+
+**v0.1** — Initial design: vision, modules, components, solver, hand pipeline, pose retargeting, SOP graph, platforms, rendering, MR readiness, roadmap.

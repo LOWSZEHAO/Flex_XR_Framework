@@ -1,0 +1,44 @@
+# Git LFS — Unreal binary assets MUST be tracked here from commit #1.
+# Adding LFS later requires history rewriting. Do not skip this file.
+
+# Content
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap   filter=lfs diff=lfs merge=lfs -text
+
+# Textures / images
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+
+# Meshes / source art
+*.fbx  filter=lfs diff=lfs merge=lfs -text
+*.obj  filter=lfs diff=lfs merge=lfs -text
+*.glb  filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
+
+# Audio
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+
+# Video / GIFs (README demo clips)
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text
+
+# Fonts / misc binaries
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
+
+# Keep C++/config/text diffable (explicitly NOT LFS)
+*.cpp text
+*.h   text
+*.cs  text
+*.md  text
+*.ini text
+*.uplugin text
+*.uproject text

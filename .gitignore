@@ -1,0 +1,40 @@
+# ── Unreal Engine ──────────────────────────────────────────────
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.slnx
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Compiled files
+*.obj
+*.pdb
+*.dll
+*.exe
+*.lib
+*.so
+*.dylib
+
+# Plugin build output
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# ── OS ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Local / secrets ────────────────────────────────────────────
+*.local
+.env
