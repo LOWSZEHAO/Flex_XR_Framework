@@ -15,6 +15,16 @@ enum class EFXR_EndReason : uint8
 	Broken        UMETA(DisplayName = "Broken")
 };
 
+/** What happens to an in-progress hold when its interactable is disabled mid-grab (§4.0). */
+UENUM(BlueprintType)
+enum class EFXR_AlreadyHeldPolicy : uint8
+{
+	// Keep the current hold to its natural end; only block re-grabbing afterwards.
+	FinishNaturally UMETA(DisplayName = "Finish Naturally"),
+	// End the hold immediately — the object is ripped from the hand (disarm, stun, cutscene).
+	ForceRelease    UMETA(DisplayName = "Force Release")
+};
+
 /** Which hand(s) a grip point accepts. */
 UENUM(BlueprintType)
 enum class EFXR_GripHandedness : uint8

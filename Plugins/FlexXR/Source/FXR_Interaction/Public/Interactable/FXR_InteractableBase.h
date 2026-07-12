@@ -33,9 +33,13 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** The everyday gameplay switch (cutscene disable, quest unlock, ...). */
+	/** The everyday gameplay switch (cutscene disable, quest unlock, ...). Honors Already-Held Policy if held. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Interaction")
 	void SetInteractionEnabled(bool bEnabled);
+
+	/** End any current hold immediately (EFXR_EndReason::ForceReleased) — disarm, stun, cutscene rip. No-op if not held. */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Interaction")
+	void ForceRelease();
 
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Interaction")
 	bool IsInteractionEnabled() const { return bInteractionEnabled; }
@@ -67,6 +71,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	bool bInteractionEnabled = true;
+
+	/** What happens to an in-progress hold if this interactable is disabled while held. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	EFXR_AlreadyHeldPolicy AlreadyHeldPolicy = EFXR_AlreadyHeldPolicy::FinishNaturally;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (ClampMin = "1.0"))
 	float ActivationRadius = 12.f;

@@ -53,8 +53,24 @@ void UFXR_InteractableBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void UFXR_InteractableBase::SetInteractionEnabled(bool bEnabled)
 {
-	// TODO(FXR_Interaction): Already-Held policy (FinishNaturally / ForceRelease) when disabled mid-hold.
 	bInteractionEnabled = bEnabled;
+
+	// Disabled mid-hold: FinishNaturally leaves the current hold alone (re-grab already blocked by
+	// CanBegin); ForceRelease rips it from the hand now.
+	if (!bEnabled && bHeld && AlreadyHeldPolicy == EFXR_AlreadyHeldPolicy::ForceRelease)
+	{
+		ForceRelease();
+	}
+}
+
+void UFXR_InteractableBase::ForceRelease()
+{
+	if (bHeld)
+	{
+		// Ends the hold via the same lifecycle as a normal release; the interaction driver sees
+		// IsHeld() flip false next tick and drops its reference (no double OnEnd).
+		OnEnd(EFXR_EndReason::ForceReleased);
+	}
 }
 
 bool UFXR_InteractableBase::CanBegin(IFXR_Interactor* Interactor) const

@@ -45,7 +45,12 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 
 	if (UFXR_InteractableBase* Current = Held.Get())
 	{
-		if (Select < ReleaseThreshold)
+		if (!Current->IsHeld())
+		{
+			// The interactable ended the hold itself (ForceRelease, or disabled mid-grab) — just drop it.
+			Held = nullptr;
+		}
+		else if (Select < ReleaseThreshold)
 		{
 			Current->OnEnd(EFXR_EndReason::Released);
 			Held = nullptr;
