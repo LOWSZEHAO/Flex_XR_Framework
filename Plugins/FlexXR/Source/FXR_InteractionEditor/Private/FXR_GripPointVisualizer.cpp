@@ -7,7 +7,7 @@
 void FFXR_GripPointVisualizer::DrawVisualization(const UActorComponent* Component, const FSceneView* View, FPrimitiveDrawInterface* PDI)
 {
 	const UFXR_GripPoint* GripPoint = Cast<UFXR_GripPoint>(Component);
-	if (!GripPoint)
+	if (!GripPoint || !GripPoint->IsDrawDebugEnabled())
 	{
 		return;
 	}

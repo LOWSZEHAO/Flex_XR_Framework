@@ -27,17 +27,34 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
 		ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
-		if (GripPoint && GripPoint->ShouldSnap())
+		// HeldOffset relates the object to the grip: Driven == HeldOffset * Grip, followed each update.
+		SnapProceduralOffset = Driven->GetComponentTransform().GetRelativeTransform(Interactor->GetGripTransform());
+		const EFXR_GripSnapMode SnapMode = GripPoint ? GripPoint->GetSnapMode() : EFXR_GripSnapMode::None;
+
+		if (GripPoint && SnapMode != EFXR_GripSnapMode::None)
 		{
-			// Snap: move the object so the chosen grip point aligns to the hand's grip pose.
-			const FTransform GripPointInDriven = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform());
-			HeldOffset = GripPointInDriven.Inverse();
-			Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+			// Offset that aligns the grip point to the hand's grip pose.
+			SnapTargetOffset = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
+
+			if (SnapMode == EFXR_GripSnapMode::Smooth)
+			{
+				// Ease from where it was grabbed to the snapped pose over the next updates.
+				HeldOffset = SnapProceduralOffset;
+				SnapAlpha = 0.f;
+				SnapInterpSpeed = GripPoint->GetSnapInterpSpeed();
+			}
+			else // Snap (instant)
+			{
+				HeldOffset = SnapTargetOffset;
+				SnapAlpha = 1.f;
+				Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+			}
 		}
 		else
 		{
-			// Procedural hold: Driven == HeldOffset * Grip, so the object stays where it was grabbed as the grip moves.
-			HeldOffset = Driven->GetComponentTransform().GetRelativeTransform(Interactor->GetGripTransform());
+			// Procedural hold: object stays where it was grabbed, relative to the grip.
+			HeldOffset = SnapProceduralOffset;
+			SnapAlpha = 1.f;
 		}
 
 		LastLocation = Driven->GetComponentLocation();
@@ -58,6 +75,13 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 	if (!Driven)
 	{
 		return;
+	}
+
+	// Smooth grip mode: ease the hold from where it was grabbed toward the snapped pose.
+	if (SnapAlpha < 1.f)
+	{
+		SnapAlpha = FMath::Min(SnapAlpha + DeltaTime * SnapInterpSpeed, 1.f);
+		HeldOffset.Blend(SnapProceduralOffset, SnapTargetOffset, SnapAlpha);
 	}
 
 	Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);

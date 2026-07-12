@@ -7,7 +7,7 @@
 void FFXR_InteractableVisualizer::DrawVisualization(const UActorComponent* Component, const FSceneView* View, FPrimitiveDrawInterface* PDI)
 {
 	const UFXR_InteractableBase* Interactable = Cast<UFXR_InteractableBase>(Component);
-	if (!Interactable)
+	if (!Interactable || !Interactable->IsDrawDebugEnabled())
 	{
 		return;
 	}

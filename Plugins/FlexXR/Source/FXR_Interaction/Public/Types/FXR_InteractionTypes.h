@@ -24,6 +24,15 @@ enum class EFXR_GripHandedness : uint8
 	RightOnly UMETA(DisplayName = "Right Only")
 };
 
+/** How a grabbed object arrives at a grip point's pose. */
+UENUM(BlueprintType)
+enum class EFXR_GripSnapMode : uint8
+{
+	None    UMETA(DisplayName = "None (hold where grabbed)"),
+	Snap    UMETA(DisplayName = "Snap (instant)"),
+	Smooth  UMETA(DisplayName = "Smooth (interpolate)")
+};
+
 /**
  * Skeleton-agnostic finger pose: per-finger curl (0 = open, 1 = fully curled) + thumb
  * opposition. Not bone rotations — a hand Anim BP / Control Rig maps these to the active

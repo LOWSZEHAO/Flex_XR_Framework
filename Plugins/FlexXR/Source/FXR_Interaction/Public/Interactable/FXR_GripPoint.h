@@ -38,7 +38,9 @@ public:
 
 	int32 GetPriority() const { return Priority; }
 	float GetActivationRadius() const { return ActivationRadius; }
-	bool ShouldSnap() const { return bSnapToGrip; }
+	EFXR_GripSnapMode GetSnapMode() const { return SnapMode; }
+	float GetSnapInterpSpeed() const { return SnapInterpSpeed; }
+	bool IsDrawDebugEnabled() const { return bDrawDebug; }
 
 	/** The hand pose formed when gripping here, or null. */
 	UFXR_HandPose* GetHandPose() const;
@@ -56,9 +58,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.5"))
 	float ActivationRadius = 8.f;
 
-	/** Snap the object so this point aligns to the hand's grip pose when grabbed here. */
+	/** How the object arrives at this grip pose when grabbed here. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
-	bool bSnapToGrip = true;
+	EFXR_GripSnapMode SnapMode = EFXR_GripSnapMode::Smooth;
+
+	/** Smooth mode: how fast the object eases to the grip pose (higher = faster; ~10 is roughly 100 ms). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.1", EditCondition = "SnapMode == EFXR_GripSnapMode::Smooth"))
+	float SnapInterpSpeed = 10.f;
 
 	/** Optional hand pose (finger shape) formed when gripping here — applied by the hand Anim BP. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")

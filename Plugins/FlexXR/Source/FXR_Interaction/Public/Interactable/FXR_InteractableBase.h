@@ -52,6 +52,9 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
+	/** Whether the activation-radius debug draw / viewport gizmo is enabled. */
+	bool IsDrawDebugEnabled() const { return bDrawDebugRadius; }
+
 	/** World location used for narrow-phase scoring (the driven component, else this component). */
 	FVector GetInteractionLocation() const;
 

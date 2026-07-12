@@ -41,6 +41,10 @@ private:
 	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
 
 	FTransform HeldOffset = FTransform::Identity;
+	FTransform SnapProceduralOffset = FTransform::Identity;
+	FTransform SnapTargetOffset = FTransform::Identity;
+	float SnapAlpha = 1.f;
+	float SnapInterpSpeed = 10.f;
 	bool bRestorePhysics = false;
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
