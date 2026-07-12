@@ -18,12 +18,12 @@ void FFXR_InteractionEditorModule::StartupModule()
 	}
 
 	{
-		TSharedPtr<FComponentVisualizer> Visualizer = MakeShareable(new FFXR_GripPointVisualizer);
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_GripPointVisualizer>();
 		GUnrealEd->RegisterComponentVisualizer(UFXR_GripPoint::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
 	{
-		TSharedPtr<FComponentVisualizer> Visualizer = MakeShareable(new FFXR_InteractableVisualizer);
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_InteractableVisualizer>();
 		GUnrealEd->RegisterComponentVisualizer(UFXR_Grab::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
