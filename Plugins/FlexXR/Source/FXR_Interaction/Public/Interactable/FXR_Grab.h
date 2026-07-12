@@ -8,6 +8,7 @@
 
 class UPrimitiveComponent;
 class UFXR_GripPoint;
+class UFXR_HandPose;
 
 /**
  * UFXR_Grab — free 6-DOF grab.
@@ -27,6 +28,9 @@ public:
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime) override;
 	virtual void OnEnd(EFXR_EndReason Reason) override;
 
+	/** The hand pose of the grip point currently in use, or null (procedural hold). */
+	UFXR_HandPose* GetActiveHandPose() const;
+
 protected:
 	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
@@ -39,6 +43,7 @@ private:
 	FTransform HeldOffset = FTransform::Identity;
 	bool bRestorePhysics = false;
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
+	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 
 	FVector LastLocation = FVector::ZeroVector;
 	FQuat LastRotation = FQuat::Identity;

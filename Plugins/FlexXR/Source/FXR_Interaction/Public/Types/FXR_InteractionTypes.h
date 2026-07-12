@@ -23,3 +23,32 @@ enum class EFXR_GripHandedness : uint8
 	LeftOnly  UMETA(DisplayName = "Left Only"),
 	RightOnly UMETA(DisplayName = "Right Only")
 };
+
+/**
+ * Skeleton-agnostic finger pose: per-finger curl (0 = open, 1 = fully curled) + thumb
+ * opposition. Not bone rotations — a hand Anim BP / Control Rig maps these to the active
+ * skeleton's finger bones (the per-skeleton "retarget profile"), so one pose works on any mesh.
+ */
+USTRUCT(BlueprintType)
+struct FFXR_FingerCurls
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Thumb = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Index = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Middle = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Ring = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Pinky = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ThumbOpposition = 0.f;
+};

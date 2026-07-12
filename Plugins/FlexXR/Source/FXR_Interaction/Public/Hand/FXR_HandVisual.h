@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Types/FXR_CoreTypes.h"
+#include "Types/FXR_InteractionTypes.h"
 #include "FXR_HandVisual.generated.h"
 
 class IFXR_Interactor;
+class UFXR_HandPose;
 
 /**
  * UFXR_HandVisual — displayed hand mesh for one rig hand; the first pass of the §5.2
@@ -38,6 +40,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetTriggerAlpha() const { return TriggerAlpha; }
 
+	/** Blended per-finger curls for the hand Anim BP — the held grip point's authored pose, else a uniform grip-driven curl. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
+	FFXR_FingerCurls GetFingerCurls() const { return FingerCurls; }
+
+	/** Overall grasp (strongest finger curl) — convenience for Anim BPs still driven by a single grasp alpha. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
+	float GetGrasp() const;
+
 protected:
 	/** Which hand this mesh represents. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
@@ -57,10 +67,13 @@ protected:
 
 private:
 	IFXR_Interactor* ResolveActiveInteractor() const;
+	const UFXR_HandPose* ResolveHeldHandPose() const;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Hand", meta = (AllowPrivateAccess = "true"))
 	float GripAlpha = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Hand", meta = (AllowPrivateAccess = "true"))
 	float TriggerAlpha = 0.f;
+
+	FFXR_FingerCurls FingerCurls;
 };

@@ -2,6 +2,7 @@
 
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_GripPoint.h"
+#include "Interactable/FXR_HandPose.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
@@ -23,7 +24,10 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		{
 			Driven->SetSimulatePhysics(false);
 		}
-		if (const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor); GripPoint && GripPoint->ShouldSnap())
+		const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+		ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
+
+		if (GripPoint && GripPoint->ShouldSnap())
 		{
 			// Snap: move the object so the chosen grip point aligns to the hand's grip pose.
 			const FTransform GripPointInDriven = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform());
@@ -96,9 +100,15 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 
 	HeldComponent = nullptr;
 	bRestorePhysics = false;
+	ActiveHandPose = nullptr;
 	TrackedLinearVelocity = FVector::ZeroVector;
 	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
+}
+
+UFXR_HandPose* UFXR_Grab::GetActiveHandPose() const
+{
+	return ActiveHandPose.Get();
 }
 
 UFXR_GripPoint* UFXR_Grab::SelectGripPoint(IFXR_Interactor* Interactor) const

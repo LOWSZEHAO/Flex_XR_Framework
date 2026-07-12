@@ -28,6 +28,11 @@ IFXR_Interactor* UFXR_InteractionDriver::GetActiveInteractor(EFXR_HandSide Side)
 	return nullptr;
 }
 
+UFXR_InteractableBase* UFXR_InteractionDriver::GetHeldInteractable(EFXR_HandSide Side) const
+{
+	return (Side == EFXR_HandSide::Left ? LeftHeld : RightHeld).Get();
+}
+
 void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_InteractableBase>& Held, float DeltaTime)
 {
 	IFXR_Interactor* Interactor = GetActiveInteractor(Side);

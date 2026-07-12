@@ -29,6 +29,9 @@ public:
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	/** The interactable currently held by the given hand, or null. */
+	UFXR_InteractableBase* GetHeldInteractable(EFXR_HandSide Side) const;
+
 protected:
 	/** Select value at or above which a grab is claimed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))

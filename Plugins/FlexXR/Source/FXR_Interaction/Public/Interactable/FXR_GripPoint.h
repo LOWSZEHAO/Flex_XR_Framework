@@ -8,6 +8,8 @@
 #include "Types/FXR_InteractionTypes.h"
 #include "FXR_GripPoint.generated.h"
 
+class UFXR_HandPose;
+
 /**
  * UFXR_GripPoint — "a sticker on the object: hands go here, shaped like this."
  *
@@ -38,6 +40,9 @@ public:
 	float GetActivationRadius() const { return ActivationRadius; }
 	bool ShouldSnap() const { return bSnapToGrip; }
 
+	/** The hand pose formed when gripping here, or null. */
+	UFXR_HandPose* GetHandPose() const;
+
 protected:
 	/** Which hand may use this grip point. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
@@ -54,6 +59,10 @@ protected:
 	/** Snap the object so this point aligns to the hand's grip pose when grabbed here. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
 	bool bSnapToGrip = true;
+
+	/** Optional hand pose (finger shape) formed when gripping here — applied by the hand Anim BP. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
+	TObjectPtr<UFXR_HandPose> HandPose;
 
 	/** Draw this grip point's axes + activation radius at runtime (authoring aid). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint|Debug")

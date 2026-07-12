@@ -1,7 +1,13 @@
 // Copyright (c) 2026 Low Sze Hao. All rights reserved.
 
 #include "Interactable/FXR_GripPoint.h"
+#include "Interactable/FXR_HandPose.h"
 #include "DrawDebugHelpers.h"
+
+UFXR_HandPose* UFXR_GripPoint::GetHandPose() const
+{
+	return HandPose;
+}
 
 UFXR_GripPoint::UFXR_GripPoint()
 {
