@@ -7,6 +7,7 @@
 #include "FXR_Grab.generated.h"
 
 class UPrimitiveComponent;
+class UFXR_GripPoint;
 
 /**
  * UFXR_Grab — free 6-DOF grab.
@@ -32,6 +33,9 @@ protected:
 	float ThrowVelocityScale = 1.f;
 
 private:
+	/** Best grip point on the owner for this interactor's hand (highest priority, then nearest), or null. */
+	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
+
 	FTransform HeldOffset = FTransform::Identity;
 	bool bRestorePhysics = false;
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;

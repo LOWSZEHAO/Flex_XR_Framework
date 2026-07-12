@@ -14,3 +14,12 @@ enum class EFXR_EndReason : uint8
 	Disabled      UMETA(DisplayName = "Disabled"),
 	Broken        UMETA(DisplayName = "Broken")
 };
+
+/** Which hand(s) a grip point accepts. */
+UENUM(BlueprintType)
+enum class EFXR_GripHandedness : uint8
+{
+	Both      UMETA(DisplayName = "Both"),
+	LeftOnly  UMETA(DisplayName = "Left Only"),
+	RightOnly UMETA(DisplayName = "Right Only")
+};
