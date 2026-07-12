@@ -86,6 +86,19 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 	Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
 
+	// Use (trigger) edges + analog value while held — the "hold grip, pull trigger" case (guns, flashlights).
+	CurrentUseValue = Interactor->GetUseValue();
+	if (!bUsing && CurrentUseValue >= UseThreshold)
+	{
+		bUsing = true;
+		OnUseStarted.Broadcast();
+	}
+	else if (bUsing && CurrentUseValue < UseReleaseThreshold)
+	{
+		bUsing = false;
+		OnUseEnded.Broadcast();
+	}
+
 	// Track hand velocity from the driven motion so release can hand it off (ADR-001 release step).
 	if (DeltaTime > SMALL_NUMBER)
 	{
@@ -121,6 +134,14 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 			Driven->SetPhysicsAngularVelocityInRadians(TrackedAngularVelocity);
 		}
 	}
+
+	// Releasing while the trigger is down still ends the use — never strand a latched OnUseStarted.
+	if (bUsing)
+	{
+		bUsing = false;
+		OnUseEnded.Broadcast();
+	}
+	CurrentUseValue = 0.f;
 
 	HeldComponent = nullptr;
 	bRestorePhysics = false;
