@@ -151,7 +151,13 @@ UFXR_GripPoint* UFXR_Grab::SelectGripPoint(IFXR_Interactor* Interactor) const
 	}
 
 	const EFXR_HandSide Side = Interactor->GetHandSide();
-	const FVector GripLocation = Interactor->GetGripTransform().GetLocation();
+
+	// A grip point is in reach when the hand's grab sphere overlaps its activation sphere —
+	// same convention as the detection broad phase (Reach = point radius + grab radius), so the
+	// hand need only touch the sphere, not drive its origin all the way to the centre.
+	FVector GrabCenter;
+	float GrabRadius = 0.f;
+	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
 
 	UFXR_GripPoint* Best = nullptr;
 	int32 BestPriority = TNumericLimits<int32>::Min();
@@ -163,8 +169,9 @@ UFXR_GripPoint* UFXR_Grab::SelectGripPoint(IFXR_Interactor* Interactor) const
 		{
 			continue;
 		}
-		const float DistanceSq = FVector::DistSquared(GripLocation, Point->GetComponentLocation());
-		if (DistanceSq > FMath::Square(Point->GetActivationRadius()))
+		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+		const float Reach = Point->GetActivationRadius() + GrabRadius;
+		if (DistanceSq > FMath::Square(Reach))
 		{
 			continue;
 		}
