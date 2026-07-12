@@ -52,3 +52,20 @@ struct FFXR_FingerCurls
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ThumbOpposition = 0.f;
 };
+
+/** Constrained-motion primitive for FXR_Latch. */
+UENUM(BlueprintType)
+enum class EFXR_LatchMotion : uint8
+{
+	Rotational UMETA(DisplayName = "Rotational"),
+	Linear     UMETA(DisplayName = "Linear")
+};
+
+/** Local axis of the latch component the motion is about (rotational) or along (linear). */
+UENUM(BlueprintType)
+enum class EFXR_LatchAxis : uint8
+{
+	X UMETA(DisplayName = "Local X"),
+	Y UMETA(DisplayName = "Local Y"),
+	Z UMETA(DisplayName = "Local Z")
+};
