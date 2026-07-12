@@ -235,6 +235,21 @@ void AFXR_Pawn::DrawDebugInteractors()
 		DrawDebugLine(World, Origin, Origin + Direction * 200.f, Color, false, -1.f, 0, 0.3f);
 	};
 
+	auto TypeName = [](IFXR_Interactor* Interactor) -> const TCHAR*
+	{
+		if (!Interactor)
+		{
+			return TEXT("none");
+		}
+		switch (Interactor->GetInteractorType())
+		{
+		case EFXR_InteractorType::MotionController: return TEXT("Controller");
+		case EFXR_InteractorType::TrackedHand:      return TEXT("Hand");
+		case EFXR_InteractorType::DesktopSim:       return TEXT("Desktop");
+		default:                                    return TEXT("?");
+		}
+	};
+
 	IFXR_Interactor* Left = GetActiveInteractor(EFXR_HandSide::Left);
 	IFXR_Interactor* Right = GetActiveInteractor(EFXR_HandSide::Right);
 	DrawInteractor(Left, FColor::Cyan);
@@ -245,12 +260,12 @@ void AFXR_Pawn::DrawDebugInteractors()
 		if (Right)
 		{
 			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Yellow,
-				FString::Printf(TEXT("R  select=%.2f  use=%.2f"), Right->GetSelectValue(), Right->GetUseValue()));
+				FString::Printf(TEXT("R  [%s]  select=%.2f  use=%.2f"), TypeName(Right), Right->GetSelectValue(), Right->GetUseValue()));
 		}
 		if (Left)
 		{
 			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Cyan,
-				FString::Printf(TEXT("L  select=%.2f  use=%.2f"), Left->GetSelectValue(), Left->GetUseValue()));
+				FString::Printf(TEXT("L  [%s]  select=%.2f  use=%.2f"), TypeName(Left), Left->GetSelectValue(), Left->GetUseValue()));
 		}
 	}
 }
