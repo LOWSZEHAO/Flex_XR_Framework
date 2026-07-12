@@ -53,9 +53,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
 	EFXR_HandSide HandSide = EFXR_HandSide::Right;
 
-	/** Local offset from the interactor grip pose to this mesh's origin (align the palm to the grip). */
+	/** Mesh offset from the interactor grip pose when driven by a controller (align the mesh to the controller grip). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
 	FTransform GripPoseOffset;
+
+	/** Mesh offset when driven by hand tracking — the tracked palm frame differs from the controller grip, so it needs its own alignment. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
+	FTransform HandTrackingPoseOffset;
 
 	/** Follow the active interactor's grip pose each tick. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
