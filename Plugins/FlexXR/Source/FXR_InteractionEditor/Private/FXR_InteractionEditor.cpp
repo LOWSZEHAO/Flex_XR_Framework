@@ -5,6 +5,7 @@
 #include "FXR_InteractableVisualizer.h"
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_Grab.h"
+#include "Interactable/FXR_Latch.h"
 #include "UnrealEdGlobals.h"
 #include "Editor/UnrealEdEngine.h"
 
@@ -27,6 +28,12 @@ void FFXR_InteractionEditorModule::StartupModule()
 		GUnrealEd->RegisterComponentVisualizer(UFXR_Grab::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
+	{
+		// The activation-radius gizmo applies to any interactable — register it for the latch too.
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_InteractableVisualizer>();
+		GUnrealEd->RegisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName(), Visualizer);
+		Visualizer->OnRegister();
+	}
 }
 
 void FFXR_InteractionEditorModule::ShutdownModule()
@@ -38,6 +45,7 @@ void FFXR_InteractionEditorModule::ShutdownModule()
 
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_GripPoint::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Grab::StaticClass()->GetFName());
+	GUnrealEd->UnregisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName());
 }
 
 #undef LOCTEXT_NAMESPACE

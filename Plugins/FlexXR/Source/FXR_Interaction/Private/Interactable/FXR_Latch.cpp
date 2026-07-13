@@ -20,6 +20,12 @@ void UFXR_Latch::BeginPlay()
 	{
 		DrivenRestWorld = Driven->GetComponentTransform();
 	}
+	else
+	{
+		UE_LOG(LogFXR, Warning,
+			TEXT("FXR_Latch '%s' on '%s': no driven mesh resolved — attach the latch UNDER the mesh it should move (the mesh must be the latch's parent, or the actor's root). It will not respond to grabs."),
+			*GetName(), *GetNameSafe(GetOwner()));
+	}
 	CurrentValue = 0.f;
 	LastValidValue = 0.f;
 }
@@ -133,13 +139,22 @@ void UFXR_Latch::CheckForErrors()
 {
 	Super::CheckForErrors();
 
-	if (MotionType != EFXR_LatchMotion::Rotational)
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
 	{
 		return;
 	}
 
-	const AActor* OwnerActor = GetOwner();
-	if (!OwnerActor)
+	// Catches the most common setup mistake: the mesh parented *under* the latch (the rule looks up,
+	// not down), so nothing gets driven. The latch must be a child of the mesh, or the mesh the root.
+	if (!ResolveDrivenComponent())
+	{
+		UE_LOG(LogFXR, Warning,
+			TEXT("FXR_Latch '%s' on '%s': no driven mesh — attach the latch under the mesh it moves (mesh = the latch's parent, or the actor root). Nothing will move."),
+			*GetName(), *OwnerActor->GetName());
+	}
+
+	if (MotionType != EFXR_LatchMotion::Rotational)
 	{
 		return;
 	}
