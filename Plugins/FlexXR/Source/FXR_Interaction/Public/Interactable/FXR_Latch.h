@@ -35,6 +35,15 @@ public:
 	virtual void CheckForErrors() override;
 #endif
 
+	//~ Accessors for the viewport gizmo / gameplay queries.
+	EFXR_LatchMotion GetMotionType() const { return MotionType; }
+	/** Lower travel limit — degrees (Rotational) or cm (Linear). May be negative. */
+	float GetMinLimit() const { return MinLimit; }
+	/** Upper travel limit — degrees (Rotational) or cm (Linear). May be negative. */
+	float GetMaxLimit() const { return MaxLimit; }
+	/** Unit motion axis in the component's own local space. */
+	FVector GetMotionAxisLocalUnit() const { return AxisUnitFor(MotionAxis); }
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	EFXR_LatchMotion MotionType = EFXR_LatchMotion::Rotational;
@@ -42,11 +51,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	EFXR_LatchAxis MotionAxis = EFXR_LatchAxis::Z;
 
-	/** Lower limit — degrees (Rotational) or cm (Linear). */
+	/** Lower limit — degrees (Rotational) or cm (Linear). Negative moves opposite the axis; 0 = the authored rest pose, so Min < 0 < Max swings both ways from rest. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float MinLimit = 0.f;
 
-	/** Upper limit — degrees (Rotational) or cm (Linear). */
+	/** Upper limit — degrees (Rotational) or cm (Linear). May be negative; keep it above Min Limit. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float MaxLimit = 110.f;
 

@@ -19,6 +19,14 @@ void UFXR_Latch::BeginPlay()
 	if (Driven.IsValid())
 	{
 		DrivenRestWorld = Driven->GetComponentTransform();
+
+		// A latch is a constrained mechanism (door/drawer/lever) — always kinematically driven along
+		// its rail, never free-falling. Force physics off so gravity can't fight the solver or drop the
+		// mesh before it's grabbed (drop-a-component-works; no manual "uncheck Simulate Physics" step).
+		if (Driven->IsSimulatingPhysics())
+		{
+			Driven->SetSimulatePhysics(false);
+		}
 	}
 	else
 	{
@@ -152,6 +160,13 @@ void UFXR_Latch::CheckForErrors()
 		UE_LOG(LogFXR, Warning,
 			TEXT("FXR_Latch '%s' on '%s': no driven mesh — attach the latch under the mesh it moves (mesh = the latch's parent, or the actor root). Nothing will move."),
 			*GetName(), *OwnerActor->GetName());
+	}
+
+	if (MinLimit >= MaxLimit)
+	{
+		UE_LOG(LogFXR, Warning,
+			TEXT("FXR_Latch '%s' on '%s': Min Limit (%.1f) >= Max Limit (%.1f) — no travel range."),
+			*GetName(), *OwnerActor->GetName(), MinLimit, MaxLimit);
 	}
 
 	if (MotionType != EFXR_LatchMotion::Rotational)

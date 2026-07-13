@@ -3,6 +3,7 @@
 #include "FXR_InteractionEditor.h"
 #include "FXR_GripPointVisualizer.h"
 #include "FXR_InteractableVisualizer.h"
+#include "FXR_LatchVisualizer.h"
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_Latch.h"
@@ -29,8 +30,8 @@ void FFXR_InteractionEditorModule::StartupModule()
 		Visualizer->OnRegister();
 	}
 	{
-		// The activation-radius gizmo applies to any interactable — register it for the latch too.
-		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_InteractableVisualizer>();
+		// The latch gets its own gizmo (pivot + axis + Min..Max range), drawn from the component.
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_LatchVisualizer>();
 		GUnrealEd->RegisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
