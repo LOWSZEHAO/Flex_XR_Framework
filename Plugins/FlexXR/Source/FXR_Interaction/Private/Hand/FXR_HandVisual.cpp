@@ -5,7 +5,6 @@
 #include "Rig/FXR_Pawn.h"
 #include "Driver/FXR_InteractionDriver.h"
 #include "Interactable/FXR_InteractableBase.h"
-#include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_HandPose.h"
 #include "GameFramework/Actor.h"
 
@@ -72,12 +71,10 @@ const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
 		return nullptr;
 	}
 
-	if (UFXR_InteractableBase* Held = Driver->GetHeldInteractable(HandSide))
+	if (const UFXR_InteractableBase* Held = Driver->GetHeldInteractable(HandSide))
 	{
-		if (const UFXR_Grab* Grab = Cast<UFXR_Grab>(Held))
-		{
-			return Grab->GetActiveHandPose();
-		}
+		// Any interactable can offer a pose (Grab, Latch, ...) via the base virtual.
+		return Held->GetActiveHandPose();
 	}
 	return nullptr;
 }

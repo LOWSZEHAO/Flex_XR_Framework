@@ -2,6 +2,7 @@
 
 #include "Interactable/FXR_Latch.h"
 #include "Interactable/FXR_GripPoint.h"
+#include "Interactable/FXR_HandPose.h"
 #include "Solver/FXR_ConstraintSolver.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Types/FXR_LogChannels.h"
@@ -50,6 +51,10 @@ void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
 
 	ValueAtGrab = CurrentValue;
 	LastValidValue = CurrentValue;
+
+	// Pose the hand around the nearest grip point (e.g. a lever handle) while driving the latch.
+	const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
 	const FVector HandLocation = Interactor->GetGripTransform().GetLocation();
 	if (MotionType == EFXR_LatchMotion::Rotational)
@@ -111,7 +116,13 @@ void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
 		BroadcastValueAndState();
 	}
 
+	ActiveHandPose = nullptr;
 	Super::OnEnd(Reason);
+}
+
+UFXR_HandPose* UFXR_Latch::GetActiveHandPose() const
+{
+	return ActiveHandPose.Get();
 }
 
 void UFXR_Latch::ApplyValue()

@@ -10,6 +10,8 @@
 
 class IFXR_Interactor;
 class UPrimitiveComponent;
+class UFXR_GripPoint;
+class UFXR_HandPose;
 
 /**
  * UFXR_InteractableBase — shared base for FlexXR interactables (Grab, Latch, Press, ...).
@@ -62,9 +64,15 @@ public:
 	/** World location used for narrow-phase scoring (the driven component, else this component). */
 	FVector GetInteractionLocation() const;
 
+	/** Hand pose (finger shape) the presentation layer should apply while this is held, or null. */
+	virtual UFXR_HandPose* GetActiveHandPose() const { return nullptr; }
+
 protected:
 	/** The primitive this interactable moves/affects: the attach-parent primitive, else the actor root primitive. */
 	UPrimitiveComponent* ResolveDrivenComponent() const;
+
+	/** Best grip point on the owner for this interactor's hand (highest priority, then nearest overlapping), or null. */
+	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
 
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);

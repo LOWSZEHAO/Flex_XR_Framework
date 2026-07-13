@@ -36,7 +36,7 @@ public:
 	virtual void OnEnd(EFXR_EndReason Reason) override;
 
 	/** The hand pose of the grip point currently in use, or null (procedural hold). */
-	UFXR_HandPose* GetActiveHandPose() const;
+	virtual UFXR_HandPose* GetActiveHandPose() const override;
 
 	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
@@ -68,9 +68,6 @@ protected:
 	float UseReleaseThreshold = 0.35f;
 
 private:
-	/** Best grip point on the owner for this interactor's hand (highest priority, then nearest), or null. */
-	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
-
 	FTransform HeldOffset = FTransform::Identity;
 	FTransform SnapProceduralOffset = FTransform::Identity;
 	FTransform SnapTargetOffset = FTransform::Identity;

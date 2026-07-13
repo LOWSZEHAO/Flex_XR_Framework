@@ -8,6 +8,7 @@
 #include "FXR_Latch.generated.h"
 
 class UPrimitiveComponent;
+class UFXR_HandPose;
 
 /** Broadcast as the latch's normalized value (0..1) changes while driven. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_LatchValueChanged, float, LatchValue);
@@ -37,6 +38,7 @@ public:
 	virtual void OnBegin(IFXR_Interactor* Interactor) override;
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime) override;
 	virtual void OnEnd(EFXR_EndReason Reason) override;
+	virtual UFXR_HandPose* GetActiveHandPose() const override;
 
 #if WITH_EDITOR
 	virtual void CheckForErrors() override;
@@ -125,4 +127,5 @@ private:
 	float ValueAtGrab = 0.f;
 	FVector HandRefInPlaneDir = FVector::ForwardVector;
 	float HandRefAxisProj = 0.f;
+	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 };

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Low Sze Hao. All rights reserved.
 
 #include "Interactable/FXR_InteractableBase.h"
+#include "Interactable/FXR_GripPoint.h"
 #include "Detection/FXR_InteractionSubsystem.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Events/FXR_EventBus.h"
@@ -101,6 +102,57 @@ FVector UFXR_InteractableBase::GetInteractionLocation() const
 		return Driven->GetComponentLocation();
 	}
 	return GetComponentLocation();
+}
+
+UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interactor) const
+{
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !Interactor)
+	{
+		return nullptr;
+	}
+
+	TArray<UFXR_GripPoint*> GripPoints;
+	OwnerActor->GetComponents<UFXR_GripPoint>(GripPoints);
+	if (GripPoints.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	const EFXR_HandSide Side = Interactor->GetHandSide();
+
+	// A grip point is in reach when the hand's grab sphere overlaps its activation sphere —
+	// same convention as the detection broad phase (Reach = point radius + grab radius).
+	FVector GrabCenter;
+	float GrabRadius = 0.f;
+	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+
+	UFXR_GripPoint* Best = nullptr;
+	int32 BestPriority = TNumericLimits<int32>::Min();
+	float BestDistanceSq = TNumericLimits<float>::Max();
+
+	for (UFXR_GripPoint* Point : GripPoints)
+	{
+		if (!Point || !Point->AcceptsHand(Side))
+		{
+			continue;
+		}
+		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+		const float Reach = Point->GetActivationRadius() + GrabRadius;
+		if (DistanceSq > FMath::Square(Reach))
+		{
+			continue;
+		}
+		if (Point->GetPriority() > BestPriority ||
+			(Point->GetPriority() == BestPriority && DistanceSq < BestDistanceSq))
+		{
+			Best = Point;
+			BestPriority = Point->GetPriority();
+			BestDistanceSq = DistanceSq;
+		}
+	}
+
+	return Best;
 }
 
 UPrimitiveComponent* UFXR_InteractableBase::ResolveDrivenComponent() const
