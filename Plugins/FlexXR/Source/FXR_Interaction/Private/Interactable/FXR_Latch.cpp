@@ -212,7 +212,8 @@ void UFXR_Latch::ApplyValue()
 float UFXR_Latch::GetLatchValue() const
 {
 	const float Range = MaxLimit - MinLimit;
-	return FMath::IsNearlyZero(Range) ? 0.f : FMath::Clamp((CurrentValue - MinLimit) / Range, 0.f, 1.f);
+	const float Raw = FMath::IsNearlyZero(Range) ? 0.f : FMath::Clamp((CurrentValue - MinLimit) / Range, 0.f, 1.f);
+	return bInvertLatchValue ? 1.f - Raw : Raw;
 }
 
 float UFXR_Latch::StateValue(int32 Index) const
@@ -251,7 +252,7 @@ void UFXR_Latch::BroadcastValueAndState()
 		if (NewState != CurrentState)
 		{
 			CurrentState = NewState;
-			OnStateChanged.Broadcast(CurrentState);
+			OnStateChanged.Broadcast(GetCurrentState());
 		}
 	}
 }

@@ -63,9 +63,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Latch")
 	float GetLatchValue() const;
 
-	/** Current discrete state index for a snap-to-states latch (0 otherwise). */
+	/** Current discrete state index for a snap-to-states latch (0 otherwise), inverted if bInvertLatchValue. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Latch")
-	int32 GetCurrentState() const { return CurrentState; }
+	int32 GetCurrentState() const { return bInvertLatchValue ? (NumStates - 1 - CurrentState) : CurrentState; }
 
 	/** Fires as the normalized value changes while the latch is driven. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Latch")
@@ -93,6 +93,10 @@ protected:
 	/** Value the latch holds at BeginPlay — degrees (Rotational) or cm (Linear). Clamped to [Min, Max]; 0 = the authored rest pose. Snap-to-states rounds it to the nearest state. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float StartValue = 0.f;
+
+	/** Reverse the reported Latch Value and state index, so Max reads 0 and Min reads 1. Use when the motion opens toward Min (e.g. Min -75 / Max 0) and you still want "closed" to read 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
+	bool bInvertLatchValue = false;
 
 	/** Rotational only: gripping within this distance (cm) of the axis holds the last angle (avoids the axis singularity). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch", meta = (ClampMin = "0.1", EditCondition = "MotionType == EFXR_LatchMotion::Rotational"))
