@@ -52,8 +52,10 @@ void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
 	ValueAtGrab = CurrentValue;
 	LastValidValue = CurrentValue;
 
-	// Pose the hand around the nearest grip point (e.g. a lever handle) while driving the latch.
-	const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	// Pose the hand around the nearest grip point (e.g. a lever handle) while driving the latch;
+	// keep the grip point as the reference for the too-far auto-detach.
+	UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	ActiveGripPoint = GripPoint;
 	ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
 	const FVector HandLocation = Interactor->GetGripTransform().GetLocation();
@@ -76,6 +78,19 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 	}
 
 	const FVector HandLocation = Interactor->GetGripTransform().GetLocation();
+
+	// Auto-detach: the latch can't follow the hand, so if the hand strays too far from the handle
+	// (grip point, else the driven mesh), release it rather than driving from an implausible reach.
+	if (DetachDistance > 0.f)
+	{
+		const FVector RefLocation = ActiveGripPoint.IsValid() ? ActiveGripPoint->GetComponentLocation() : GetInteractionLocation();
+		if (FVector::DistSquared(HandLocation, RefLocation) > FMath::Square(DetachDistance))
+		{
+			ForceRelease();
+			return;
+		}
+	}
+
 	const FVector Pivot = GetPivotLocation();
 	const FVector Axis = GetAxisWorld();
 
@@ -117,6 +132,7 @@ void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
 	}
 
 	ActiveHandPose = nullptr;
+	ActiveGripPoint = nullptr;
 	Super::OnEnd(Reason);
 }
 

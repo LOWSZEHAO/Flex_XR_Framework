@@ -9,6 +9,7 @@
 
 class UPrimitiveComponent;
 class UFXR_HandPose;
+class UFXR_GripPoint;
 
 /** Broadcast as the latch's normalized value (0..1) changes while driven. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_LatchValueChanged, float, LatchValue);
@@ -92,6 +93,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch", meta = (ClampMin = "0.1", EditCondition = "MotionType == EFXR_LatchMotion::Rotational"))
 	float MinLeverArm = 5.f;
 
+	/** While held, auto-release if the hand strays this far (cm) from the handle grip point (or the driven mesh if there's no grip point). 0 = never auto-detach. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch", meta = (ClampMin = "0.0"))
+	float DetachDistance = 40.f;
+
 	/** Detented motion: on release, snap to the nearest of N evenly-spaced states (switches, levers, selectors). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch|States")
 	bool bSnapToStates = false;
@@ -128,4 +133,5 @@ private:
 	FVector HandRefInPlaneDir = FVector::ForwardVector;
 	float HandRefAxisProj = 0.f;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
+	TWeakObjectPtr<UFXR_GripPoint> ActiveGripPoint;
 };
