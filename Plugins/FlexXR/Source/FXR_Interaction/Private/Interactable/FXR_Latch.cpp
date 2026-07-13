@@ -36,6 +36,8 @@ void UFXR_Latch::BeginPlay()
 	}
 	CurrentValue = 0.f;
 	LastValidValue = 0.f;
+	CurrentState = NearestStateIndex(CurrentValue);
+	LastBroadcastValue = GetLatchValue();
 }
 
 void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
@@ -95,6 +97,21 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 	}
 
 	ApplyValue();
+	BroadcastValueAndState();
+}
+
+void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
+{
+	// Detented release: settle on the nearest state so a switch/lever lands cleanly on a position.
+	if (bSnapToStates && Driven.IsValid())
+	{
+		CurrentValue = StateValue(NearestStateIndex(CurrentValue));
+		LastValidValue = CurrentValue;
+		ApplyValue();
+		BroadcastValueAndState();
+	}
+
+	Super::OnEnd(Reason);
 }
 
 void UFXR_Latch::ApplyValue()
@@ -119,6 +136,53 @@ void UFXR_Latch::ApplyValue()
 	{
 		const FVector NewLocation = DrivenRestWorld.GetLocation() + Axis * CurrentValue;
 		DrivenComponent->SetWorldTransform(FTransform(DrivenRestWorld.GetRotation(), NewLocation, DrivenRestWorld.GetScale3D()), false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+float UFXR_Latch::GetLatchValue() const
+{
+	const float Range = MaxLimit - MinLimit;
+	return FMath::IsNearlyZero(Range) ? 0.f : FMath::Clamp((CurrentValue - MinLimit) / Range, 0.f, 1.f);
+}
+
+float UFXR_Latch::StateValue(int32 Index) const
+{
+	if (NumStates <= 1)
+	{
+		return MinLimit;
+	}
+	const float T = static_cast<float>(FMath::Clamp(Index, 0, NumStates - 1)) / static_cast<float>(NumStates - 1);
+	return FMath::Lerp(MinLimit, MaxLimit, T);
+}
+
+int32 UFXR_Latch::NearestStateIndex(float Value) const
+{
+	const float Range = MaxLimit - MinLimit;
+	if (NumStates <= 1 || FMath::IsNearlyZero(Range))
+	{
+		return 0;
+	}
+	const float T = (Value - MinLimit) / Range;
+	return FMath::Clamp(FMath::RoundToInt(T * static_cast<float>(NumStates - 1)), 0, NumStates - 1);
+}
+
+void UFXR_Latch::BroadcastValueAndState()
+{
+	const float NewLatchValue = GetLatchValue();
+	if (!FMath::IsNearlyEqual(NewLatchValue, LastBroadcastValue, 1e-3f))
+	{
+		LastBroadcastValue = NewLatchValue;
+		OnLatchValueChanged.Broadcast(NewLatchValue);
+	}
+
+	if (bSnapToStates)
+	{
+		const int32 NewState = NearestStateIndex(CurrentValue);
+		if (NewState != CurrentState)
+		{
+			CurrentState = NewState;
+			OnStateChanged.Broadcast(CurrentState);
+		}
 	}
 }
 
