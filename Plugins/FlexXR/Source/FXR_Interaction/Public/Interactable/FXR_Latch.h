@@ -139,4 +139,10 @@ private:
 	float HandRefAxisProj = 0.f;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 	TWeakObjectPtr<UFXR_GripPoint> ActiveGripPoint;
+
+	// Hand-to-handle snap, driven by the grip point's snap mode (None = hand stays on controller).
+	EFXR_GripSnapMode HandSnapMode = EFXR_GripSnapMode::None;
+	float HandSnapSpeed = 10.f;
+	float HandSnapAlpha = 1.f;
+	FTransform EasedHandTransform = FTransform::Identity;
 };

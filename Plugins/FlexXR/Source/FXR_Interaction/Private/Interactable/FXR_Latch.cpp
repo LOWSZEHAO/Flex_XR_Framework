@@ -69,6 +69,16 @@ void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
 	ActiveGripPoint = GripPoint;
 	ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
+	// Hand-to-handle snap follows the grip point's snap mode: Smooth eases from the grabbed pose,
+	// Snap arrives instantly, None keeps the hand on the controller.
+	HandSnapMode = GripPoint ? GripPoint->GetSnapMode() : EFXR_GripSnapMode::None;
+	HandSnapSpeed = GripPoint ? GripPoint->GetSnapInterpSpeed() : 10.f;
+	HandSnapAlpha = (HandSnapMode == EFXR_GripSnapMode::Smooth) ? 0.f : 1.f;
+	if (GripPoint)
+	{
+		EasedHandTransform.Blend(Interactor->GetGripTransform(), GripPoint->GetComponentTransform(), HandSnapAlpha);
+	}
+
 	const FVector HandLocation = Interactor->GetGripTransform().GetLocation();
 	if (MotionType == EFXR_LatchMotion::Rotational)
 	{
@@ -129,6 +139,16 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 	ApplyValue();
 	BroadcastValueAndState();
+
+	// Advance the hand-to-handle ease (Smooth) and track the moving handle for the hand mesh to follow.
+	if (ActiveGripPoint.IsValid())
+	{
+		if (HandSnapMode == EFXR_GripSnapMode::Smooth && HandSnapAlpha < 1.f)
+		{
+			HandSnapAlpha = FMath::Min(HandSnapAlpha + DeltaTime * HandSnapSpeed, 1.f);
+		}
+		EasedHandTransform.Blend(Interactor->GetGripTransform(), ActiveGripPoint->GetComponentTransform(), HandSnapAlpha);
+	}
 }
 
 void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
@@ -154,11 +174,11 @@ UFXR_HandPose* UFXR_Latch::GetActiveHandPose() const
 
 bool UFXR_Latch::GetHandAttachTransform(FTransform& OutTransform) const
 {
-	// Snap the hand to the handle so it tracks the object as the latch moves (the grip point is a
-	// child of the driven mesh). No grip point → the hand keeps following the controller.
-	if (const UFXR_GripPoint* GripPoint = ActiveGripPoint.Get())
+	// Pin the hand to the handle (eased per the grip point's snap mode) so it tracks the object as
+	// the latch moves. Snap mode None — or no grip point — keeps the hand on the controller.
+	if (ActiveGripPoint.IsValid() && HandSnapMode != EFXR_GripSnapMode::None)
 	{
-		OutTransform = GripPoint->GetComponentTransform();
+		OutTransform = EasedHandTransform;
 		return true;
 	}
 	return false;
