@@ -40,6 +40,7 @@ public:
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime) override;
 	virtual void OnEnd(EFXR_EndReason Reason) override;
 	virtual UFXR_HandPose* GetActiveHandPose() const override;
+	virtual bool GetHandAttachTransform(FTransform& OutTransform) const override;
 
 #if WITH_EDITOR
 	virtual void CheckForErrors() override;
@@ -88,6 +89,10 @@ protected:
 	/** Upper limit — degrees (Rotational) or cm (Linear). May be negative; keep it above Min Limit. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float MaxLimit = 110.f;
+
+	/** Value the latch holds at BeginPlay — degrees (Rotational) or cm (Linear). Clamped to [Min, Max]; 0 = the authored rest pose. Snap-to-states rounds it to the nearest state. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
+	float StartValue = 0.f;
 
 	/** Rotational only: gripping within this distance (cm) of the axis holds the last angle (avoids the axis singularity). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch", meta = (ClampMin = "0.1", EditCondition = "MotionType == EFXR_LatchMotion::Rotational"))

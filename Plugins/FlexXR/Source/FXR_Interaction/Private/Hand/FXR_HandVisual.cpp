@@ -30,9 +30,21 @@ void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		const bool bHandTracking = (Interactor->GetInteractorType() == EFXR_InteractorType::TrackedHand);
 		const FTransform& Offset = bHandTracking ? HandTrackingPoseOffset : GripPoseOffset;
 
+		// A held interactable may pin the hand to a handle (latch grip point) so it tracks the object;
+		// otherwise the hand follows the interactor grip (Grab moves the object to the hand instead).
+		FTransform GripSource = Interactor->GetGripTransform();
+		if (const UFXR_InteractableBase* Held = ResolveHeldInteractable())
+		{
+			FTransform Attach;
+			if (Held->GetHandAttachTransform(Attach))
+			{
+				GripSource = Attach;
+			}
+		}
+
 		// Follow location + rotation only, preserving this mesh's authored scale — a negative
 		// scale (mirroring the right-hand mesh into a left hand) must survive the follow.
-		const FTransform Target = Offset * Interactor->GetGripTransform();
+		const FTransform Target = Offset * GripSource;
 		SetWorldLocationAndRotation(Target.GetLocation(), Target.GetRotation());
 	}
 
@@ -57,7 +69,7 @@ void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	FingerCurls.ThumbOpposition = FMath::FInterpTo(FingerCurls.ThumbOpposition, Target.ThumbOpposition, DeltaTime, BlendSpeed);
 }
 
-const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
+UFXR_InteractableBase* UFXR_HandVisual::ResolveHeldInteractable() const
 {
 	const AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
@@ -66,14 +78,14 @@ const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
 	}
 
 	const UFXR_InteractionDriver* Driver = OwnerActor->FindComponentByClass<UFXR_InteractionDriver>();
-	if (!Driver)
-	{
-		return nullptr;
-	}
+	return Driver ? Driver->GetHeldInteractable(HandSide) : nullptr;
+}
 
-	if (const UFXR_InteractableBase* Held = Driver->GetHeldInteractable(HandSide))
+const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
+{
+	// Any interactable can offer a pose (Grab, Latch, ...) via the base virtual.
+	if (const UFXR_InteractableBase* Held = ResolveHeldInteractable())
 	{
-		// Any interactable can offer a pose (Grab, Latch, ...) via the base virtual.
 		return Held->GetActiveHandPose();
 	}
 	return nullptr;

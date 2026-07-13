@@ -35,10 +35,21 @@ void UFXR_Latch::BeginPlay()
 			TEXT("FXR_Latch '%s' on '%s': no driven mesh resolved — attach the latch UNDER the mesh it should move (the mesh must be the latch's parent, or the actor's root). It will not respond to grabs."),
 			*GetName(), *GetNameSafe(GetOwner()));
 	}
-	CurrentValue = 0.f;
-	LastValidValue = 0.f;
+	// Start pose: begin at the authored StartValue (0 = rest), snapped to a state if detented.
+	CurrentValue = FMath::Clamp(StartValue, MinLimit, MaxLimit);
+	if (bSnapToStates)
+	{
+		CurrentValue = StateValue(NearestStateIndex(CurrentValue));
+	}
+	LastValidValue = CurrentValue;
 	CurrentState = NearestStateIndex(CurrentValue);
 	LastBroadcastValue = GetLatchValue();
+
+	// Drive the mesh to the start pose if it isn't the authored rest.
+	if (Driven.IsValid() && !FMath::IsNearlyZero(CurrentValue))
+	{
+		ApplyValue();
+	}
 }
 
 void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
@@ -139,6 +150,18 @@ void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
 UFXR_HandPose* UFXR_Latch::GetActiveHandPose() const
 {
 	return ActiveHandPose.Get();
+}
+
+bool UFXR_Latch::GetHandAttachTransform(FTransform& OutTransform) const
+{
+	// Snap the hand to the handle so it tracks the object as the latch moves (the grip point is a
+	// child of the driven mesh). No grip point → the hand keeps following the controller.
+	if (const UFXR_GripPoint* GripPoint = ActiveGripPoint.Get())
+	{
+		OutTransform = GripPoint->GetComponentTransform();
+		return true;
+	}
+	return false;
 }
 
 void UFXR_Latch::ApplyValue()

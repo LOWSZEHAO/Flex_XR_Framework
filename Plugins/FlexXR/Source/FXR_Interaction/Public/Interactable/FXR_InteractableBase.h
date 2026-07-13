@@ -67,6 +67,13 @@ public:
 	/** Hand pose (finger shape) the presentation layer should apply while this is held, or null. */
 	virtual UFXR_HandPose* GetActiveHandPose() const { return nullptr; }
 
+	/**
+	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
+	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
+	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).
+	 */
+	virtual bool GetHandAttachTransform(FTransform& OutTransform) const { return false; }
+
 protected:
 	/** The primitive this interactable moves/affects: the attach-parent primitive, else the actor root primitive. */
 	UPrimitiveComponent* ResolveDrivenComponent() const;

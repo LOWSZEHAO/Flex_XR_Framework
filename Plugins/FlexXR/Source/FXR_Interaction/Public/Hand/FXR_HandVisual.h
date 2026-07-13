@@ -10,6 +10,7 @@
 
 class IFXR_Interactor;
 class UFXR_HandPose;
+class UFXR_InteractableBase;
 
 /**
  * UFXR_HandVisual — displayed hand mesh for one rig hand; the first pass of the §5.2
@@ -71,6 +72,7 @@ protected:
 
 private:
 	IFXR_Interactor* ResolveActiveInteractor() const;
+	UFXR_InteractableBase* ResolveHeldInteractable() const;
 	const UFXR_HandPose* ResolveHeldHandPose() const;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Hand", meta = (AllowPrivateAccess = "true"))
