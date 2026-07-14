@@ -4,9 +4,11 @@
 #include "FXR_GripPointVisualizer.h"
 #include "FXR_InteractableVisualizer.h"
 #include "FXR_LatchVisualizer.h"
+#include "FXR_PressVisualizer.h"
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_Latch.h"
+#include "Interactable/FXR_Press.h"
 #include "UnrealEdGlobals.h"
 #include "Editor/UnrealEdEngine.h"
 
@@ -35,6 +37,12 @@ void FFXR_InteractionEditorModule::StartupModule()
 		GUnrealEd->RegisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
+	{
+		// The press draws its face disc + travel/click depths.
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_PressVisualizer>();
+		GUnrealEd->RegisterComponentVisualizer(UFXR_Press::StaticClass()->GetFName(), Visualizer);
+		Visualizer->OnRegister();
+	}
 }
 
 void FFXR_InteractionEditorModule::ShutdownModule()
@@ -47,6 +55,7 @@ void FFXR_InteractionEditorModule::ShutdownModule()
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_GripPoint::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Grab::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName());
+	GUnrealEd->UnregisterComponentVisualizer(UFXR_Press::StaticClass()->GetFName());
 }
 
 #undef LOCTEXT_NAMESPACE
