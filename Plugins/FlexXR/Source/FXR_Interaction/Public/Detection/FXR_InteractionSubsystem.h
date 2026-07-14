@@ -38,6 +38,9 @@ public:
 	 */
 	UFXR_InteractableBase* FindBestCandidate(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide) const;
 
+	/** All registered interactables — for driver-side passes (pokes). Broad-phase culling is the caller's job until the spatial hash lands. */
+	const TArray<TObjectPtr<UFXR_InteractableBase>>& GetRegistered() const { return Registered; }
+
 	/** Resolve the subsystem from any world context object (may return null). */
 	static UFXR_InteractionSubsystem* Get(const UObject* WorldContextObject);
 

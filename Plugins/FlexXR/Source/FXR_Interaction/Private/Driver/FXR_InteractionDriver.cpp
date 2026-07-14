@@ -3,6 +3,7 @@
 #include "Driver/FXR_InteractionDriver.h"
 #include "Detection/FXR_InteractionSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
+#include "Interactable/FXR_Press.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -20,6 +21,42 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	DriveHand(EFXR_HandSide::Left, LeftHeld, DeltaTime);
 	DriveHand(EFXR_HandSide::Right, RightHeld, DeltaTime);
+	DrivePokes(EFXR_HandSide::Left);
+	DrivePokes(EFXR_HandSide::Right);
+}
+
+void UFXR_InteractionDriver::DrivePokes(EFXR_HandSide Side)
+{
+	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	if (!Interactor)
+	{
+		return;
+	}
+
+	// A hand that owns a hold isn't a poking finger — its fingers are wrapped around something.
+	if (GetHeldInteractable(Side))
+	{
+		return;
+	}
+
+	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+	if (!Subsystem)
+	{
+		return;
+	}
+
+	FVector TipLocation;
+	float TipRadius = 0.f;
+	Interactor->GetPokeTip(TipLocation, TipRadius);
+
+	// Linear pass over the registry (first-pass detection, design 5.4); presses cull precisely.
+	for (const TObjectPtr<UFXR_InteractableBase>& Interactable : Subsystem->GetRegistered())
+	{
+		if (UFXR_Press* Press = Cast<UFXR_Press>(Interactable.Get()))
+		{
+			Press->NotifyPoke(TipLocation, TipRadius, Interactor);
+		}
+	}
 }
 
 IFXR_Interactor* UFXR_InteractionDriver::GetActiveInteractor(EFXR_HandSide Side) const

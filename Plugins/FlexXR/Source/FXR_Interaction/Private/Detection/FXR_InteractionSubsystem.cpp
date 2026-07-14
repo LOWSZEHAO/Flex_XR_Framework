@@ -28,7 +28,7 @@ UFXR_InteractableBase* UFXR_InteractionSubsystem::FindBestCandidate(const FVecto
 
 	for (const TObjectPtr<UFXR_InteractableBase>& Interactable : Registered)
 	{
-		if (!Interactable || !Interactable->IsInteractionEnabled() || Interactable->IsHeld())
+		if (!Interactable || !Interactable->IsGrabTarget() || !Interactable->IsInteractionEnabled() || Interactable->IsHeld())
 		{
 			continue;
 		}

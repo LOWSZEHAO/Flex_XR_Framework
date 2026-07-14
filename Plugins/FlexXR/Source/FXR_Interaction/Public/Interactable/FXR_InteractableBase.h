@@ -93,6 +93,9 @@ public:
 	 */
 	bool IsInGrabReach(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide, float& OutDistanceSq) const;
 
+	/** Whether grab detection may claim this interactable — poke-driven types (Press) return false. */
+	virtual bool IsGrabTarget() const { return true; }
+
 	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
