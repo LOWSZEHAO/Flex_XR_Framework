@@ -6,6 +6,7 @@
 #include "Interactor/FXR_Interactor.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 {
@@ -66,6 +67,8 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 
 void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Grab_OnUpdate);
+
 	if (!Interactor)
 	{
 		return;

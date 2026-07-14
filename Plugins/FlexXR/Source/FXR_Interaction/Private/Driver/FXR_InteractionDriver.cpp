@@ -5,6 +5,7 @@
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 UFXR_InteractionDriver::UFXR_InteractionDriver()
 {
@@ -14,6 +15,8 @@ UFXR_InteractionDriver::UFXR_InteractionDriver()
 void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_Tick);
 
 	DriveHand(EFXR_HandSide::Left, LeftHeld, DeltaTime);
 	DriveHand(EFXR_HandSide::Right, RightHeld, DeltaTime);

@@ -7,6 +7,7 @@
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_HandPose.h"
 #include "GameFramework/Actor.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 UFXR_HandVisual::UFXR_HandVisual()
 {
@@ -16,6 +17,8 @@ UFXR_HandVisual::UFXR_HandVisual()
 void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_HandVisual_Tick);
 
 	IFXR_Interactor* Interactor = ResolveActiveInteractor();
 	if (!Interactor)

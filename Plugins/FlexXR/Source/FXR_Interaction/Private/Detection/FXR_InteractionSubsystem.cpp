@@ -4,6 +4,7 @@
 #include "Interactable/FXR_InteractableBase.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 void UFXR_InteractionSubsystem::RegisterInteractable(UFXR_InteractableBase* Interactable)
 {
@@ -20,6 +21,8 @@ void UFXR_InteractionSubsystem::UnregisterInteractable(UFXR_InteractableBase* In
 
 UFXR_InteractableBase* UFXR_InteractionSubsystem::FindBestCandidate(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide) const
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Detection_FindBestCandidate);
+
 	UFXR_InteractableBase* Best = nullptr;
 	float BestDistanceSq = TNumericLimits<float>::Max();
 

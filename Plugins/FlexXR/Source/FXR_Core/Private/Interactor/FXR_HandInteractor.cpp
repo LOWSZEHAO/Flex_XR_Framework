@@ -5,6 +5,7 @@
 #include "IHandTracker.h"
 #include "HeadMountedDisplayTypes.h"
 #include "InputCoreTypes.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 UFXR_HandInteractor::UFXR_HandInteractor()
 {
@@ -34,6 +35,8 @@ IHandTracker* UFXR_HandInteractor::GetHandTracker() const
 
 void UFXR_HandInteractor::SampleHandTracking()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_HandInteractor_Sample);
+
 	IHandTracker* Tracker = GetHandTracker();
 	if (!Tracker || !Tracker->IsHandTrackingStateValid())
 	{

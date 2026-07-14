@@ -8,6 +8,7 @@
 #include "Types/FXR_LogChannels.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 void UFXR_Latch::BeginPlay()
 {
@@ -93,6 +94,8 @@ void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
 
 void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Latch_OnUpdate);
+
 	if (!Interactor || !Driven.IsValid())
 	{
 		return;
