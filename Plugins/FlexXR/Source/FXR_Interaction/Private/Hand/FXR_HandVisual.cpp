@@ -86,10 +86,11 @@ UFXR_InteractableBase* UFXR_HandVisual::ResolveHeldInteractable() const
 
 const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
 {
-	// Any interactable can offer a pose (Grab, Latch, ...) via the base virtual.
+	// Any interactable can offer a pose (Grab, Latch, ...) via the base virtual; per-side so a
+	// two-hand hold shapes each hand from its own grip point (pistol grip vs foregrip).
 	if (const UFXR_InteractableBase* Held = ResolveHeldInteractable())
 	{
-		return Held->GetActiveHandPose();
+		return Held->GetActiveHandPose(HandSide);
 	}
 	return nullptr;
 }

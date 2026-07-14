@@ -55,6 +55,18 @@ public:
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime);
 	virtual void OnEnd(EFXR_EndReason Reason);
 
+	//~ Two-hand contract — defaults are single-hand; interactables that support a second hand
+	//~ (FXR_Grab's Allow Two-Handed) override these. The driver never assumes hand roles.
+	/** Whether a second hand may join the current hold. */
+	virtual bool CanBeginSecondary(IFXR_Interactor* Interactor) const { return false; }
+	/** A second hand joined the current hold. */
+	virtual void OnBeginSecondary(IFXR_Interactor* Interactor) {}
+	/**
+	 * A specific hand let go. Default: single-hand — the hold ends. Two-hand overrides detach
+	 * just that hand (or promote the survivor) and only end the hold when the last hand leaves.
+	 */
+	virtual void ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason) { OnEnd(Reason); }
+
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
@@ -64,8 +76,8 @@ public:
 	/** World location used for narrow-phase scoring (the driven component, else this component). */
 	FVector GetInteractionLocation() const;
 
-	/** Hand pose (finger shape) the presentation layer should apply while this is held, or null. */
-	virtual UFXR_HandPose* GetActiveHandPose() const { return nullptr; }
+	/** Hand pose (finger shape) the given hand should form while this is held, or null. */
+	virtual UFXR_HandPose* GetActiveHandPose(EFXR_HandSide Side) const { return nullptr; }
 
 	//~ Grip registry (ADR-007): owning grip points attach themselves here at BeginPlay.
 	void RegisterGripPoint(UFXR_GripPoint* GripPoint);

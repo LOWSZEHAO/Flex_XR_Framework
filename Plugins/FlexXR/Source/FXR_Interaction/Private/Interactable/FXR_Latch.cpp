@@ -170,8 +170,9 @@ void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
 	Super::OnEnd(Reason);
 }
 
-UFXR_HandPose* UFXR_Latch::GetActiveHandPose() const
+UFXR_HandPose* UFXR_Latch::GetActiveHandPose(EFXR_HandSide Side) const
 {
+	// Single-hand mechanism for now — the one driving hand wears the handle's pose.
 	return ActiveHandPose.Get();
 }
 

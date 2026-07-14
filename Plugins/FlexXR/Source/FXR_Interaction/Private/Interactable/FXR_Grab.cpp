@@ -16,6 +16,8 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		return;
 	}
 
+	PrimaryInteractor = Interactor;
+
 	UPrimitiveComponent* Driven = ResolveDrivenComponent();
 	HeldComponent = Driven;
 	if (Driven)
@@ -80,14 +82,29 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		return;
 	}
 
-	// Smooth grip mode: ease the hold from where it was grabbed toward the snapped pose.
-	if (SnapAlpha < 1.f)
+	// The driver ticks each attached hand; the primary's update does all the work (it reads both
+	// grips when two-handed), so the secondary's own tick is a no-op.
+	if (Interactor == SecondaryInteractor)
 	{
-		SnapAlpha = FMath::Min(SnapAlpha + DeltaTime * SnapInterpSpeed, 1.f);
-		HeldOffset.Blend(SnapProceduralOffset, SnapTargetOffset, SnapAlpha);
+		return;
 	}
 
-	Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+	if (SecondaryInteractor)
+	{
+		// Two-hand hold: position rides the primary hand, aim follows the hand-to-hand line.
+		Driven->SetWorldTransform(TwoHandOffset * MakeTwoHandFrame(), false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	else
+	{
+		// Smooth grip mode: ease the hold from where it was grabbed toward the snapped pose.
+		if (SnapAlpha < 1.f)
+		{
+			SnapAlpha = FMath::Min(SnapAlpha + DeltaTime * SnapInterpSpeed, 1.f);
+			HeldOffset.Blend(SnapProceduralOffset, SnapTargetOffset, SnapAlpha);
+		}
+
+		Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+	}
 
 	// Use (trigger) edges + analog value while held — the "hold grip, pull trigger" case (guns, flashlights).
 	CurrentUseValue = Interactor->GetUseValue();
@@ -149,12 +166,112 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 	HeldComponent = nullptr;
 	bRestorePhysics = false;
 	ActiveHandPose = nullptr;
+	PrimaryInteractor = nullptr;
+	SecondaryInteractor = nullptr;
+	SecondaryHandPose = nullptr;
 	TrackedLinearVelocity = FVector::ZeroVector;
 	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
 }
 
-UFXR_HandPose* UFXR_Grab::GetActiveHandPose() const
+bool UFXR_Grab::CanBeginSecondary(IFXR_Interactor* Interactor) const
 {
+	return bAllowTwoHanded && IsHeld() && Interactor && Interactor != PrimaryInteractor &&
+		!SecondaryInteractor && HeldComponent.IsValid();
+}
+
+void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
+{
+	if (!CanBeginSecondary(Interactor))
+	{
+		return;
+	}
+
+	SecondaryInteractor = Interactor;
+
+	// The second hand's grip point (hand-side filtered — e.g. a LeftOnly foregrip) shapes it.
+	const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	SecondaryHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
+
+	// Capture the object relative to the two-hand frame as it is right now — joining never pops.
+	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
+	{
+		TwoHandOffset = Driven->GetComponentTransform().GetRelativeTransform(MakeTwoHandFrame());
+	}
+	SnapAlpha = 1.f;
+}
+
+void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
+{
+	// Second hand off: back to a one-hand hold, anchored where the object is now.
+	if (Interactor && Interactor == SecondaryInteractor)
+	{
+		SecondaryInteractor = nullptr;
+		SecondaryHandPose = nullptr;
+		ReanchorToPrimary();
+		return;
+	}
+
+	// Primary off while a second hand holds on: the survivor is promoted and carries the hold.
+	if (SecondaryInteractor)
+	{
+		// The trigger hand left — never strand a latched use.
+		if (bUsing)
+		{
+			bUsing = false;
+			OnUseEnded.Broadcast();
+		}
+
+		PrimaryInteractor = SecondaryInteractor;
+		ActiveHandPose = SecondaryHandPose;
+		SecondaryInteractor = nullptr;
+		SecondaryHandPose = nullptr;
+		ReanchorToPrimary();
+		return;
+	}
+
+	// Last hand off — the hold ends (single-hand behaviour).
+	OnEnd(Reason);
+}
+
+UFXR_HandPose* UFXR_Grab::GetActiveHandPose(EFXR_HandSide Side) const
+{
+	if (SecondaryInteractor && SecondaryInteractor->GetHandSide() == Side)
+	{
+		return SecondaryHandPose.Get();
+	}
 	return ActiveHandPose.Get();
+}
+
+FTransform UFXR_Grab::MakeTwoHandFrame() const
+{
+	const FTransform PrimaryGrip = PrimaryInteractor ? PrimaryInteractor->GetGripTransform() : FTransform::Identity;
+	if (!SecondaryInteractor)
+	{
+		return PrimaryGrip;
+	}
+
+	const FVector From = PrimaryGrip.GetLocation();
+	const FVector To = SecondaryInteractor->GetGripTransform().GetLocation();
+	FVector Aim = To - From;
+	if (Aim.SizeSquared() < KINDA_SMALL_NUMBER)
+	{
+		return PrimaryGrip; // Hands coincide — degenerate; hold the primary frame.
+	}
+
+	// X aims along the hand-to-hand line; the primary grip's up resolves the roll.
+	const FQuat Rotation = FRotationMatrix::MakeFromXZ(Aim, PrimaryGrip.GetRotation().GetUpVector()).ToQuat();
+	return FTransform(Rotation, From);
+}
+
+void UFXR_Grab::ReanchorToPrimary()
+{
+	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
+	{
+		if (PrimaryInteractor)
+		{
+			HeldOffset = Driven->GetComponentTransform().GetRelativeTransform(PrimaryInteractor->GetGripTransform());
+			SnapAlpha = 1.f;
+		}
+	}
 }

@@ -55,7 +55,9 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 		}
 		else if (Select < ReleaseThreshold)
 		{
-			Current->OnEnd(EFXR_EndReason::Released);
+			// Role-aware: a two-hand hold detaches just this hand (or promotes the survivor);
+			// single-hand ends the interaction. The interactable decides — the driver has no roles.
+			Current->ReleaseHand(Interactor, EFXR_EndReason::Released);
 			Held = nullptr;
 		}
 		else
@@ -67,12 +69,26 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 
 	if (Select >= GrabThreshold)
 	{
+		FVector GrabCenter;
+		float GrabRadius = 0.f;
+		Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+
+		// Joining the other hand's hold wins over starting a fresh grab — reaching for an object
+		// you are already holding is nearly always intentional (rifle foregrip, two-hand carry).
+		TWeakObjectPtr<UFXR_InteractableBase>& OtherHeld = (Side == EFXR_HandSide::Left) ? RightHeld : LeftHeld;
+		if (UFXR_InteractableBase* Other = OtherHeld.Get())
+		{
+			float DistanceSq = 0.f;
+			if (Other->CanBeginSecondary(Interactor) && Other->IsInGrabReach(GrabCenter, GrabRadius, Side, DistanceSq))
+			{
+				Other->OnBeginSecondary(Interactor);
+				Held = Other;
+				return;
+			}
+		}
+
 		if (UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this))
 		{
-			FVector GrabCenter;
-			float GrabRadius = 0.f;
-			Interactor->GetGrabSphere(GrabCenter, GrabRadius);
-
 			if (UFXR_InteractableBase* Candidate = Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side))
 			{
 				if (Candidate->CanBegin(Interactor))
