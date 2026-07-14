@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.3 (Design Complete + Engineering Standards Pass)
+**Version:** 0.5 (GripPoint authority & ownership — ADR-007)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -39,19 +39,19 @@ The core bet: **one interaction layer serves both.** Training modules sit *on to
 
 ## 3. Module Architecture
 
-One plugin, four modules, **strictly one-way dependencies**:
+One plugin, five modules, **strictly one-way dependencies**:
 
 ```
-┌─────────────────────────────────────────────┐
-│  FXR_Training   (optional — SOP layer)      │  knows about Interaction
-├─────────────────────────────────────────────┤
-│  FXR_UI         (spatial UI kit, motion)    │
-├─────────────────────────────────────────────┤
-│  FXR_Interaction (components + solvers +    │  knows nothing about Training
-│                   detection + highlight)    │
-├─────────────────────────────────────────────┤
-│  FXR_Core       (platform / OpenXR layer)   │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  FXR_Training     (optional — SOP layer)                    │  knows about everything below
+├──────────────────────────────┬──────────────────────────────┤
+│  FXR_UI                      │  FXR_Locomotion              │  siblings
+│  (spatial UI kit, motion)    │  (teleport, smooth, turn)    │
+├──────────────────────────────┴──────────────────────────────┤
+│  FXR_Interaction  (components + solvers + detection)        │  knows nothing about Training
+├─────────────────────────────────────────────────────────────┤
+│  FXR_Core         (platform / OpenXR layer)                 │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.1 FXR_Core — platform layer
@@ -72,6 +72,17 @@ User-facing components (§4), the internal systems powering them (§5), the dete
 
 ### 3.4 FXR_Training — the SOP layer (optional)
 Data-driven step graph that **watches** `InteractionId` events and validates them (§7). Scoring, mistake analytics, reports, replay. Games never load it.
+
+### 3.5 FXR_Locomotion — moving the player
+
+Depends on **FXR_Interaction** (never the reverse) for two reasons:
+1. **Climbing is grab applied to world geometry** — it reuses `FXR_Grab` and the hand pipeline rather than
+   duplicating them.
+2. **Locomotion must yield to interaction.** A hand holding a valve cannot simultaneously drive a teleport arc.
+   The locomotion component queries interactor state and suppresses input for any hand that currently owns an
+   interaction.
+
+Ships: `FXR_Locomotion` (pawn component), `FXR_TeleportAnchor` and `FXR_TeleportBlocker` (world components).
 
 ---
 
@@ -181,11 +192,53 @@ Justifications: real travel + spring feel; multiple distinct use points per obje
 
 ### FXR_GripPoint
 "A sticker on the object: hands go here, shaped like this."
-- Stores: allowed hand (**Left Only / Right Only / Both**), `UFXR_HandPose` asset, priority, activation radius.
+- Stores: allowed hand (**Left Only / Right Only / Both**), `UFXR_HandPose` asset, priority, activation radius, snap mode, owners.
 - **Left/right at different positions → add two GripPoints with hand filters** (rifle: right hand on pistol grip, left on foregrip). The scorer filters by hand side, so each hand only lands on its own point. **Both** = symmetric spots (mug handle); pose auto-mirrors for whichever hand arrives.
 - **Rail variant:** an axis extent — hands grab anywhere along a handrail/hose and slide.
 - Runtime scoring (distance + approach angle + side + priority) picks the best point; displayed hand blends into the authored pose over ~100 ms.
-- No GripPoint → **procedural grip fallback** (fingers sphere-cast and curl until contact).
+
+**Presence is authoritative (ADR-007).** A GripPoint owned by an interactable ⇒ GripPoints are the **only** way hands attach — the mesh becomes invisible to grab detection. No GripPoint ⇒ the mesh's collision is the grab surface (**procedural grip**: fingers sphere-cast and curl until contact). There is deliberately no enum/checkbox for this on the interactable: presence of the asset is the switch, so the invalid state ("grip-points-only with no grip point") is unrepresentable. All grip configuration lives on FXR_GripPoint. Palm-push (contact drive) is unaffected — a GripPoint-only door can still be shoved with an open palm — and the rotational min-lever-arm guard stays for point-free latches.
+
+**Ownership — `Owners` is a list.** Auto-resolution order:
+1. Nearest ancestor interactable in the component hierarchy → owner.
+2. Otherwise the actor's interactables: exactly **one** → it owns the point (zero configuration); **more than one** → ambiguous — `Owners` must be set explicitly; validation errors at author time naming the candidates. Never guessed at runtime.
+3. No interactable on the actor → validation warning; the point never registers.
+
+A point may be owned by several interactables, but **at most one owner may be enabled at a time** (validated). One interactable claims a given hand at a time; multiple enabled interactables per actor are fine when they don't share points (extinguisher body Grab + squeeze-handle Use).
+
+**The three authoring cases:**
+
+*Case A — single interactable (the ~90% case).* Points parented to the mesh; the sole interactable owns them automatically. Zero configuration.
+```
+BP_Crate
+├── CrateMesh
+│   ├── FXR_Grab
+│   ├── GripPoint_L        Owners: [Grab]  (auto-resolved)
+│   └── GripPoint_R        Owners: [Grab]  (auto-resolved)
+```
+
+*Case B — multiple interactables, different grip locations.* Parent each point under its interactable (self-documenting), or set `Owners` manually. For holds that genuinely differ — carrying a loose panel by its edges vs. swinging a hung door by its handle.
+```
+BP_Door
+├── DoorMesh
+│   ├── FXR_Grab
+│   │   ├── GripPoint_Edge_L     Owners: [Grab]
+│   │   └── GripPoint_Edge_R     Owners: [Grab]
+│   └── FXR_Latch
+│       ├── GripPoint_Handle_L   Owners: [Latch]
+│       └── GripPoint_Handle_R   Owners: [Latch]
+```
+
+*Case C — multiple interactables sharing one grip location.* One pair of points, owned by both; legal because only one owner is enabled at a time. The detachable-door pattern: the frame's FXR_Socket fires `OnSocketed` → `Grab.SetInteractionEnabled(false)`, `Latch.SetInteractionEnabled(true)` — the same handle now swings the door instead of picking it up; reverse on removal.
+```
+BP_Door
+├── DoorMesh
+│   ├── FXR_Grab        (enabled  — carry the loose panel)
+│   ├── FXR_Latch       (disabled — not hung yet)
+│   ├── GripPoint_L     Owners: [Grab, Latch]
+│   └── GripPoint_R     Owners: [Grab, Latch]
+```
+Known limitation (deliberately unsolved): a shared point carries **one** pose. If two owners need different poses at the same location, fall back to Case B. No per-owner pose override until a real case demands it.
 
 ### FXR_Highlight *(optional)*
 Every interactable already gets the default highlight automatically (Outline, bright yellow) — this component exists only to customize further:
@@ -208,6 +261,76 @@ Every interactable already gets the default highlight automatically (Outline, br
 | **Sweep** | Gradient band travels across the object (direction configurable) | Selected/confirm, scan effects, "correct item" feedback |
 
 State→style mapping lives in project settings; FXR_Training only ever says "highlight the pin, Guidance state" — never hardcoding visuals.
+
+### FXR_Locomotion *(pawn component)*
+
+**One component, not four.** Teleport, smooth movement, turning, and climbing are *modes that must arbitrate*:
+smooth movement is illegal while a teleport arc is being aimed, snap and smooth turn are mutually exclusive,
+comfort settings are global, and hand ownership is shared. Splitting them into separate components would
+require an arbiter anyway — so the arbiter **is** the component. (Same reasoning as two-hand grab being a
+checkbox, not a component. See ADR-005.)
+
+**Detail panel:**
+
+```
+Preset:  Comfort ▾        (Comfort / Standard / Free / Custom)
+                          └ fills every field below; editing any field flips to Custom
+
+── Movement ─────────────────────────────────────────────────
+☑ Allow Teleport        ☑ Allow Smooth Move        ☐ Allow Climb
+Smooth Move Direction:   Head Relative ▾   (Head / Hand / Hip Relative)
+Smooth Move Speed:       2.5 m/s
+Teleport Transition:     Fade ▾            (Fade / Blink / Dash / Instant)
+
+── Teleport ─────────────────────────────────────────────────
+Aim Style:               Projectile Arc ▾  (Projectile Arc / Straight Ray)
+Max Distance:            10 m
+Validation:              NavMesh ▾         (NavMesh / Surface Angle / Anchors Only / Custom Channel)
+Max Surface Angle:       35°               [EditCondition: Validation == Surface Angle]
+Landing Rotation:        Keep Facing ▾     (Keep Facing / Thumbstick Choose / Face Arc)
+Fade Duration:           0.15 s
+
+── Turning ──────────────────────────────────────────────────
+Turn Mode:               Snap ▾            (Snap / Smooth / Both / None)
+Snap Angle:              30°               [EditCondition: Snap or Both]
+Smooth Turn Rate:        90 °/s            [EditCondition: Smooth or Both]
+
+── Comfort ──────────────────────────────────────────────────
+Vignette:                Dynamic ▾         (Off / Dynamic / Always)
+Vignette Strength:       0.6
+☑ Vignette On Turn      ☑ Vignette On Smooth Move
+
+── Visuals ──────────────────────────────────────────────────
+Arc mesh · reticle mesh · valid/invalid materials (arc + reticle)
+
+── Training ─────────────────────────────────────────────────
+☐ Expose to Training     InteractionId: "MoveTo_Station_A"
+```
+
+**Presets** do the heavy lifting, in keeping with the framework's preset-first principle:
+
+| Preset | Teleport | Smooth move | Turn | Vignette |
+|---|---|---|---|---|
+| **Comfort** | ✅ fade | ❌ | Snap 30° | Always |
+| **Standard** | ✅ fade | ✅ 2.5 m/s | Snap 30° | Dynamic |
+| **Free** | ✅ dash | ✅ 4 m/s | Smooth 90°/s | Off |
+| **Custom** | — | — | — | — |
+
+**Enums:** `EFXR_LocomotionPreset`, `EFXR_TeleportTransition`, `EFXR_TeleportAim`, `EFXR_TeleportValidation`,
+`EFXR_LandingRotation`, `EFXR_TurnMode`, `EFXR_VignetteMode`, `EFXR_MoveDirectionSource`.
+
+**Runtime API:** `SetLocomotionEnabled(bool)`, `SetTeleportEnabled(bool)`, `SetTurnEnabled(bool)`,
+`TeleportToLocation(FVector, FRotator)`, `SetPreset(EFXR_LocomotionPreset)`. Same enable/disable semantics as
+`UFXR_InteractableBase` — one mechanism, two callers (games gate directly; SOP hard-lock steps call the same API).
+
+### FXR_TeleportAnchor *(world component)*
+A fixed, legal destination. With `Validation = Anchors Only`, the player may *only* land on anchors — the strict
+industrial variant ("you may stand at exactly these four positions at this machine"). Carries its own
+`InteractionId` and optional facing direction. Games use it for designer-authored perches and cover positions.
+
+### FXR_TeleportBlocker *(world component)*
+A volume that invalidates any landing point inside it, regardless of what NavMesh says. Hazard zones, edges,
+scripted no-go areas.
 
 ---
 
@@ -304,6 +427,42 @@ The editor validation panel backs this up: e.g. *"FXR_Grab with physics-on-relea
 
 **Reversal path (cheap):** the detection subsystem is the interface's only would-be consumer. If a non-inheriting implementer ever appears, extracting `IFXR_Interactable` (native-only, single `End(Reason)` exit — no separate `Cancel`) from the existing virtuals is a mechanical refactor. Recorded in `Docs/adr/ADR-003.md`.
 
+### 5.8 Locomotion Systems
+
+**Arc prediction (allocation-free).** `FPredictProjectilePath` with a **persistent scratch buffer** owned by the
+component — never a per-frame `TArray`. The spline-mesh pool size is **derived** from
+`SimFrequency × MaxSimTime`, never a magic constant, so tuning arc distance cannot silently starve the pool.
+
+**Material state changes are edge-triggered.** Valid/invalid materials are applied only when the validity state
+*changes*, not every frame. (Per-frame `SetMaterial` is render-state churn for a value that rarely changes.)
+
+**Room-scale teleport (ADR-006).** Teleport moves the **play-space origin** so that the *HMD* lands on the target
+— not the pawn root. The component obtains the rig via an `IFXR_LocomotionOwner` interface implemented by the
+FlexXR pawn, and falls back to `SetActorLocation` when the interface is absent. The locomotion component never
+casts to a concrete pawn class.
+
+**Comfort vignette.** A post-process/overlay driven by instantaneous linear and angular velocity, with
+`Dynamic` scaling strength to speed. Quest tier uses an overlay mesh rather than full-screen post-process
+(same per-tier strategy as the Outline highlight, §9).
+
+**Hand-tracking parity — the design problem locomotion actually has.** Bare hands have no thumbstick. Every mode
+therefore has a gesture binding resolved through `IFXR_Interactor`:
+
+| Action | Controller | Tracked hand |
+|---|---|---|
+| Aim teleport | Thumbstick forward / grip hold | Point gesture, palm down |
+| Commit teleport | Release | Pinch |
+| Cancel teleport | Thumbstick centre | Open palm |
+| Snap turn | Thumbstick L/R | Flick gesture, or `Landing Rotation` on teleport |
+| Smooth move | Thumbstick | **Not offered by default** — imprecise and uncomfortable without a stick |
+
+**Capability rule:** when the active interactor is a tracked hand and no controller is present, the framework
+falls back to **teleport + rotation-on-landing** automatically, regardless of preset. Documented, not silent —
+the validation panel reports it.
+
+**Interaction yielding.** A hand that currently owns an interaction (grab, latch, press, ray focus) cannot drive
+locomotion. Checked against interactor state each frame; no locomotion input is consumed for that hand.
+
 ---
 
 ## 6. Hand Pose Authoring — three tiers of effort
@@ -345,6 +504,18 @@ Step 3: "Pull the safety pin"
 **Output:** session report — time per step, mistakes, hints consumed, score; replay powered by the deterministic solver.
 
 **Implementation choice (decided — ADR-004):** a custom lightweight step runtime (`FFXR_StepRunner`) consuming a compiled step array, authored via `UFXR_StepGraph` DataAssets — **not** UE StateTree, and no bespoke node editor yet. The authoring format is deliberately separated from the runtime, so front-ends (DataAsset, CSV/JSON import for client SOPs, a future visual graph editor) are swappable with zero runtime churn. See `Docs/adr/ADR-004-sop-step-graph.md`.
+
+Locomotion emits `InteractionId` events on the same bus as interactions. A step may therefore be completed by
+*arriving somewhere*:
+
+```
+Step 1: "Approach the extinguisher station"
+├─ Complete when:  event == "MoveTo_Station_A"      (FXR_TeleportAnchor)
+└─ Guidance:       highlight anchor, directional arrow
+```
+
+With `Validation = Anchors Only` plus `FXR_TeleportBlocker` hazard volumes, an SOP scene can enforce legal
+standing positions — the locomotion equivalent of the opt-in hard-lock.
 
 ---
 
@@ -427,12 +598,12 @@ Day-one in FXR_Core: `EFXR_Mode { VR, MR }` threaded through pawn/rig and render
 | Thing | Convention | Examples |
 |---|---|---|
 | User-facing components | `FXR_` + behavior | `FXR_Grab`, `FXR_Latch`, `FXR_Press`, `FXR_Socket`, `FXR_Use`, `FXR_RayTarget`, `FXR_GripPoint`, `FXR_Highlight` |
-| C++ component classes | UE prefix + FXR name | `UFXR_Grab`, `UFXR_GripPoint`, `UFXR_InteractableBase` |
-| Subsystems / internal systems | `UFXR_` / `FFXR_` | `UFXR_InteractionSubsystem`, `FFXR_ConstraintSolver`, `FFXR_TwoHandSolver`, `FFXR_InteractorState` |
-| Interfaces | `IFXR_` | `IFXR_Interactor` |
+| C++ component classes | UE prefix + FXR name | `UFXR_Grab`, `UFXR_GripPoint`, `UFXR_InteractableBase`, `UFXR_Locomotion`, `UFXR_TeleportAnchor`, `UFXR_TeleportBlocker` |
+| Subsystems / internal systems | `UFXR_` / `FFXR_` | `UFXR_InteractionSubsystem`, `FFXR_ConstraintSolver`, `FFXR_TwoHandSolver`, `FFXR_InteractorState`, `FFXR_ArcPredictor` |
+| Interfaces | `IFXR_` | `IFXR_Interactor`, `IFXR_LocomotionOwner` |
 | Data assets / settings | `UFXR_` | `UFXR_HandPose`, `UFXR_LatchPreset`, `UFXR_StepGraph`, `UFXR_ProjectSettings` |
-| Enums | `EFXR_` | `EFXR_Mode`, `EFXR_EndReason`, `EFXR_HighlightStyle`, `EFXR_HighlightScope` |
-| Plugin modules | `FXR_` | `FXR_Core`, `FXR_Interaction`, `FXR_UI`, `FXR_Training` |
+| Enums | `EFXR_` | `EFXR_Mode`, `EFXR_EndReason`, `EFXR_HighlightStyle`, `EFXR_HighlightScope`, `EFXR_TurnMode`, `EFXR_VignetteMode` |
+| Plugin modules | `FXR_` | `FXR_Core`, `FXR_Interaction`, `FXR_UI`, `FXR_Training`, `FXR_Locomotion` |
 | Trace channel | `FXR_` | `FXR_Interaction` |
 
 ---
@@ -443,6 +614,7 @@ Day-one in FXR_Core: `EFXR_Mode { VR, MR }` threaded through pawn/rig and render
 |---|---|---|
 | **1 — FXR_Core** | Repo scaffolding (README skeleton, `CODING_STANDARDS.md`, CI, ADR seed); pawn/rig, `IFXR_Interactor` (controller + tracked hand + desktop sim), input mapping, capability detection, event bus, MR flags | 3–4 wks |
 | **2 — Interaction core** | `UFXR_InteractionSubsystem` + detection pipeline, `FFXR_ConstraintSolver`, InteractableBase (enable API, driven-component rule), FXR_Grab (+ use events, two-hand), FXR_GripPoint + pose pipeline + retargeting, FXR_Latch, FXR_Press | 4–6 wks |
+| **2.5 — FXR_Locomotion** | Teleport (arc, validation, room-scale origin, transitions), smooth move, snap/smooth turn, comfort vignette, hand-tracking gesture parity + fallback, anchors & blockers, presets | 2–3 wks |
 | **3 — FXR_UI + presentation** | Spatial UI kit, motion-design spec, FXR_RayTarget + focus manager, FXR_Socket, highlight system (3 styles, per-tier impls), guidance primitives, validation panel | 3–4 wks |
 | **4 — FXR_Training + SOP demo** | Step graph (`FFXR_StepRunner` + `UFXR_StepGraph` DataAssets, per ADR-004), modes, reporting; **fire safety training demo** built entirely on FlexXR | 4–6 wks |
 | **5 — Optimization + standalone** | Quest build, Insights profiling, budget enforcement, **performance case study** | 3–4 wks |
@@ -515,6 +687,16 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.4 — Locomotion**
+- New module `FXR_Locomotion` (§3.5), sibling to FXR_UI, depending on FXR_Interaction.
+- New components: `FXR_Locomotion` (single component with mode arbiter — ADR-005), `FXR_TeleportAnchor`,
+  `FXR_TeleportBlocker`.
+- New §5.8: allocation-free arc prediction, derived pool sizing, edge-triggered material swaps, room-scale
+  origin teleport (ADR-006), comfort vignette per rendering tier, hand-tracking gesture parity with automatic
+  teleport fallback, interaction-yielding rule.
+- Locomotion events join the training event bus; `Anchors Only` validation as the locomotion hard-lock.
+- Roadmap: new Phase 2.5 (2–3 wks); later phases shift.
 
 **v0.3 — Engineering Standards Pass**
 - New §15: binding C++ quality bar (Epic standard, allocation-free hot paths, plain-C++ solver + automation tests, `Build.cs`-enforced module boundaries, editor-module split, Insights instrumentation), repository discipline (commit convention, branch-per-phase PRs, per-phase release tags, README skeleton, CI-run tests), and the ADR practice.

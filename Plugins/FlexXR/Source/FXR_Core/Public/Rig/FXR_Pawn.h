@@ -8,6 +8,7 @@
 #include "FXR_Pawn.generated.h"
 
 class UCameraComponent;
+class UMotionControllerComponent;
 class UFXR_ControllerInteractor;
 class UFXR_HandInteractor;
 class UFXR_DesktopSimInteractor;
@@ -40,6 +41,10 @@ public:
 	/** The active interactor for a hand (controller / tracked hand / desktop-sim, per capabilities). */
 	IFXR_Interactor* GetActiveInteractor(EFXR_HandSide Side) const;
 
+	/** BlueprintPure fallback for Anim BPs without UFXR_HandVisual: the active interactor's grip (Select) value 0..1. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Rig")
+	float GetHandGripAlpha(EFXR_HandSide Side) const;
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
 	TObjectPtr<USceneComponent> VROrigin;
@@ -52,6 +57,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
 	TObjectPtr<USceneComponent> RightHandRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
+	TObjectPtr<UMotionControllerComponent> LeftMotionController;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Rig")
+	TObjectPtr<UMotionControllerComponent> RightMotionController;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_ControllerInteractor> LeftController;

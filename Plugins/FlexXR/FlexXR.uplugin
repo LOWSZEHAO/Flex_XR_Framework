@@ -25,6 +25,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "FXR_InteractionEditor",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
 			"Name": "FXR_UI",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"

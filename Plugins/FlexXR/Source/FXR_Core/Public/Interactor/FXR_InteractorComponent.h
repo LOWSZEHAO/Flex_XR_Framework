@@ -32,6 +32,7 @@ public:
 	virtual FTransform GetAimTransform() const override;
 	virtual FTransform GetPalmTransform() const override;
 	virtual void GetGrabSphere(FVector& OutCenter, float& OutRadius) const override;
+	virtual void GetPokeTip(FVector& OutLocation, float& OutRadius) const override;
 	virtual void GetFarRay(FVector& OutOrigin, FVector& OutDirection) const override;
 	virtual void SendHapticFeedback(float Amplitude, float Duration) override {}
 	// Inert defaults so the base stays concrete — a UObject CDO must be constructible, so no
@@ -70,6 +71,14 @@ protected:
 	/** Palm-contact offset from the tracked transform, in tracked-local space. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor")
 	FVector PalmLocalOffset = FVector::ZeroVector;
+
+	/** Index-fingertip (poke) offset from the tracked transform, in tracked-local space — align to the hand mesh's extended index tip. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor")
+	FVector PokeLocalOffset = FVector::ZeroVector;
+
+	/** Radius (cm) of the poke-tip probe sphere (a fingertip pad). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor", meta = (ClampMin = "0.1"))
+	float PokeRadius = 1.f;
 
 	bool bInteractorActive = true;
 };

@@ -35,6 +35,12 @@ void UFXR_InteractorComponent::GetGrabSphere(FVector& OutCenter, float& OutRadiu
 	OutRadius = GrabSphereRadius;
 }
 
+void UFXR_InteractorComponent::GetPokeTip(FVector& OutLocation, float& OutRadius) const
+{
+	OutLocation = GetTrackedTransform().TransformPositionNoScale(PokeLocalOffset);
+	OutRadius = PokeRadius;
+}
+
 void UFXR_InteractorComponent::GetFarRay(FVector& OutOrigin, FVector& OutDirection) const
 {
 	const FTransform Aim = GetAimTransform();

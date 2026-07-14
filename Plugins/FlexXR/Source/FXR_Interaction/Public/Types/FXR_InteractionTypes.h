@@ -1,0 +1,90 @@
+// Copyright (c) 2026 Low Sze Hao. All rights reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "FXR_InteractionTypes.generated.h"
+
+/** Why an interaction ended — passed to UFXR_InteractableBase::OnEnd. */
+UENUM(BlueprintType)
+enum class EFXR_EndReason : uint8
+{
+	Released      UMETA(DisplayName = "Released"),
+	ForceReleased UMETA(DisplayName = "Force Released"),
+	Disabled      UMETA(DisplayName = "Disabled"),
+	Broken        UMETA(DisplayName = "Broken")
+};
+
+/** What happens to an in-progress hold when its interactable is disabled mid-grab (§4.0). */
+UENUM(BlueprintType)
+enum class EFXR_AlreadyHeldPolicy : uint8
+{
+	// Keep the current hold to its natural end; only block re-grabbing afterwards.
+	FinishNaturally UMETA(DisplayName = "Finish Naturally"),
+	// End the hold immediately — the object is ripped from the hand (disarm, stun, cutscene).
+	ForceRelease    UMETA(DisplayName = "Force Release")
+};
+
+/** Which hand(s) a grip point accepts. */
+UENUM(BlueprintType)
+enum class EFXR_GripHandedness : uint8
+{
+	Both      UMETA(DisplayName = "Both"),
+	LeftOnly  UMETA(DisplayName = "Left Only"),
+	RightOnly UMETA(DisplayName = "Right Only")
+};
+
+/** How a grabbed object arrives at a grip point's pose. */
+UENUM(BlueprintType)
+enum class EFXR_GripSnapMode : uint8
+{
+	None    UMETA(DisplayName = "None (hold where grabbed)"),
+	Snap    UMETA(DisplayName = "Snap (instant)"),
+	Smooth  UMETA(DisplayName = "Smooth (interpolate)")
+};
+
+/**
+ * Skeleton-agnostic finger pose: per-finger curl (0 = open, 1 = fully curled) + thumb
+ * opposition. Not bone rotations — a hand Anim BP / Control Rig maps these to the active
+ * skeleton's finger bones (the per-skeleton "retarget profile"), so one pose works on any mesh.
+ */
+USTRUCT(BlueprintType)
+struct FFXR_FingerCurls
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Thumb = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Index = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Middle = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Ring = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Pinky = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Hand", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ThumbOpposition = 0.f;
+};
+
+/** Constrained-motion primitive for FXR_Latch. */
+UENUM(BlueprintType)
+enum class EFXR_LatchMotion : uint8
+{
+	Rotational UMETA(DisplayName = "Rotational"),
+	Linear     UMETA(DisplayName = "Linear")
+};
+
+/** Local axis of the latch component the motion is about (rotational) or along (linear). */
+UENUM(BlueprintType)
+enum class EFXR_LatchAxis : uint8
+{
+	X UMETA(DisplayName = "Local X"),
+	Y UMETA(DisplayName = "Local Y"),
+	Z UMETA(DisplayName = "Local Z")
+};

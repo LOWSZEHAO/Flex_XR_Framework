@@ -11,6 +11,7 @@
 #include "Types/FXR_LogChannels.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
+#include "MotionControllerComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
@@ -40,12 +41,23 @@ AFXR_Pawn::AFXR_Pawn()
 	RightHandRoot = CreateDefaultSubobject<USceneComponent>(TEXT("RightHandRoot"));
 	RightHandRoot->SetupAttachment(VROrigin);
 
+	// The pawn owns the motion controllers (never nest a default subobject inside another
+	// component — Blueprint subclassing then mismatches the attach-parent). The controller
+	// interactors parent under them and inherit the tracked pose.
+	LeftMotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("LeftMotionController"));
+	LeftMotionController->SetupAttachment(LeftHandRoot);
+	LeftMotionController->SetTrackingMotionSource(FName("Left"));
+
+	RightMotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("RightMotionController"));
+	RightMotionController->SetupAttachment(RightHandRoot);
+	RightMotionController->SetTrackingMotionSource(FName("Right"));
+
 	LeftController = CreateDefaultSubobject<UFXR_ControllerInteractor>(TEXT("LeftController"));
-	LeftController->SetupAttachment(LeftHandRoot);
+	LeftController->SetupAttachment(LeftMotionController);
 	LeftController->SetHandSide(EFXR_HandSide::Left);
 
 	RightController = CreateDefaultSubobject<UFXR_ControllerInteractor>(TEXT("RightController"));
-	RightController->SetupAttachment(RightHandRoot);
+	RightController->SetupAttachment(RightMotionController);
 	RightController->SetHandSide(EFXR_HandSide::Right);
 
 	LeftHand = CreateDefaultSubobject<UFXR_HandInteractor>(TEXT("LeftHand"));
@@ -126,6 +138,15 @@ IFXR_Interactor* AFXR_Pawn::GetActiveInteractor(EFXR_HandSide Side) const
 		}
 	}
 	return nullptr;
+}
+
+float AFXR_Pawn::GetHandGripAlpha(EFXR_HandSide Side) const
+{
+	if (IFXR_Interactor* Interactor = GetActiveInteractor(Side))
+	{
+		return Interactor->GetSelectValue();
+	}
+	return 0.f;
 }
 
 UFXR_XRSubsystem* AFXR_Pawn::GetXRSubsystem() const
@@ -214,6 +235,21 @@ void AFXR_Pawn::DrawDebugInteractors()
 		DrawDebugLine(World, Origin, Origin + Direction * 200.f, Color, false, -1.f, 0, 0.3f);
 	};
 
+	auto TypeName = [](IFXR_Interactor* Interactor) -> const TCHAR*
+	{
+		if (!Interactor)
+		{
+			return TEXT("none");
+		}
+		switch (Interactor->GetInteractorType())
+		{
+		case EFXR_InteractorType::MotionController: return TEXT("Controller");
+		case EFXR_InteractorType::TrackedHand:      return TEXT("Hand");
+		case EFXR_InteractorType::DesktopSim:       return TEXT("Desktop");
+		default:                                    return TEXT("?");
+		}
+	};
+
 	IFXR_Interactor* Left = GetActiveInteractor(EFXR_HandSide::Left);
 	IFXR_Interactor* Right = GetActiveInteractor(EFXR_HandSide::Right);
 	DrawInteractor(Left, FColor::Cyan);
@@ -224,12 +260,12 @@ void AFXR_Pawn::DrawDebugInteractors()
 		if (Right)
 		{
 			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Yellow,
-				FString::Printf(TEXT("R  select=%.2f  use=%.2f"), Right->GetSelectValue(), Right->GetUseValue()));
+				FString::Printf(TEXT("R  [%s]  select=%.2f  use=%.2f"), TypeName(Right), Right->GetSelectValue(), Right->GetUseValue()));
 		}
 		if (Left)
 		{
 			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Cyan,
-				FString::Printf(TEXT("L  select=%.2f  use=%.2f"), Left->GetSelectValue(), Left->GetUseValue()));
+				FString::Printf(TEXT("L  [%s]  select=%.2f  use=%.2f"), TypeName(Left), Left->GetSelectValue(), Left->GetUseValue()));
 		}
 	}
 }
