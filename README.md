@@ -4,7 +4,7 @@
 
 C++ core · OpenXR · hand tracking + controller parity · PCVR-first, Quest-capable · MR-ready
 
-> 🚧 **Status:** Phase 1 — FXR_Core (in development). See [Roadmap](#roadmap).
+> 🚧 **Status:** Phase 2 — Interaction core **complete**. Next: Phase 2.5 — FXR_Locomotion. See [Roadmap](#roadmap).
 
 ---
 
@@ -24,7 +24,8 @@ The architectural bet: **one interaction layer, two products.** Training modules
 | | |
 |---|---|
 | 🖐️ **Hand + controller parity** | Every interaction works with tracked hands, motion controllers, or a desktop mouse simulator. No interaction ever assumes an input device. |
-| 🚪 **Deterministic constraint solver** | Kinematic-while-held, physics-on-release. Doors, valves, drawers and levers with authored weight and detents — no jitter, no constraint explosions, identical on PCVR and Quest. |
+| 🤲 **Drop-in interactables** | `FXR_Grab` (one- and two-handed, built-in use events, snap-to-pose grip points), `FXR_Latch` (doors, levers, valves, drawers — limits, states, 0–1 value events), `FXR_Press` (fingertip-depth buttons with haptic click). Drop the component on a mesh — it works. |
+| 🚪 **Deterministic constraint solver** | Kinematic-while-held, physics-on-release. Doors, valves, drawers and levers with authored weight and detents — no jitter, no constraint explosions, identical on PCVR and Quest. Geometry + determinism pinned by automation tests. |
 | ✋ **Skeleton-agnostic hand poses** | Poses stored as curl/splay values, retargeted per skeleton + fingertip IK — one pose library survives hand-mesh swaps and any player hand size. |
 | 🎯 **Zero-setup detection** | Registry-based broad phase with activation radii; no per-object collision configuration, ever. |
 | 📋 **SOP step graph** | A judge, not a controller — the world stays interactive, the graph watches and validates. Branching, parallel steps, Guided/Practice/Exam modes, session reports. |
@@ -59,8 +60,8 @@ The architectural bet: **one interaction layer, two products.** Training modules
 <!-- GIFs land here as phases complete -->
 | | |
 |---|---|
-| _In-VR pose recorder_ | _coming in Phase 2_ |
-| _Palm-push vs handle-pull_ | _coming in Phase 2_ |
+| _In-VR pose recorder_ | _coming with the authoring tools_ |
+| _Palm-push vs handle-pull_ | _coming with contact drive_ |
 | _Guided vs Exam mode_ | _coming in Phase 4_ |
 | _PCVR vs Quest side-by-side_ | _coming in Phase 5_ |
 
@@ -86,8 +87,8 @@ Right-click `FlexXR.uproject` → **Generate Visual Studio project files** → o
 
 ## Roadmap
 
-- [ ] **Phase 1 — FXR_Core** · pawn/rig, `IFXR_Interactor`, input mapping, capability detection, event bus, MR flags
-- [ ] **Phase 2 — Interaction core** · detection subsystem, constraint solver, Grab / Latch / Press, grip points, pose retargeting
+- [x] **Phase 1 — FXR_Core** · pawn/rig, `IFXR_Interactor`, input mapping, capability detection, event bus, MR flags
+- [x] **Phase 2 — Interaction core** · registry detection, deterministic constraint solver (+ automation tests), Grab (two-hand, use events) / Latch (states, value events) / Press (fingertip probes), grip points + hand poses, editor gizmos
 - [ ] **Phase 2.5 — FXR_Locomotion** · teleport (arc + validation, room-scale origin), smooth move, snap/smooth turn, comfort vignette, anchors + blockers
 - [ ] **Phase 3 — FXR_UI** · spatial UI kit, ray targeting + focus manager, sockets, highlight system
 - [ ] **Phase 4 — FXR_Training** · SOP step graph, modes, reporting + fire safety demo
