@@ -67,6 +67,13 @@ public:
 	/** Hand pose (finger shape) the presentation layer should apply while this is held, or null. */
 	virtual UFXR_HandPose* GetActiveHandPose() const { return nullptr; }
 
+	//~ Grip registry (ADR-007): owning grip points attach themselves here at BeginPlay.
+	void RegisterGripPoint(UFXR_GripPoint* GripPoint);
+	void UnregisterGripPoint(UFXR_GripPoint* GripPoint);
+
+	/** True if any grip point claims this interactable — grip points are then the only grab surface (ADR-007). */
+	bool HasOwnedGripPoints() const { return OwnedGripPoints.Num() > 0; }
+
 	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
@@ -78,7 +85,7 @@ protected:
 	/** The primitive this interactable moves/affects: the attach-parent primitive, else the actor root primitive. */
 	UPrimitiveComponent* ResolveDrivenComponent() const;
 
-	/** Best grip point on the owner for this interactor's hand (highest priority, then nearest overlapping), or null. */
+	/** Best owned grip point for this interactor's hand (highest priority, then nearest overlapping), or null. */
 	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
 
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
@@ -105,4 +112,8 @@ protected:
 	bool bDrawDebugRadius = false;
 
 	bool bHeld = false;
+
+private:
+	/** Grip points owned by this interactable (registered by the points themselves at BeginPlay). */
+	TArray<TWeakObjectPtr<UFXR_GripPoint>> OwnedGripPoints;
 };

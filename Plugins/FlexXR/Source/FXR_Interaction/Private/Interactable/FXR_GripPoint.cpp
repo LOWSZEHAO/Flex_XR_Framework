@@ -2,6 +2,9 @@
 
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_HandPose.h"
+#include "Interactable/FXR_InteractableBase.h"
+#include "Types/FXR_LogChannels.h"
+#include "GameFramework/Actor.h"
 #include "DrawDebugHelpers.h"
 
 UFXR_HandPose* UFXR_GripPoint::GetHandPose() const
@@ -20,6 +23,37 @@ void UFXR_GripPoint::BeginPlay()
 {
 	Super::BeginPlay();
 	SetComponentTickEnabled(bDrawDebug);
+
+	// Attach to the owning interactables' grip registries (ADR-007). Ambiguity resolved to none
+	// on purpose — an unowned point never registers, and the author-time validation names it.
+	TArray<UFXR_InteractableBase*> ResolvedOwners;
+	ResolveOwners(ResolvedOwners);
+	for (UFXR_InteractableBase* Owner : ResolvedOwners)
+	{
+		Owner->RegisterGripPoint(this);
+		RegisteredOwners.Add(Owner);
+	}
+
+	if (ResolvedOwners.Num() == 0)
+	{
+		UE_LOG(LogFXR, Warning,
+			TEXT("FXR_GripPoint '%s' on '%s': no owning interactable resolved — the point is inert. Parent it under an interactable, keep a single interactable on the actor, or set Owners explicitly."),
+			*GetName(), *GetNameSafe(GetOwner()));
+	}
+}
+
+void UFXR_GripPoint::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (const TWeakObjectPtr<UFXR_InteractableBase>& Owner : RegisteredOwners)
+	{
+		if (UFXR_InteractableBase* Interactable = Owner.Get())
+		{
+			Interactable->UnregisterGripPoint(this);
+		}
+	}
+	RegisteredOwners.Reset();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void UFXR_GripPoint::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -46,3 +80,109 @@ bool UFXR_GripPoint::AcceptsHand(EFXR_HandSide Side) const
 	default:                             return true;
 	}
 }
+
+void UFXR_GripPoint::ResolveOwners(TArray<UFXR_InteractableBase*>& OutOwners) const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	// 1. Explicit Owners win.
+	for (const FComponentReference& Reference : Owners)
+	{
+		if (UFXR_InteractableBase* Interactable = Cast<UFXR_InteractableBase>(Reference.GetComponent(OwnerActor)))
+		{
+			OutOwners.AddUnique(Interactable);
+		}
+	}
+	if (OutOwners.Num() > 0)
+	{
+		return;
+	}
+
+	// 2. Nearest ancestor interactable in the component hierarchy.
+	for (USceneComponent* Parent = GetAttachParent(); Parent; Parent = Parent->GetAttachParent())
+	{
+		if (UFXR_InteractableBase* Interactable = Cast<UFXR_InteractableBase>(Parent))
+		{
+			OutOwners.Add(Interactable);
+			return;
+		}
+	}
+
+	// 3. The actor's single interactable. Several -> ambiguous -> none (validation names them).
+	TArray<UFXR_InteractableBase*> Candidates;
+	OwnerActor->GetComponents<UFXR_InteractableBase>(Candidates);
+	if (Candidates.Num() == 1)
+	{
+		OutOwners.Add(Candidates[0]);
+	}
+}
+
+bool UFXR_GripPoint::IsOwnedBy(const UFXR_InteractableBase* Interactable) const
+{
+	if (!Interactable)
+	{
+		return false;
+	}
+	TArray<UFXR_InteractableBase*> ResolvedOwners;
+	ResolveOwners(ResolvedOwners);
+	return ResolvedOwners.Contains(Interactable);
+}
+
+#if WITH_EDITOR
+void UFXR_GripPoint::CheckForErrors()
+{
+	Super::CheckForErrors();
+
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	TArray<UFXR_InteractableBase*> ResolvedOwners;
+	ResolveOwners(ResolvedOwners);
+
+	if (ResolvedOwners.Num() == 0)
+	{
+		TArray<UFXR_InteractableBase*> Candidates;
+		OwnerActor->GetComponents<UFXR_InteractableBase>(Candidates);
+
+		if (Candidates.Num() == 0)
+		{
+			UE_LOG(LogFXR, Warning,
+				TEXT("FXR_GripPoint '%s' on '%s': the actor has no interactable — the grip point will never register."),
+				*GetName(), *OwnerActor->GetName());
+		}
+		else
+		{
+			FString Names;
+			for (const UFXR_InteractableBase* Candidate : Candidates)
+			{
+				Names += (Names.IsEmpty() ? TEXT("") : TEXT(", "));
+				Names += Candidate->GetName();
+			}
+			UE_LOG(LogFXR, Error,
+				TEXT("FXR_GripPoint '%s' on '%s': ambiguous ownership — several interactables (%s) and no explicit Owners. Set Owners, or parent the point under its interactable."),
+				*GetName(), *OwnerActor->GetName(), *Names);
+		}
+		return;
+	}
+
+	// Shared points are legal only while at most one owner is enabled at a time.
+	int32 EnabledOwners = 0;
+	for (const UFXR_InteractableBase* Owner : ResolvedOwners)
+	{
+		EnabledOwners += Owner->IsInteractionEnabled() ? 1 : 0;
+	}
+	if (EnabledOwners > 1)
+	{
+		UE_LOG(LogFXR, Error,
+			TEXT("FXR_GripPoint '%s' on '%s': %d owners are enabled simultaneously — a shared grip point allows at most one enabled owner at a time. Disable all but one by default and switch at runtime."),
+			*GetName(), *OwnerActor->GetName(), EnabledOwners);
+	}
+}
+#endif

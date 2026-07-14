@@ -318,7 +318,8 @@ void UFXR_Latch::CheckForErrors()
 	OwnerActor->GetComponents<UFXR_GripPoint>(GripPoints);
 	for (const UFXR_GripPoint* GripPoint : GripPoints)
 	{
-		if (!GripPoint)
+		// Only this latch's own points matter — a sibling Grab's edge points are not lever handles.
+		if (!GripPoint || !GripPoint->IsOwnedBy(this))
 		{
 			continue;
 		}

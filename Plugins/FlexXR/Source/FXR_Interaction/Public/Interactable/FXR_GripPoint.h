@@ -4,23 +4,29 @@
 
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Types/FXR_CoreTypes.h"
 #include "Types/FXR_InteractionTypes.h"
 #include "FXR_GripPoint.generated.h"
 
 class UFXR_HandPose;
+class UFXR_InteractableBase;
 
 /**
  * UFXR_GripPoint — "a sticker on the object: hands go here, shaped like this."
  *
  * A SceneComponent whose transform is the authored grip pose. Add one (or several) to a
- * grabbable actor; FXR_Grab scores them by hand side, priority and distance, then snaps
- * the held object so the chosen grip point aligns to the hand's grip — a consistent,
+ * grabbable actor; the owning interactable scores them by hand side, priority and distance,
+ * then snaps the held object (Grab) or the hand (Latch) so the grip aligns — a consistent,
  * authored hold instead of wherever the hand happened to close.
  *
- * This slice delivers the snap + selection. Finger shaping via UFXR_HandPose retargeting
- * (design 5.3) is a following slice; the point's transform is the "where", the pose is
- * the "shaped like this".
+ * **Adding a grip point makes it the only grab surface on its owning interactable** (ADR-007):
+ * presence is the switch — no grip point means the mesh is the grab surface; one or more means
+ * hands attach only at the points. All grip configuration lives here, never on the interactable.
+ *
+ * Ownership resolves automatically: the nearest ancestor interactable in the hierarchy, else
+ * the actor's single interactable. With several interactables on one actor, set Owners
+ * explicitly (a grip point may be shared, but only one owner may be enabled at a time).
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_GripPoint : public USceneComponent
@@ -31,10 +37,26 @@ public:
 	UFXR_GripPoint();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+#if WITH_EDITOR
+	virtual void CheckForErrors() override;
+#endif
 
 	/** True if this grip point accepts the given hand. */
 	bool AcceptsHand(EFXR_HandSide Side) const;
+
+	/**
+	 * The interactables this grip point belongs to. Explicit Owners win; otherwise the nearest
+	 * ancestor interactable in the hierarchy, else the actor's single interactable. Ambiguity
+	 * (several interactables, no explicit owner) resolves to none — fail loudly at author time,
+	 * never guess at runtime (ADR-007).
+	 */
+	void ResolveOwners(TArray<UFXR_InteractableBase*>& OutOwners) const;
+
+	/** True if the given interactable is one of this grip point's resolved owners. */
+	bool IsOwnedBy(const UFXR_InteractableBase* Interactable) const;
 
 	int32 GetPriority() const { return Priority; }
 	float GetActivationRadius() const { return ActivationRadius; }
@@ -46,6 +68,15 @@ public:
 	UFXR_HandPose* GetHandPose() const;
 
 protected:
+	/**
+	 * Owning interactables, set explicitly. Leave empty to auto-resolve (nearest ancestor
+	 * interactable, else the actor's single interactable). Required when several interactables
+	 * share this point (e.g. a door handle owned by Grab + Latch) — at most one owner may be
+	 * enabled at a time.
+	 */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|GripPoint", meta = (UseComponentPicker, AllowedClasses = "/Script/FXR_Interaction.FXR_InteractableBase"))
+	TArray<FComponentReference> Owners;
+
 	/** Which hand may use this grip point. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
 	EFXR_GripHandedness Handedness = EFXR_GripHandedness::Both;
@@ -73,4 +104,8 @@ protected:
 	/** Draw this grip point's axes + activation radius at runtime (authoring aid). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint|Debug")
 	bool bDrawDebug = false;
+
+private:
+	/** Owners this point registered with at BeginPlay, kept for symmetric unregistration. */
+	TArray<TWeakObjectPtr<UFXR_InteractableBase>> RegisteredOwners;
 };

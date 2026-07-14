@@ -104,17 +104,22 @@ FVector UFXR_InteractableBase::GetInteractionLocation() const
 	return GetComponentLocation();
 }
 
+void UFXR_InteractableBase::RegisterGripPoint(UFXR_GripPoint* GripPoint)
+{
+	if (GripPoint)
+	{
+		OwnedGripPoints.AddUnique(GripPoint);
+	}
+}
+
+void UFXR_InteractableBase::UnregisterGripPoint(UFXR_GripPoint* GripPoint)
+{
+	OwnedGripPoints.RemoveSingleSwap(GripPoint);
+}
+
 UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interactor) const
 {
-	const AActor* OwnerActor = GetOwner();
-	if (!OwnerActor || !Interactor)
-	{
-		return nullptr;
-	}
-
-	TArray<UFXR_GripPoint*> GripPoints;
-	OwnerActor->GetComponents<UFXR_GripPoint>(GripPoints);
-	if (GripPoints.Num() == 0)
+	if (!Interactor || OwnedGripPoints.Num() == 0)
 	{
 		return nullptr;
 	}
@@ -131,8 +136,9 @@ UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interact
 	int32 BestPriority = TNumericLimits<int32>::Min();
 	float BestDistanceSq = TNumericLimits<float>::Max();
 
-	for (UFXR_GripPoint* Point : GripPoints)
+	for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
 	{
+		UFXR_GripPoint* Point = WeakPoint.Get();
 		if (!Point || !Point->AcceptsHand(Side))
 		{
 			continue;
