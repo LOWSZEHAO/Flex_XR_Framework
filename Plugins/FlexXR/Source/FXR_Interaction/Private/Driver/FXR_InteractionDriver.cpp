@@ -70,7 +70,7 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 			float GrabRadius = 0.f;
 			Interactor->GetGrabSphere(GrabCenter, GrabRadius);
 
-			if (UFXR_InteractableBase* Candidate = Subsystem->FindBestCandidate(GrabCenter, GrabRadius))
+			if (UFXR_InteractableBase* Candidate = Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side))
 			{
 				if (Candidate->CanBegin(Interactor))
 				{

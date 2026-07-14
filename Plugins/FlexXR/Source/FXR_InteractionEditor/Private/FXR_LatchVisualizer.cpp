@@ -2,7 +2,9 @@
 
 #include "FXR_LatchVisualizer.h"
 #include "Interactable/FXR_Latch.h"
+#include "Interactable/FXR_GripPoint.h"
 #include "Types/FXR_InteractionTypes.h"
+#include "GameFramework/Actor.h"
 #include "SceneManagement.h"
 
 void FFXR_LatchVisualizer::DrawVisualization(const UActorComponent* Component, const FSceneView* View, FPrimitiveDrawInterface* PDI)
@@ -34,8 +36,26 @@ void FFXR_LatchVisualizer::DrawVisualization(const UActorComponent* Component, c
 		PDI->DrawLine(Tip, Back - Side * 3.f, Color, SDPG_World, 2.f);
 	};
 
-	// Grab zone (registry detection) — centered on the driven mesh, not the pivot.
-	DrawWireSphere(PDI, MeshLoc, FColor::Orange, Latch->GetActivationRadius(), 16, SDPG_World);
+	// Grab zone (registry detection): on the latch's grip points when it owns any (ADR-007 —
+	// they are then the only grab surface), else the activation radius around the driven mesh.
+	bool bHasGripPoints = false;
+	if (const AActor* OwnerActor = Latch->GetOwner())
+	{
+		TArray<UFXR_GripPoint*> GripPoints;
+		OwnerActor->GetComponents<UFXR_GripPoint>(GripPoints);
+		for (const UFXR_GripPoint* Point : GripPoints)
+		{
+			if (Point && Point->IsOwnedBy(Latch))
+			{
+				bHasGripPoints = true;
+				DrawWireSphere(PDI, Point->GetComponentLocation(), FColor::Orange, Point->GetActivationRadius(), 12, SDPG_World);
+			}
+		}
+	}
+	if (!bHasGripPoints)
+	{
+		DrawWireSphere(PDI, MeshLoc, FColor::Orange, Latch->GetActivationRadius(), 16, SDPG_World);
+	}
 
 	// Pivot + axis, drawn from the component so they track when the latch is moved or rotated.
 	PDI->DrawPoint(Pivot, FLinearColor::White, 10.f, SDPG_World);

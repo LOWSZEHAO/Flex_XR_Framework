@@ -37,7 +37,22 @@ void UFXR_InteractableBase::TickComponent(float DeltaTime, ELevelTick TickType, 
 		if (const UWorld* World = GetWorld())
 		{
 			const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
-			DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
+			if (HasOwnedGripPoints())
+			{
+				// Grip points are the only grab surface (ADR-007) — show state on them, not a
+				// misleading mesh radius.
+				for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
+				{
+					if (const UFXR_GripPoint* Point = WeakPoint.Get())
+					{
+						DrawDebugSphere(World, Point->GetComponentLocation(), Point->GetActivationRadius(), 12, Color, false, -1.f, 0, 0.5f);
+					}
+				}
+			}
+			else
+			{
+				DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
+			}
 		}
 	}
 }
@@ -102,6 +117,37 @@ FVector UFXR_InteractableBase::GetInteractionLocation() const
 		return Driven->GetComponentLocation();
 	}
 	return GetComponentLocation();
+}
+
+bool UFXR_InteractableBase::IsInGrabReach(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide, float& OutDistanceSq) const
+{
+	// Presence is the switch (ADR-007): owned grip points are the only grab surface; the mesh
+	// path runs only when the interactable owns none (procedural grip on the collision).
+	if (HasOwnedGripPoints())
+	{
+		bool bInReach = false;
+		OutDistanceSq = TNumericLimits<float>::Max();
+		for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
+		{
+			const UFXR_GripPoint* Point = WeakPoint.Get();
+			if (!Point || !Point->AcceptsHand(HandSide))
+			{
+				continue;
+			}
+			const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+			const float Reach = Point->GetActivationRadius() + GrabRadius;
+			if (DistanceSq <= FMath::Square(Reach) && DistanceSq < OutDistanceSq)
+			{
+				OutDistanceSq = DistanceSq;
+				bInReach = true;
+			}
+		}
+		return bInReach;
+	}
+
+	const float Reach = ActivationRadius + GrabRadius;
+	OutDistanceSq = FVector::DistSquared(GrabCenter, GetInteractionLocation());
+	return OutDistanceSq <= FMath::Square(Reach);
 }
 
 void UFXR_InteractableBase::RegisterGripPoint(UFXR_GripPoint* GripPoint)

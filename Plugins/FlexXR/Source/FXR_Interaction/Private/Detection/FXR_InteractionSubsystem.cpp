@@ -18,7 +18,7 @@ void UFXR_InteractionSubsystem::UnregisterInteractable(UFXR_InteractableBase* In
 	Registered.RemoveSingleSwap(Interactable);
 }
 
-UFXR_InteractableBase* UFXR_InteractionSubsystem::FindBestCandidate(const FVector& GrabCenter, float GrabRadius) const
+UFXR_InteractableBase* UFXR_InteractionSubsystem::FindBestCandidate(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide) const
 {
 	UFXR_InteractableBase* Best = nullptr;
 	float BestDistanceSq = TNumericLimits<float>::Max();
@@ -30,10 +30,10 @@ UFXR_InteractableBase* UFXR_InteractionSubsystem::FindBestCandidate(const FVecto
 			continue;
 		}
 
-		const float Reach = Interactable->GetActivationRadius() + GrabRadius;
-		const float DistanceSq = FVector::DistSquared(GrabCenter, Interactable->GetInteractionLocation());
-
-		if (DistanceSq <= Reach * Reach && DistanceSq < BestDistanceSq)
+		// Reach is the interactable's own business (ADR-007): grip points if it owns any, else
+		// the activation radius around the driven mesh.
+		float DistanceSq = TNumericLimits<float>::Max();
+		if (Interactable->IsInGrabReach(GrabCenter, GrabRadius, HandSide, DistanceSq) && DistanceSq < BestDistanceSq)
 		{
 			BestDistanceSq = DistanceSq;
 			Best = Interactable;

@@ -75,6 +75,13 @@ public:
 	bool HasOwnedGripPoints() const { return OwnedGripPoints.Num() > 0; }
 
 	/**
+	 * Whether a hand's grab sphere reaches this interactable (ADR-007): with owned grip points,
+	 * the points are the only grab surface — the nearest accepting point decides; without, the
+	 * activation radius around the driven mesh decides. OutDistanceSq scores the narrow phase.
+	 */
+	bool IsInGrabReach(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide, float& OutDistanceSq) const;
+
+	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
 	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).

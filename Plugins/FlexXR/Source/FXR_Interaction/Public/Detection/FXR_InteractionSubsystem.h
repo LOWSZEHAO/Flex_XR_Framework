@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Types/FXR_CoreTypes.h"
 #include "FXR_InteractionSubsystem.generated.h"
 
 class UFXR_InteractableBase;
@@ -31,10 +32,11 @@ public:
 	void UnregisterInteractable(UFXR_InteractableBase* Interactable);
 
 	/**
-	 * Best available interactable whose activation radius reaches the grab-sphere centre,
-	 * scored by nearest distance. Skips disabled and already-held interactables. Null if none.
+	 * Best available interactable in grab reach of the hand, scored by nearest distance. Reach
+	 * is per-interactable (ADR-007): owned grip points if any (filtered by hand side), else the
+	 * activation radius. Skips disabled and already-held interactables. Null if none.
 	 */
-	UFXR_InteractableBase* FindBestCandidate(const FVector& GrabCenter, float GrabRadius) const;
+	UFXR_InteractableBase* FindBestCandidate(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide) const;
 
 	/** Resolve the subsystem from any world context object (may return null). */
 	static UFXR_InteractionSubsystem* Get(const UObject* WorldContextObject);
