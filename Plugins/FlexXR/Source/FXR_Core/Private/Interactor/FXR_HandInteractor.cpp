@@ -41,6 +41,7 @@ void UFXR_HandInteractor::SampleHandTracking()
 	if (!Tracker || !Tracker->IsHandTrackingStateValid())
 	{
 		bHasValidHand = false;
+		bHasValidIndexTip = false;
 		SelectValue = 0.f;
 		UseValue = 0.f;
 		return;
@@ -50,14 +51,23 @@ void UFXR_HandInteractor::SampleHandTracking()
 
 	FTransform Palm, Thumb, Index;
 	float Radius = 0.f;
+	float IndexRadius = 0.f;
 	const bool bPalm = Tracker->GetKeypointState(Hand, EHandKeypoint::Palm, Palm, Radius);
 	const bool bThumb = Tracker->GetKeypointState(Hand, EHandKeypoint::ThumbTip, Thumb, Radius);
-	const bool bIndex = Tracker->GetKeypointState(Hand, EHandKeypoint::IndexTip, Index, Radius);
+	const bool bIndex = Tracker->GetKeypointState(Hand, EHandKeypoint::IndexTip, Index, IndexRadius);
 
 	if (bPalm)
 	{
 		CachedPalm = Palm;
 		bHasValidHand = true;
+	}
+
+	// The tracked index tip is the poke probe (FXR_Press) — the real fingertip, per-user scaled.
+	bHasValidIndexTip = bIndex;
+	if (bIndex)
+	{
+		CachedIndexTip = Index.GetLocation();
+		CachedIndexTipRadius = (IndexRadius > KINDA_SMALL_NUMBER) ? IndexRadius : PokeRadius;
 	}
 
 	if (bThumb && bIndex)
@@ -72,4 +82,15 @@ void UFXR_HandInteractor::SampleHandTracking()
 FTransform UFXR_HandInteractor::GetTrackedTransform() const
 {
 	return bHasValidHand ? CachedPalm : Super::GetTrackedTransform();
+}
+
+void UFXR_HandInteractor::GetPokeTip(FVector& OutLocation, float& OutRadius) const
+{
+	if (bHasValidIndexTip)
+	{
+		OutLocation = CachedIndexTip;
+		OutRadius = CachedIndexTipRadius;
+		return;
+	}
+	Super::GetPokeTip(OutLocation, OutRadius);
 }

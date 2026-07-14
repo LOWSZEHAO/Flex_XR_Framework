@@ -48,6 +48,14 @@ public:
 	/** Framework grab-sphere query shape for near broad-phase detection. */
 	virtual void GetGrabSphere(FVector& OutCenter, float& OutRadius) const = 0;
 
+	/**
+	 * Fingertip probe (design 5.4): the index-tip sphere that drives poke interactions
+	 * (FXR_Press travel). The real tracked fingertip on hand tracking; a tuned offset from the
+	 * controller pose otherwise. First probe of the fingertip set — procedural grip and
+	 * palm-contact points extend this seam later.
+	 */
+	virtual void GetPokeTip(FVector& OutLocation, float& OutRadius) const = 0;
+
 	/** Framework far-ray query shape: origin + normalized direction. */
 	virtual void GetFarRay(FVector& OutOrigin, FVector& OutDirection) const = 0;
 
