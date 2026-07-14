@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.4 (Locomotion)
+**Version:** 0.5 (GripPoint authority & ownership — ADR-007)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -192,11 +192,53 @@ Justifications: real travel + spring feel; multiple distinct use points per obje
 
 ### FXR_GripPoint
 "A sticker on the object: hands go here, shaped like this."
-- Stores: allowed hand (**Left Only / Right Only / Both**), `UFXR_HandPose` asset, priority, activation radius.
+- Stores: allowed hand (**Left Only / Right Only / Both**), `UFXR_HandPose` asset, priority, activation radius, snap mode, owners.
 - **Left/right at different positions → add two GripPoints with hand filters** (rifle: right hand on pistol grip, left on foregrip). The scorer filters by hand side, so each hand only lands on its own point. **Both** = symmetric spots (mug handle); pose auto-mirrors for whichever hand arrives.
 - **Rail variant:** an axis extent — hands grab anywhere along a handrail/hose and slide.
 - Runtime scoring (distance + approach angle + side + priority) picks the best point; displayed hand blends into the authored pose over ~100 ms.
-- No GripPoint → **procedural grip fallback** (fingers sphere-cast and curl until contact).
+
+**Presence is authoritative (ADR-007).** A GripPoint owned by an interactable ⇒ GripPoints are the **only** way hands attach — the mesh becomes invisible to grab detection. No GripPoint ⇒ the mesh's collision is the grab surface (**procedural grip**: fingers sphere-cast and curl until contact). There is deliberately no enum/checkbox for this on the interactable: presence of the asset is the switch, so the invalid state ("grip-points-only with no grip point") is unrepresentable. All grip configuration lives on FXR_GripPoint. Palm-push (contact drive) is unaffected — a GripPoint-only door can still be shoved with an open palm — and the rotational min-lever-arm guard stays for point-free latches.
+
+**Ownership — `Owners` is a list.** Auto-resolution order:
+1. Nearest ancestor interactable in the component hierarchy → owner.
+2. Otherwise the actor's interactables: exactly **one** → it owns the point (zero configuration); **more than one** → ambiguous — `Owners` must be set explicitly; validation errors at author time naming the candidates. Never guessed at runtime.
+3. No interactable on the actor → validation warning; the point never registers.
+
+A point may be owned by several interactables, but **at most one owner may be enabled at a time** (validated). One interactable claims a given hand at a time; multiple enabled interactables per actor are fine when they don't share points (extinguisher body Grab + squeeze-handle Use).
+
+**The three authoring cases:**
+
+*Case A — single interactable (the ~90% case).* Points parented to the mesh; the sole interactable owns them automatically. Zero configuration.
+```
+BP_Crate
+├── CrateMesh
+│   ├── FXR_Grab
+│   ├── GripPoint_L        Owners: [Grab]  (auto-resolved)
+│   └── GripPoint_R        Owners: [Grab]  (auto-resolved)
+```
+
+*Case B — multiple interactables, different grip locations.* Parent each point under its interactable (self-documenting), or set `Owners` manually. For holds that genuinely differ — carrying a loose panel by its edges vs. swinging a hung door by its handle.
+```
+BP_Door
+├── DoorMesh
+│   ├── FXR_Grab
+│   │   ├── GripPoint_Edge_L     Owners: [Grab]
+│   │   └── GripPoint_Edge_R     Owners: [Grab]
+│   └── FXR_Latch
+│       ├── GripPoint_Handle_L   Owners: [Latch]
+│       └── GripPoint_Handle_R   Owners: [Latch]
+```
+
+*Case C — multiple interactables sharing one grip location.* One pair of points, owned by both; legal because only one owner is enabled at a time. The detachable-door pattern: the frame's FXR_Socket fires `OnSocketed` → `Grab.SetInteractionEnabled(false)`, `Latch.SetInteractionEnabled(true)` — the same handle now swings the door instead of picking it up; reverse on removal.
+```
+BP_Door
+├── DoorMesh
+│   ├── FXR_Grab        (enabled  — carry the loose panel)
+│   ├── FXR_Latch       (disabled — not hung yet)
+│   ├── GripPoint_L     Owners: [Grab, Latch]
+│   └── GripPoint_R     Owners: [Grab, Latch]
+```
+Known limitation (deliberately unsolved): a shared point carries **one** pose. If two owners need different poses at the same location, fall back to Case B. No per-owner pose override until a real case demands it.
 
 ### FXR_Highlight *(optional)*
 Every interactable already gets the default highlight automatically (Outline, bright yellow) — this component exists only to customize further:
