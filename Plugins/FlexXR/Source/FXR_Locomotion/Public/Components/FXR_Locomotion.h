@@ -14,6 +14,8 @@ class UInputAction;
 class UInputMappingContext;
 class UStaticMesh;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UCameraComponent;
 class UFXR_InteractorComponent;
 class UFXR_InteractionDriver;
 class IFXR_Interactor;
@@ -62,6 +64,10 @@ public:
 	/** True while a teleport arc is being aimed. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
 	bool IsAimingTeleport() const { return Phase == ETeleportPhase::Aiming; }
+
+	/** Current comfort-vignette intensity 0..1 — bind to a post-process/overlay if not using Vignette Material. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
+	float GetVignetteIntensity() const { return VignetteIntensity; }
 
 protected:
 	//~ Movement
@@ -136,6 +142,21 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning")
 	EFXR_HandSide TurnHand = EFXR_HandSide::Left;
 
+	//~ Comfort
+	/** Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant narrowed FOV. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort")
+	EFXR_VignetteMode VignetteMode = EFXR_VignetteMode::Dynamic;
+
+	/** Maximum vignette closure 0..1. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "VignetteMode != EFXR_VignetteMode::Off"))
+	float VignetteStrength = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort", meta = (EditCondition = "VignetteMode == EFXR_VignetteMode::Dynamic"))
+	bool bVignetteOnTurn = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort", meta = (EditCondition = "VignetteMode == EFXR_VignetteMode::Dynamic"))
+	bool bVignetteOnSmoothMove = true;
+
 	//~ Input
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputMappingContext> LocomotionContext;
@@ -165,6 +186,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
+	/** Post-process material driven each frame with the vignette intensity. If unset, bind Get Vignette Intensity to your own overlay. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> VignetteMaterial;
+
+	/** Scalar parameter on the vignette material that receives the 0..1 intensity. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	FName VignetteIntensityParameter = TEXT("Intensity");
+
 private:
 	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn };
 
@@ -181,6 +210,8 @@ private:
 	void ExecuteMove();
 	void ProcessTurn(float DeltaTime);
 	void ProcessSmoothMove(float DeltaTime);
+	void UpdateVignette(float DeltaTime);
+	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
 	void DrawAim() const;
@@ -204,6 +235,16 @@ private:
 	float CurrentTurnAxis = 0.f;
 	bool bTurnArmed = true;
 	FVector2D MoveAxis = FVector2D::ZeroVector;
+
+	// Comfort: per-frame smooth-motion factors (0 for teleport/snap — those never vignette) feed the
+	// eased VignetteIntensity, which drives the assigned material and Get Vignette Intensity.
+	float VignetteIntensity = 0.f;
+	float SmoothMoveFactor = 0.f;
+	float SmoothTurnFactor = 0.f;
+	bool bVignetteBlendableAdded = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> VignetteMID;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.

@@ -14,7 +14,9 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -63,6 +65,10 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		TryBindInput();
 	}
 
+	// Cleared each frame; the smooth-motion handlers below set them, so teleport/snap never vignette.
+	SmoothMoveFactor = 0.f;
+	SmoothTurnFactor = 0.f;
+
 	// Turning runs whenever the view isn't mid-transition — including while aiming a teleport arc.
 	if (Phase == ETeleportPhase::Idle || Phase == ETeleportPhase::Aiming)
 	{
@@ -103,6 +109,8 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	default:
 		break;
 	}
+
+	UpdateVignette(DeltaTime);
 }
 
 void UFXR_Locomotion::SetLocomotionEnabled(bool bEnabled)
@@ -257,6 +265,7 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	if (bSmoothActive && AbsAxis > TurnSmoothDeadzone)
 	{
 		ApplyYaw(Axis * SmoothTurnRate * DeltaTime);
+		SmoothTurnFactor = FMath::Min(AbsAxis, 1.f); // continuous turn feeds the comfort vignette
 	}
 }
 
@@ -314,6 +323,66 @@ void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 	const FVector Right = FRotationMatrix(YawRotation).GetScaledAxis(EAxis::Y);
 	const FVector Delta = (Forward * MoveAxis.Y + Right * MoveAxis.X) * SmoothMoveSpeed * DeltaTime;
 	Origin->AddWorldOffset(Delta, false, nullptr, ETeleportType::TeleportPhysics);
+
+	SmoothMoveFactor = FMath::Min(static_cast<float>(MoveAxis.Size()), 1.f); // stick magnitude ≈ speed
+}
+
+void UFXR_Locomotion::UpdateVignette(float DeltaTime)
+{
+	float Target = 0.f;
+	switch (VignetteMode)
+	{
+	case EFXR_VignetteMode::Off:
+		Target = 0.f;
+		break;
+
+	case EFXR_VignetteMode::Always:
+		Target = VignetteStrength;
+		break;
+
+	case EFXR_VignetteMode::Dynamic:
+	{
+		float Factor = 0.f;
+		if (bVignetteOnSmoothMove)
+		{
+			Factor = FMath::Max(Factor, SmoothMoveFactor);
+		}
+		if (bVignetteOnTurn)
+		{
+			Factor = FMath::Max(Factor, SmoothTurnFactor);
+		}
+		Target = Factor * VignetteStrength;
+		break;
+	}
+	}
+
+	// Ease so the vignette never pops (a popping vignette is itself uncomfortable).
+	VignetteIntensity = FMath::FInterpTo(VignetteIntensity, Target, DeltaTime, 8.f);
+	ApplyVignetteToMaterial();
+}
+
+void UFXR_Locomotion::ApplyVignetteToMaterial()
+{
+	if (!VignetteMaterial)
+	{
+		return; // no material assigned — the game binds Get Vignette Intensity to its own overlay instead
+	}
+
+	if (!bVignetteBlendableAdded)
+	{
+		const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+		if (UCameraComponent* Camera = LocOwner ? Cast<UCameraComponent>(LocOwner->GetHMDComponent()) : nullptr)
+		{
+			VignetteMID = UMaterialInstanceDynamic::Create(VignetteMaterial, this);
+			Camera->PostProcessSettings.AddBlendable(VignetteMID, 1.f);
+			bVignetteBlendableAdded = true;
+		}
+	}
+
+	if (VignetteMID)
+	{
+		VignetteMID->SetScalarParameterValue(VignetteIntensityParameter, VignetteIntensity);
+	}
 }
 
 void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
