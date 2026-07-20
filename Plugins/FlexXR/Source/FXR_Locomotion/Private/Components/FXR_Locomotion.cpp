@@ -148,14 +148,28 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	SmoothMoveFactor = 0.f;
 	SmoothTurnFactor = 0.f;
 
-	// Turning runs whenever the view isn't mid-transition — including while aiming a teleport arc.
+	// Capability fallback (ADR-005): tracked hands have no thumbstick, so gesture-drive teleport and
+	// drop smooth move. Documented, not silent.
+	const bool bHandTeleport = IsHandTracking(TeleportHand);
+	if (bHandTeleport)
+	{
+		if (!bLoggedHandFallback)
+		{
+			UE_LOG(LogFXR, Log, TEXT("FXR_Locomotion: tracked hands active — using gesture teleport + rotation-on-landing; smooth move disabled (ADR-005 capability rule)."));
+			bLoggedHandFallback = true;
+		}
+		ProcessHandTeleportGesture();
+	}
+
+	// Turning runs whenever the view isn't mid-transition. On hands the turn stick is absent, so this
+	// is a no-op and turning comes from teleport landing rotation instead.
 	if (Phase == ETeleportPhase::Idle || Phase == ETeleportPhase::Aiming)
 	{
 		ProcessTurn(DeltaTime);
 	}
 
-	// Smooth move is illegal while a teleport arc is being aimed (ADR-005) — Idle only.
-	if (Phase == ETeleportPhase::Idle)
+	// Smooth move is illegal while aiming a teleport (ADR-005) and not offered on hands (no stick).
+	if (Phase == ETeleportPhase::Idle && !IsHandTracking(MoveHand))
 	{
 		ProcessSmoothMove(DeltaTime);
 	}
@@ -462,6 +476,64 @@ void UFXR_Locomotion::ApplyVignetteToMaterial()
 	{
 		VignetteMID->SetScalarParameterValue(VignetteIntensityParameter, VignetteIntensity);
 	}
+}
+
+void UFXR_Locomotion::ProcessHandTeleportGesture()
+{
+	IFXR_Interactor* Hand = GetInteractorForHand(TeleportHand);
+	if (!Hand || Hand->GetInteractorType() != EFXR_InteractorType::TrackedHand)
+	{
+		return;
+	}
+
+	if (!bLocomotionEnabled || !bAllowTeleport || IsHandBusy(TeleportHand))
+	{
+		if (Phase == ETeleportPhase::Aiming)
+		{
+			Phase = ETeleportPhase::Idle; // grabbed something / disabled mid-aim → cancel
+		}
+		return;
+	}
+
+	const bool bPalmDown = IsPalmDown(Hand);
+	const bool bPinch = Hand->GetSelectValue() >= HandPinchCommitThreshold;
+
+	if (Phase == ETeleportPhase::Idle)
+	{
+		// Raise the hand palm-down (without pinching) to begin aiming.
+		if (bPalmDown && !bPinch)
+		{
+			Phase = ETeleportPhase::Aiming;
+		}
+	}
+	else if (Phase == ETeleportPhase::Aiming)
+	{
+		if (bPinch)
+		{
+			CommitTeleport(); // pinch commits
+		}
+		else if (!bPalmDown)
+		{
+			Phase = ETeleportPhase::Idle; // open the hand / turn it up to cancel
+		}
+	}
+}
+
+bool UFXR_Locomotion::IsHandTracking(EFXR_HandSide Side) const
+{
+	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
+	return Interactor && Interactor->GetInteractorType() == EFXR_InteractorType::TrackedHand;
+}
+
+bool UFXR_Locomotion::IsPalmDown(const IFXR_Interactor* Hand) const
+{
+	if (!Hand)
+	{
+		return false;
+	}
+	const FTransform Palm = Hand->GetPalmTransform();
+	const FVector WorldAxis = Palm.TransformVectorNoScale(PalmDownAxisLocal).GetSafeNormal();
+	return FVector::DotProduct(WorldAxis, FVector::DownVector) >= PalmDownThreshold;
 }
 
 void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)

@@ -170,6 +170,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort", meta = (EditCondition = "VignetteMode == EFXR_VignetteMode::Dynamic"))
 	bool bVignetteOnSmoothMove = true;
 
+	//~ Hand Tracking (gesture teleport when the hand is the active source; controllers ignore these)
+	/** Pinch strength that commits a gesture teleport. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float HandPinchCommitThreshold = 0.7f;
+
+	/** Palm-local axis that points at the ground in the aim pose (palm down). Flip a sign in-headset if aiming reads inverted. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking")
+	FVector PalmDownAxisLocal = FVector(0.f, 0.f, -1.f);
+
+	/** How closely the palm must face down (dot with world-down) to begin aiming. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PalmDownThreshold = 0.5f;
+
 	//~ Input
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputMappingContext> LocomotionContext;
@@ -224,6 +237,9 @@ private:
 	void ExecuteMove();
 	void ProcessTurn(float DeltaTime);
 	void ProcessSmoothMove(float DeltaTime);
+	void ProcessHandTeleportGesture();
+	bool IsHandTracking(EFXR_HandSide Side) const;
+	bool IsPalmDown(const IFXR_Interactor* Hand) const;
 	void UpdateVignette(float DeltaTime);
 	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
@@ -239,6 +255,7 @@ private:
 	bool bTurnEnabled = true;
 	bool bInputBound = false;
 	bool bLoggedMissingOwner = false;
+	bool bLoggedHandFallback = false;
 
 	FVector TargetLocation = FVector::ZeroVector;
 	bool bTargetValid = false;
