@@ -8,6 +8,7 @@
 #include "Types/FXR_LogChannels.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
 #include "NavigationSystem.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -16,6 +17,15 @@
 #include "Camera/PlayerCameraManager.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
+
+namespace
+{
+	// Snap fires past the high threshold and rearms only after re-centring below the low one — so a
+	// single flick is one snap; a partial hold below the high threshold drives smooth (Both mode).
+	constexpr float TurnSnapThreshold = 0.8f;
+	constexpr float TurnRearmThreshold = 0.3f;
+	constexpr float TurnSmoothDeadzone = 0.15f;
+}
 
 UFXR_Locomotion::UFXR_Locomotion()
 {
@@ -51,6 +61,12 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	if (!bInputBound)
 	{
 		TryBindInput();
+	}
+
+	// Turning runs whenever the view isn't mid-transition — including while aiming a teleport arc.
+	if (Phase == ETeleportPhase::Idle || Phase == ETeleportPhase::Aiming)
+	{
+		ProcessTurn(DeltaTime);
 	}
 
 	switch (Phase)
@@ -101,6 +117,11 @@ void UFXR_Locomotion::SetTeleportEnabled(bool bEnabled)
 	}
 }
 
+void UFXR_Locomotion::SetTurnEnabled(bool bEnabled)
+{
+	bTurnEnabled = bEnabled;
+}
+
 bool UFXR_Locomotion::TeleportToLocation(const FVector& Location, FRotator Rotation)
 {
 	// Scripted move: no aim/validation, no transition — used by SOP "MoveTo" steps and game script.
@@ -149,6 +170,12 @@ void UFXR_Locomotion::TryBindInput()
 		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportCompleted);
 	}
 
+	if (TurnAction)
+	{
+		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTurn);
+		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnCompleted);
+	}
+
 	bInputBound = true;
 }
 
@@ -170,6 +197,88 @@ void UFXR_Locomotion::HandleTeleportCompleted()
 	if (Phase == ETeleportPhase::Aiming)
 	{
 		CommitTeleport();
+	}
+}
+
+void UFXR_Locomotion::HandleTurn(const FInputActionValue& Value)
+{
+	CurrentTurnAxis = Value.Get<float>();
+}
+
+void UFXR_Locomotion::HandleTurnCompleted()
+{
+	CurrentTurnAxis = 0.f;
+}
+
+void UFXR_Locomotion::ProcessTurn(float DeltaTime)
+{
+	if (!bLocomotionEnabled || !bTurnEnabled || TurnMode == EFXR_TurnMode::None)
+	{
+		return;
+	}
+	if (IsHandBusy(TurnHand)) // yield: the turning hand is holding an interactable
+	{
+		return;
+	}
+
+	const float Axis = CurrentTurnAxis;
+	const float AbsAxis = FMath::Abs(Axis);
+	const bool bSnapActive = (TurnMode == EFXR_TurnMode::Snap || TurnMode == EFXR_TurnMode::Both);
+	const bool bSmoothActive = (TurnMode == EFXR_TurnMode::Smooth || TurnMode == EFXR_TurnMode::Both);
+
+	// In the snap zone a flick yaws once and disarms; smooth is suppressed so it never double-turns.
+	if (bSnapActive && AbsAxis >= TurnSnapThreshold)
+	{
+		if (bTurnArmed)
+		{
+			ApplyYaw(FMath::Sign(Axis) * SnapAngle);
+			bTurnArmed = false;
+		}
+		return;
+	}
+
+	if (AbsAxis < TurnRearmThreshold)
+	{
+		bTurnArmed = true;
+	}
+
+	if (bSmoothActive && AbsAxis > TurnSmoothDeadzone)
+	{
+		ApplyYaw(Axis * SmoothTurnRate * DeltaTime);
+	}
+}
+
+void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
+{
+	if (FMath::IsNearlyZero(DeltaYawDegrees))
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(Owner);
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+
+	if (Origin && HMD)
+	{
+		// Rotate the origin about the HMD's vertical axis: the head keeps its world position, the
+		// world yaws around it — the room-scale-correct pivot (ADR-006), same as landing rotation.
+		const FVector Pivot = HMD->GetComponentLocation();
+		const FQuat DeltaQ(FVector::UpVector, FMath::DegreesToRadians(DeltaYawDegrees));
+		const FVector NewLocation = Pivot + DeltaQ.RotateVector(Origin->GetComponentLocation() - Pivot);
+		const FQuat NewRotation = DeltaQ * Origin->GetComponentQuat();
+		Origin->SetWorldLocationAndRotation(NewLocation, NewRotation, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	else
+	{
+		// Fallback rotates about the pawn root, not the head — same tradeoff as the ADR-006 fallback.
+		Owner->AddActorWorldRotation(FRotator(0.f, DeltaYawDegrees, 0.f));
 	}
 }
 
@@ -339,8 +448,13 @@ void UFXR_Locomotion::ExecuteMove()
 		NewOrigin.Z = TargetLocation.Z;
 		Origin->SetWorldLocation(NewOrigin, false, nullptr, ETeleportType::TeleportPhysics);
 
-		// Landing rotation KeepFacing is a no-op; FaceArc / Thumbstick Choose (rotating the origin
-		// about the HMD) land with the turn slice, which owns the shared yaw-about-HMD maths.
+		// Landing rotation about the HMD (ADR-006). KeepFacing is a no-op; FaceArc turns the player
+		// to face the arc's aim direction. Thumbstick Choose (aim-time stick) is a later refinement.
+		if (LandingRotation == EFXR_LandingRotation::FaceArc)
+		{
+			const float HMDYaw = HMD->GetComponentRotation().Yaw;
+			ApplyYaw(FRotator::NormalizeAxis(TargetFacingYaw - HMDYaw));
+		}
 	}
 	else
 	{

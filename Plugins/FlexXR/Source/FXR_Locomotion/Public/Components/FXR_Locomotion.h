@@ -17,10 +17,12 @@ class UMaterialInterface;
 class UFXR_InteractorComponent;
 class UFXR_InteractionDriver;
 class IFXR_Interactor;
+struct FInputActionValue;
 
 /**
  * UFXR_Locomotion — the single locomotion component (ADR-005): teleport, smooth move, turn, and
- * comfort, arbitrated internally rather than split into four components. This slice ships teleport.
+ * comfort, arbitrated internally rather than split into four components. Teleport and snap/smooth
+ * turning are live; smooth move, vignette, and presets are following slices.
  *
  * Room-scale correct (ADR-006): teleport moves the play-space origin so the HMD lands on the
  * target, obtained via the owner's IFXR_LocomotionOwner — never a concrete pawn cast, so it works
@@ -48,6 +50,10 @@ public:
 	/** Enable/disable teleport specifically. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
 	void SetTeleportEnabled(bool bEnabled);
+
+	/** Enable/disable turning specifically. */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
+	void SetTurnEnabled(bool bEnabled);
 
 	/** Scripted move (SOP "MoveTo" step): relocate the rig so the HMD lands at Location, facing Rotation. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
@@ -99,6 +105,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0"))
 	float FadeDuration = 0.15f;
 
+	//~ Turning
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning")
+	EFXR_TurnMode TurnMode = EFXR_TurnMode::Snap;
+
+	/** Degrees per snap. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "TurnMode == EFXR_TurnMode::Snap || TurnMode == EFXR_TurnMode::Both"))
+	float SnapAngle = 30.f;
+
+	/** Degrees per second for smooth turning. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "TurnMode == EFXR_TurnMode::Smooth || TurnMode == EFXR_TurnMode::Both"))
+	float SmoothTurnRate = 90.f;
+
+	/** Which hand's stick turns (yields if that hand is holding an interactable). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning")
+	EFXR_HandSide TurnHand = EFXR_HandSide::Left;
+
 	//~ Input
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputMappingContext> LocomotionContext;
@@ -106,6 +128,10 @@ protected:
 	/** Hold to aim the teleport arc, release to commit. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputAction> TeleportAction;
+
+	/** Axis1D (thumbstick X) — sign turns left/right; snap on a flick, smooth while held. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	TObjectPtr<UInputAction> TurnAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	int32 InputPriority = 0;
@@ -126,10 +152,15 @@ private:
 	void TryBindInput();
 	void HandleTeleportStarted();
 	void HandleTeleportCompleted();
+	void HandleTurn(const FInputActionValue& Value);
+	void HandleTurnCompleted();
 	void UpdateAim();
 	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
 	void CommitTeleport();
 	void ExecuteMove();
+	void ProcessTurn(float DeltaTime);
+	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
+	void ApplyYaw(float DeltaYawDegrees);
 	void DrawAim() const;
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
@@ -137,6 +168,7 @@ private:
 
 	ETeleportPhase Phase = ETeleportPhase::Idle;
 	bool bLocomotionEnabled = true;
+	bool bTurnEnabled = true;
 	bool bInputBound = false;
 	bool bLoggedMissingOwner = false;
 	bool bLoggedAnchorsUnsupported = false;
@@ -145,6 +177,9 @@ private:
 	bool bTargetValid = false;
 	float TargetFacingYaw = 0.f;
 	float FadeElapsed = 0.f;
+
+	float CurrentTurnAxis = 0.f;
+	bool bTurnArmed = true;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.
