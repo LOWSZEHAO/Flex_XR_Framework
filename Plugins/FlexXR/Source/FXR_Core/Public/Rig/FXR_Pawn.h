@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "Types/FXR_CoreTypes.h"
+#include "Rig/FXR_LocomotionOwner.h"
 #include "FXR_Pawn.generated.h"
 
 class UCameraComponent;
@@ -27,7 +28,7 @@ class IFXR_Interactor;
  * into a level (auto-possesses Player 0) to try the rig.
  */
 UCLASS()
-class FXR_CORE_API AFXR_Pawn : public APawn
+class FXR_CORE_API AFXR_Pawn : public APawn, public IFXR_LocomotionOwner
 {
 	GENERATED_BODY()
 
@@ -37,6 +38,11 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+
+	//~ IFXR_LocomotionOwner (ADR-006 room-scale origin) — the rig moved by teleport is VROrigin,
+	//~ the HMD whose horizontal position lands on target is Camera.
+	virtual USceneComponent* GetTrackingOriginComponent() const override;
+	virtual USceneComponent* GetHMDComponent() const override;
 
 	/** The active interactor for a hand (controller / tracked hand / desktop-sim, per capabilities). */
 	IFXR_Interactor* GetActiveInteractor(EFXR_HandSide Side) const;

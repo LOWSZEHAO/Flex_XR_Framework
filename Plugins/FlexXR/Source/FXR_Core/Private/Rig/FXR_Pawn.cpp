@@ -116,6 +116,16 @@ void AFXR_Pawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	}
 }
 
+USceneComponent* AFXR_Pawn::GetTrackingOriginComponent() const
+{
+	return VROrigin;
+}
+
+USceneComponent* AFXR_Pawn::GetHMDComponent() const
+{
+	return Camera;
+}
+
 IFXR_Interactor* AFXR_Pawn::GetActiveInteractor(EFXR_HandSide Side) const
 {
 	UFXR_InteractorComponent* Ordered[3] = { nullptr, nullptr, DesktopSim };

@@ -35,6 +35,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "FXR_Locomotion",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "FXR_Training",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
