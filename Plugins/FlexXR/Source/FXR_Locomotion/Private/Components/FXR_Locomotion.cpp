@@ -32,7 +32,82 @@ namespace
 UFXR_Locomotion::UFXR_Locomotion()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	// Start consistent with the default preset so the panel never shows a preset the fields contradict.
+	ApplyPreset(Preset);
 }
+
+void UFXR_Locomotion::ApplyPreset(EFXR_LocomotionPreset InPreset)
+{
+	switch (InPreset)
+	{
+	case EFXR_LocomotionPreset::Comfort:
+		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Fade;
+		bAllowSmoothMove = false;
+		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
+		VignetteMode = EFXR_VignetteMode::Always;
+		break;
+
+	case EFXR_LocomotionPreset::Standard:
+		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Fade;
+		bAllowSmoothMove = true; SmoothMoveSpeed = 250.f; // ~2.5 m/s
+		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
+		VignetteMode = EFXR_VignetteMode::Dynamic;
+		break;
+
+	case EFXR_LocomotionPreset::Free:
+		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Dash;
+		bAllowSmoothMove = true; SmoothMoveSpeed = 400.f; // ~4 m/s
+		TurnMode = EFXR_TurnMode::Smooth; SmoothTurnRate = 90.f;
+		VignetteMode = EFXR_VignetteMode::Off;
+		break;
+
+	case EFXR_LocomotionPreset::Custom:
+	default:
+		break; // Custom leaves the fields as authored
+	}
+
+	Preset = InPreset;
+}
+
+void UFXR_Locomotion::SetPreset(EFXR_LocomotionPreset InPreset)
+{
+	ApplyPreset(InPreset);
+}
+
+#if WITH_EDITOR
+void UFXR_Locomotion::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName Changed = PropertyChangedEvent.GetPropertyName();
+
+	if (Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, Preset))
+	{
+		if (Preset != EFXR_LocomotionPreset::Custom)
+		{
+			ApplyPreset(Preset);
+		}
+		return;
+	}
+
+	// Editing any preset-controlled feel field flips to Custom (input / visual / hand setup fields don't).
+	const bool bFeelField =
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, bAllowTeleport) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, Transition) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, bAllowSmoothMove) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SmoothMoveSpeed) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, TurnMode) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SnapAngle) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SmoothTurnRate) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, VignetteMode);
+
+	if (bFeelField)
+	{
+		Preset = EFXR_LocomotionPreset::Custom;
+	}
+}
+#endif
 
 void UFXR_Locomotion::BeginPlay()
 {

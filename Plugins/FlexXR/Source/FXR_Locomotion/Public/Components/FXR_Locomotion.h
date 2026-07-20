@@ -45,6 +45,10 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 	/** Master switch for all locomotion (games gate directly; SOP hard-lock steps call the same API). */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
 	void SetLocomotionEnabled(bool bEnabled);
@@ -61,6 +65,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
 	bool TeleportToLocation(const FVector& Location, FRotator Rotation);
 
+	/** Apply a locomotion feel preset at runtime (fills the feel fields; Custom leaves them). */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
+	void SetPreset(EFXR_LocomotionPreset InPreset);
+
 	/** True while a teleport arc is being aimed. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
 	bool IsAimingTeleport() const { return Phase == ETeleportPhase::Aiming; }
@@ -70,6 +78,10 @@ public:
 	float GetVignetteIntensity() const { return VignetteIntensity; }
 
 protected:
+	/** Feel preset — picking one fills every field below; editing any of them flips this to Custom. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion")
+	EFXR_LocomotionPreset Preset = EFXR_LocomotionPreset::Standard;
+
 	//~ Movement
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	bool bAllowTeleport = true;
@@ -197,6 +209,7 @@ protected:
 private:
 	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn };
 
+	void ApplyPreset(EFXR_LocomotionPreset InPreset);
 	void TryBindInput();
 	void HandleTeleportStarted();
 	void HandleTeleportCompleted();
