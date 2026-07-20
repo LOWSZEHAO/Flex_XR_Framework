@@ -1,0 +1,159 @@
+// Copyright (c) 2026 Low Sze Hao. All rights reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "Engine/EngineTypes.h"
+#include "Kismet/GameplayStatics.h"
+#include "Types/FXR_CoreTypes.h"
+#include "Types/FXR_LocomotionTypes.h"
+#include "FXR_Locomotion.generated.h"
+
+class UInputAction;
+class UInputMappingContext;
+class UStaticMesh;
+class UMaterialInterface;
+class UFXR_InteractorComponent;
+class UFXR_InteractionDriver;
+class IFXR_Interactor;
+
+/**
+ * UFXR_Locomotion — the single locomotion component (ADR-005): teleport, smooth move, turn, and
+ * comfort, arbitrated internally rather than split into four components. This slice ships teleport.
+ *
+ * Room-scale correct (ADR-006): teleport moves the play-space origin so the HMD lands on the
+ * target, obtained via the owner's IFXR_LocomotionOwner — never a concrete pawn cast, so it works
+ * with any project's pawn. Yields to interaction: a hand currently holding an interactable drives
+ * no locomotion.
+ *
+ * Add it to the pawn, assign a teleport input action + mapping context, hold to aim the arc and
+ * release to commit. The arc + reticle draw as debug lines until arc/reticle meshes are assigned.
+ */
+UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
+class FXR_LOCOMOTION_API UFXR_Locomotion : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	UFXR_Locomotion();
+
+	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+	/** Master switch for all locomotion (games gate directly; SOP hard-lock steps call the same API). */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
+	void SetLocomotionEnabled(bool bEnabled);
+
+	/** Enable/disable teleport specifically. */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
+	void SetTeleportEnabled(bool bEnabled);
+
+	/** Scripted move (SOP "MoveTo" step): relocate the rig so the HMD lands at Location, facing Rotation. */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
+	bool TeleportToLocation(const FVector& Location, FRotator Rotation);
+
+	/** True while a teleport arc is being aimed. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
+	bool IsAimingTeleport() const { return Phase == ETeleportPhase::Aiming; }
+
+protected:
+	//~ Movement
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
+	bool bAllowTeleport = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
+	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
+
+	//~ Teleport
+	/** Which hand aims teleport (this slice drives one hand; per-hand aiming comes later). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	EFXR_HandSide TeleportHand = EFXR_HandSide::Right;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
+
+	/** Straight-ray reach / arc distance cap (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "50.0"))
+	float MaxDistance = 1000.f;
+
+	/** Projectile-arc launch speed (cm/s) — higher throws the arc farther and flatter. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "50.0", EditCondition = "AimStyle == EFXR_TeleportAim::ProjectileArc"))
+	float ArcLaunchSpeed = 900.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	EFXR_TeleportValidation Validation = EFXR_TeleportValidation::NavMesh;
+
+	/** Steepest floor (degrees from horizontal) still teleportable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0", ClampMax = "89.0", EditCondition = "Validation == EFXR_TeleportValidation::SurfaceAngle"))
+	float MaxSurfaceAngle = 35.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	EFXR_LandingRotation LandingRotation = EFXR_LandingRotation::KeepFacing;
+
+	/** Collision channel the aim traces against (and the valid-surface channel for Custom Channel validation). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	TEnumAsByte<ECollisionChannel> TeleportTraceChannel = ECC_WorldStatic;
+
+	/** View transition length (s). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0"))
+	float FadeDuration = 0.15f;
+
+	//~ Input
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	TObjectPtr<UInputMappingContext> LocomotionContext;
+
+	/** Hold to aim the teleport arc, release to commit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	TObjectPtr<UInputAction> TeleportAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	int32 InputPriority = 0;
+
+	//~ Visuals (optional; debug lines are used until meshes are assigned — a later slice).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UStaticMesh> ReticleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> ValidMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> InvalidMaterial;
+
+private:
+	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn };
+
+	void TryBindInput();
+	void HandleTeleportStarted();
+	void HandleTeleportCompleted();
+	void UpdateAim();
+	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
+	void CommitTeleport();
+	void ExecuteMove();
+	void DrawAim() const;
+	void StartCameraFade(float From, float To) const;
+	bool IsHandBusy(EFXR_HandSide Side) const;
+	IFXR_Interactor* GetAimInteractor() const;
+
+	ETeleportPhase Phase = ETeleportPhase::Idle;
+	bool bLocomotionEnabled = true;
+	bool bInputBound = false;
+	bool bLoggedMissingOwner = false;
+	bool bLoggedAnchorsUnsupported = false;
+
+	FVector TargetLocation = FVector::ZeroVector;
+	bool bTargetValid = false;
+	float TargetFacingYaw = 0.f;
+	float FadeElapsed = 0.f;
+
+	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
+	// reused across frames, and the drawn polyline reuses ArcPoints.
+	FPredictProjectilePathResult ArcResult;
+	TArray<FVector> ArcPoints;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UFXR_InteractorComponent>> CachedInteractors;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UFXR_InteractionDriver> CachedDriver;
+};
