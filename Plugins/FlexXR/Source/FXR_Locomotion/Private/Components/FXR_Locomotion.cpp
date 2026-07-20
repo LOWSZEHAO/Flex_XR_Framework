@@ -69,6 +69,12 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		ProcessTurn(DeltaTime);
 	}
 
+	// Smooth move is illegal while a teleport arc is being aimed (ADR-005) — Idle only.
+	if (Phase == ETeleportPhase::Idle)
+	{
+		ProcessSmoothMove(DeltaTime);
+	}
+
 	switch (Phase)
 	{
 	case ETeleportPhase::Aiming:
@@ -176,6 +182,12 @@ void UFXR_Locomotion::TryBindInput()
 		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnCompleted);
 	}
 
+	if (MoveAction)
+	{
+		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleMove);
+		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleMoveCompleted);
+	}
+
 	bInputBound = true;
 }
 
@@ -246,6 +258,62 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	{
 		ApplyYaw(Axis * SmoothTurnRate * DeltaTime);
 	}
+}
+
+void UFXR_Locomotion::HandleMove(const FInputActionValue& Value)
+{
+	MoveAxis = Value.Get<FVector2D>();
+}
+
+void UFXR_Locomotion::HandleMoveCompleted()
+{
+	MoveAxis = FVector2D::ZeroVector;
+}
+
+void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
+{
+	if (!bLocomotionEnabled || !bAllowSmoothMove || MoveAxis.IsNearlyZero())
+	{
+		return;
+	}
+	if (IsHandBusy(MoveHand)) // yield: the moving hand is holding an interactable
+	{
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(Owner);
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+	if (!Origin)
+	{
+		return;
+	}
+
+	// Horizontal frame the stick steers in. Hand-relative uses the moving hand's aim yaw; Head and
+	// Hip use the HMD yaw (the rig has no hip tracker, so Hip degenerates to Head).
+	float Yaw = 0.f;
+	if (MoveDirectionSource == EFXR_MoveDirectionSource::HandRelative)
+	{
+		if (const IFXR_Interactor* MoveInteractor = GetInteractorForHand(MoveHand))
+		{
+			Yaw = MoveInteractor->GetAimTransform().Rotator().Yaw;
+		}
+		else if (HMD)
+		{
+			Yaw = HMD->GetComponentRotation().Yaw;
+		}
+	}
+	else if (HMD)
+	{
+		Yaw = HMD->GetComponentRotation().Yaw;
+	}
+
+	const FRotator YawRotation(0.f, Yaw, 0.f);
+	const FVector Forward = YawRotation.Vector();
+	const FVector Right = FRotationMatrix(YawRotation).GetScaledAxis(EAxis::Y);
+	const FVector Delta = (Forward * MoveAxis.Y + Right * MoveAxis.X) * SmoothMoveSpeed * DeltaTime;
+	Origin->AddWorldOffset(Delta, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
@@ -509,11 +577,11 @@ bool UFXR_Locomotion::IsHandBusy(EFXR_HandSide Side) const
 	return CachedDriver && CachedDriver->GetHeldInteractable(Side) != nullptr;
 }
 
-IFXR_Interactor* UFXR_Locomotion::GetAimInteractor() const
+IFXR_Interactor* UFXR_Locomotion::GetInteractorForHand(EFXR_HandSide Side) const
 {
 	for (const TObjectPtr<UFXR_InteractorComponent>& Comp : CachedInteractors)
 	{
-		if (Comp && Comp->IsInteractorActive() && Comp->GetHandSide() == TeleportHand)
+		if (Comp && Comp->IsInteractorActive() && Comp->GetHandSide() == Side)
 		{
 			return Comp.Get();
 		}

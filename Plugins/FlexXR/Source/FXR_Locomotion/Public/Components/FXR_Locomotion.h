@@ -69,6 +69,21 @@ protected:
 	bool bAllowTeleport = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
+	bool bAllowSmoothMove = false;
+
+	/** Frame the move stick is relative to (Hip approximates to Head — the rig has no hip tracker). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (EditCondition = "bAllowSmoothMove"))
+	EFXR_MoveDirectionSource MoveDirectionSource = EFXR_MoveDirectionSource::HeadRelative;
+
+	/** Smooth-move speed (cm/s) — 250 ≈ 2.5 m/s. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0", EditCondition = "bAllowSmoothMove"))
+	float SmoothMoveSpeed = 250.f;
+
+	/** Which hand's stick moves (yields if that hand is holding an interactable). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (EditCondition = "bAllowSmoothMove"))
+	EFXR_HandSide MoveHand = EFXR_HandSide::Left;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
 
 	//~ Teleport
@@ -133,6 +148,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputAction> TurnAction;
 
+	/** Axis2D (thumbstick XY) — smooth movement (X = strafe, Y = forward). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	TObjectPtr<UInputAction> MoveAction;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	int32 InputPriority = 0;
 
@@ -154,17 +173,21 @@ private:
 	void HandleTeleportCompleted();
 	void HandleTurn(const FInputActionValue& Value);
 	void HandleTurnCompleted();
+	void HandleMove(const FInputActionValue& Value);
+	void HandleMoveCompleted();
 	void UpdateAim();
 	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
 	void CommitTeleport();
 	void ExecuteMove();
 	void ProcessTurn(float DeltaTime);
+	void ProcessSmoothMove(float DeltaTime);
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
 	void DrawAim() const;
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
-	IFXR_Interactor* GetAimInteractor() const;
+	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
+	IFXR_Interactor* GetAimInteractor() const { return GetInteractorForHand(TeleportHand); }
 
 	ETeleportPhase Phase = ETeleportPhase::Idle;
 	bool bLocomotionEnabled = true;
@@ -180,6 +203,7 @@ private:
 
 	float CurrentTurnAxis = 0.f;
 	bool bTurnArmed = true;
+	FVector2D MoveAxis = FVector2D::ZeroVector;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.
