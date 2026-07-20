@@ -5,6 +5,8 @@
 #include "Interactor/FXR_Interactor.h"
 #include "Interactor/FXR_InteractorComponent.h"
 #include "Driver/FXR_InteractionDriver.h"
+#include "Detection/FXR_TeleportRegistry.h"
+#include "World/FXR_TeleportAnchor.h"
 #include "Types/FXR_LogChannels.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -127,6 +129,8 @@ void UFXR_Locomotion::BeginPlay()
 
 		CachedDriver = Owner->FindComponentByClass<UFXR_InteractionDriver>();
 	}
+
+	CachedRegistry = UFXR_TeleportRegistry::Get(this);
 }
 
 void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -599,12 +603,25 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 		break;
 
 	case EFXR_TeleportValidation::AnchorsOnly:
-		if (!bLoggedAnchorsUnsupported)
+		if (CachedRegistry)
 		{
-			UE_LOG(LogFXR, Warning, TEXT("FXR_Locomotion: 'Anchors Only' validation needs FXR_TeleportAnchor, which is a later slice — no target will validate until then."));
-			bLoggedAnchorsUnsupported = true;
+			if (const UFXR_TeleportAnchor* Anchor = CachedRegistry->FindAnchorNear(HitLocation))
+			{
+				OutTarget = Anchor->GetComponentLocation();
+				OutValid = true;
+				if (Anchor->ShouldOverrideFacing())
+				{
+					OutFacingYaw = Anchor->GetComponentRotation().Yaw;
+				}
+			}
 		}
 		break;
+	}
+
+	// A blocker rejects any otherwise-valid target, in every validation mode.
+	if (OutValid && CachedRegistry && CachedRegistry->IsBlocked(OutTarget))
+	{
+		OutValid = false;
 	}
 
 	return OutValid;

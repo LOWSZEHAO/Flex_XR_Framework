@@ -18,6 +18,7 @@ class UMaterialInstanceDynamic;
 class UCameraComponent;
 class UFXR_InteractorComponent;
 class UFXR_InteractionDriver;
+class UFXR_TeleportRegistry;
 class IFXR_Interactor;
 struct FInputActionValue;
 
@@ -238,7 +239,6 @@ private:
 	bool bTurnEnabled = true;
 	bool bInputBound = false;
 	bool bLoggedMissingOwner = false;
-	bool bLoggedAnchorsUnsupported = false;
 
 	FVector TargetLocation = FVector::ZeroVector;
 	bool bTargetValid = false;
@@ -269,4 +269,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UFXR_InteractionDriver> CachedDriver;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UFXR_TeleportRegistry> CachedRegistry;
 };
