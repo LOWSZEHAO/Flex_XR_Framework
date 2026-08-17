@@ -36,11 +36,9 @@ class FXR_INTERACTION_API UFXR_Press : public UFXR_InteractableBase
 public:
 	UFXR_Press();
 
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
-	/** Whether the viewport should ghost the cap at full travel (authoring aid, editor only). */
-	bool IsPreviewPressed() const { return bPreviewPressed; }
 
 	/** Poke-driven, never grab-claimed. */
 	virtual bool IsGrabTarget() const override { return false; }
@@ -88,12 +86,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.1"))
 	float FaceRadius = 2.5f;
 
-	/**
-	 * Extra radial margin (cm) tolerated before an already-pressed button lets go at the rim.
-	 * Stops a fingertip resting on the edge from flickering; 0 releases exactly at the face radius.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.0"))
-	float EdgeTolerance = 1.f;
 
 	/** Fraction of the travel at which OnPressed fires (the click point). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.05", ClampMax = "1.0"))
@@ -112,15 +104,22 @@ protected:
 	float HapticAmplitude = 0.5f;
 
 	/**
-	 * Editor preview: ghost the cap's outline at full travel in the viewport, so press depth can be
-	 * judged against the mesh without playing. Purely a drawing aid — it never moves the cap, so it
-	 * cannot be saved into the asset by accident.
+	 * Editor preview: cycle the cap through its travel in the viewport so the press motion can be
+	 * judged against the mesh without playing. Untick to return it to rest.
 	 */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Press|Debug")
 	bool bPreviewPressed = false;
 
+	/** Seconds for one full down-and-up preview cycle. */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|Press|Debug", meta = (ClampMin = "0.1", EditCondition = "bPreviewPressed"))
+	float PreviewCycleSeconds = 1.5f;
+
 private:
 	void ApplyDepth();
+#if WITH_EDITOR
+	/** Animate the cap through its travel in an editor viewport (runs on real instances, not templates). */
+	void TickEditorPreview(float DeltaTime);
+#endif
 
 	// Cached at BeginPlay (world space; assumes the button actor itself does not move at runtime).
 	FTransform FaceRestWorld = FTransform::Identity;
@@ -144,4 +143,11 @@ private:
 	// that is nowhere near this button must not cancel the other hand's approach.
 	bool bPokeArmed[2] = { false, false };
 	float LastBroadcastValue = 0.f;
+
+#if WITH_EDITOR
+	// Rest transforms are captured when the preview starts, exactly as BeginPlay does at runtime —
+	// the press is a child of the cap, so reading them live would chase the moving mesh.
+	bool bPreviewCaptured = false;
+	float PreviewTime = 0.f;
+#endif
 };

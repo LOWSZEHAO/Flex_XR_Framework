@@ -23,6 +23,24 @@ UFXR_Press::UFXR_Press()
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
+void UFXR_Press::OnRegister()
+{
+	Super::OnRegister();
+
+#if WITH_EDITOR
+	// Editor viewports tick the preview actor's real components, which is the only context where a
+	// press can move its cap on screen — a component template has neither owner nor attach parent.
+	if (const UWorld* World = GetWorld())
+	{
+		if (!World->IsGameWorld())
+		{
+			bTickInEditor = true;
+			SetComponentTickEnabled(true);
+		}
+	}
+#endif
+}
+
 void UFXR_Press::BeginPlay()
 {
 	Super::BeginPlay();
@@ -64,10 +82,8 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 	// Work in the rest-face frame: +Z out of the button, the face plane at Z = 0.
 	const FVector TipLocal = FaceRestWorld.InverseTransformPositionNoScale(TipLocation);
 
-	// Only fingertips over the face press it (the tip sphere may lap over the rim). Once engaged the
-	// rim is a little more forgiving, so a finger resting near the edge cannot flicker on and off.
-	const float RimRadius = FaceRadius + TipRadius + ((Depth > 0.f) ? EdgeTolerance : 0.f);
-	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(RimRadius))
+	// Only fingertips over the face press it (the tip sphere may lap over the rim).
+	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(FaceRadius + TipRadius))
 	{
 		// Sliding off the side ends this hand's approach outright — returning must start from the
 		// front again, or a finger swinging back in below the face would re-press the button.
@@ -111,6 +127,17 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Press_Tick);
+
+#if WITH_EDITOR
+	if (const UWorld* World = GetWorld())
+	{
+		if (!World->IsGameWorld())
+		{
+			TickEditorPreview(DeltaTime);
+			return;
+		}
+	}
+#endif
 
 	// A one-frame tolerance: the driver feeding pokes may tick after this component.
 	const bool bPoked = (GFrameCounter - LastPokeFrame) <= 1;
@@ -203,6 +230,43 @@ void UFXR_Press::DrawInteractionDebug() const
 	DrawDebugCircle(World, Face - Normal * Depth, FaceRadius * 0.75f, 24, bPressed ? FColor::Green : FColor::Orange, false, -1.f, 0, 0.6f, AxisX, AxisY, false);
 }
 
+
+#if WITH_EDITOR
+void UFXR_Press::TickEditorPreview(float DeltaTime)
+{
+	if (!bPreviewPressed)
+	{
+		// Always leave the cap where it was found, so an authoring aid can never be saved in.
+		if (bPreviewCaptured)
+		{
+			Depth = 0.f;
+			ApplyDepth();
+			bPreviewCaptured = false;
+		}
+		return;
+	}
+
+	if (!bPreviewCaptured)
+	{
+		Driven = ResolveDrivenComponent();
+		if (!Driven.IsValid())
+		{
+			return;
+		}
+		FaceRestWorld = GetComponentTransform();
+		DrivenRestWorld = Driven->GetComponentTransform();
+		PreviewTime = 0.f;
+		bPreviewCaptured = true;
+	}
+
+	// Ease down and back up so the motion reads as a press rather than a slide.
+	PreviewTime = FMath::Fmod(PreviewTime + DeltaTime, PreviewCycleSeconds);
+	const float Cycle = PreviewTime / PreviewCycleSeconds;
+	const float PingPong = 1.f - FMath::Abs(Cycle * 2.f - 1.f);
+	Depth = FMath::InterpEaseInOut(0.f, Travel, PingPong, 2.f);
+	ApplyDepth();
+}
+#endif
 
 float UFXR_Press::GetPressValue() const
 {
