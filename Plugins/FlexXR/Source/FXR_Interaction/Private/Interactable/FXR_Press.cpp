@@ -7,6 +7,12 @@
 #include "GameFramework/Actor.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
+#if WITH_EDITOR
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#endif
+
 UFXR_Press::UFXR_Press()
 {
 	// A press ticks while poked (cap follow) and while returning to rest; idle it sleeps.
@@ -174,13 +180,62 @@ void UFXR_Press::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 	}
 }
 
+UPrimitiveComponent* UFXR_Press::ResolvePreviewCap() const
+{
+	// Placed instance: the normal driven-component rule applies.
+	if (UPrimitiveComponent* Cap = ResolveDrivenComponent())
+	{
+		return Cap;
+	}
+
+	// Blueprint editor: component templates carry no attach parent — the hierarchy lives in the
+	// construction script, so walk the SCS to find the node whose child is this template.
+	const UBlueprintGeneratedClass* BPClass = GetTypedOuter<UBlueprintGeneratedClass>();
+	USimpleConstructionScript* SCS = BPClass ? BPClass->SimpleConstructionScript : nullptr;
+	if (!SCS)
+	{
+		return nullptr;
+	}
+
+	const TArray<USCS_Node*>& Nodes = SCS->GetAllNodes();
+	USCS_Node* SelfNode = nullptr;
+	for (USCS_Node* Node : Nodes)
+	{
+		if (Node && Node->ComponentTemplate == this)
+		{
+			SelfNode = Node;
+			break;
+		}
+	}
+	if (!SelfNode)
+	{
+		return nullptr;
+	}
+
+	for (USCS_Node* Node : Nodes)
+	{
+		if (Node && Node->GetChildNodes().Contains(SelfNode))
+		{
+			return Cast<UPrimitiveComponent>(Node->ComponentTemplate);
+		}
+	}
+	return nullptr;
+}
+
 void UFXR_Press::ApplyEditorPreview()
 {
-	UPrimitiveComponent* Cap = ResolveDrivenComponent();
+	UPrimitiveComponent* Cap = ResolvePreviewCap();
 	if (!Cap)
 	{
+		UE_LOG(LogFXR, Warning,
+			TEXT("FXR_Press '%s': Preview Pressed found no cap mesh — the press must be attached under the mesh it moves."),
+			*GetName());
+		bPreviewPressed = false;
 		return;
 	}
+
+	Cap->Modify();
+	Modify();
 
 	// Restore first so repeated edits (e.g. scrubbing Travel while previewing) never stack offsets.
 	if (bPreviewActive)
@@ -189,14 +244,30 @@ void UFXR_Press::ApplyEditorPreview()
 		bPreviewActive = false;
 	}
 
-	if (bPreviewPressed)
+	if (!bPreviewPressed)
 	{
-		// The press is a child of the cap, so moving the cap moves it too — but translation leaves
-		// the rotation (and therefore the press normal) intact, so one offset is enough.
-		PreviewRestRelative = Cap->GetRelativeLocation();
-		Cap->AddWorldOffset(-GetComponentTransform().GetUnitAxis(EAxis::Z) * Travel);
-		bPreviewActive = true;
+		return;
 	}
+
+	PreviewRestRelative = Cap->GetRelativeLocation();
+
+	// The cap moves in its own parent's space. A placed instance has live world transforms; a
+	// Blueprint template only has relative ones, where the press sits directly under the cap.
+	FVector Delta;
+	if (GetOwner())
+	{
+		const FVector WorldDelta = -GetComponentTransform().GetUnitAxis(EAxis::Z) * Travel;
+		const USceneComponent* CapParent = Cap->GetAttachParent();
+		Delta = CapParent ? CapParent->GetComponentTransform().InverseTransformVectorNoScale(WorldDelta) : WorldDelta;
+	}
+	else
+	{
+		const FVector PressAxisInCapSpace = GetRelativeRotation().RotateVector(FVector::UpVector);
+		Delta = Cap->GetRelativeRotation().RotateVector(-PressAxisInCapSpace * Travel);
+	}
+
+	Cap->SetRelativeLocation(PreviewRestRelative + Delta);
+	bPreviewActive = true;
 }
 #endif
 

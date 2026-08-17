@@ -110,6 +110,8 @@ private:
 #if WITH_EDITOR
 	/** Move the cap to (or back from) the previewed depth. Restores first, so edits never stack. */
 	void ApplyEditorPreview();
+	/** The cap to preview: the driven component, or — for a Blueprint template — the SCS parent. */
+	UPrimitiveComponent* ResolvePreviewCap() const;
 #endif
 
 	// Cached at BeginPlay (world space; assumes the button actor itself does not move at runtime).
