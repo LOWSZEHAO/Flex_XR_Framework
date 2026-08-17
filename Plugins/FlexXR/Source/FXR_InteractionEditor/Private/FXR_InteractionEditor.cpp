@@ -6,7 +6,10 @@
 #include "FXR_LatchVisualizer.h"
 #include "FXR_PressVisualizer.h"
 #include "FXR_InteractorVisualizer.h"
+#include "FXR_PressDetails.h"
 #include "Interactor/FXR_InteractorComponent.h"
+#include "PropertyEditorModule.h"
+#include "Modules/ModuleManager.h"
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_Latch.h"
@@ -18,6 +21,15 @@
 
 void FFXR_InteractionEditorModule::StartupModule()
 {
+	{
+		// Detail customizations run independently of GUnrealEd.
+		FPropertyEditorModule& PropertyModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+		PropertyModule.RegisterCustomClassLayout(
+			UFXR_Press::StaticClass()->GetFName(),
+			FOnGetDetailCustomizationInstance::CreateStatic(&FFXR_PressDetails::MakeInstance));
+		PropertyModule.NotifyCustomizationModuleChanged();
+	}
+
 	if (!GUnrealEd)
 	{
 		return;
@@ -57,6 +69,11 @@ void FFXR_InteractionEditorModule::StartupModule()
 
 void FFXR_InteractionEditorModule::ShutdownModule()
 {
+	if (FPropertyEditorModule* PropertyModule = FModuleManager::GetModulePtr<FPropertyEditorModule>("PropertyEditor"))
+	{
+		PropertyModule->UnregisterCustomClassLayout(UFXR_Press::StaticClass()->GetFName());
+	}
+
 	if (!GUnrealEd)
 	{
 		return;
