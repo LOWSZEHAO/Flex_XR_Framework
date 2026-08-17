@@ -39,16 +39,8 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-#if WITH_EDITOR
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-
-	/**
-	 * Move the cap to (or back from) the previewed depth. Restores first, so repeated calls never
-	 * stack. Public because the editor module drives it too: on a Blueprint template the preview
-	 * also needs the Blueprint's actors rebuilt, which only editor code can request.
-	 */
-	void ApplyEditorPreview();
-#endif
+	/** Whether the viewport should ghost the cap at full travel (authoring aid, editor only). */
+	bool IsPreviewPressed() const { return bPreviewPressed; }
 
 	/** Poke-driven, never grab-claimed. */
 	virtual bool IsGrabTarget() const override { return false; }
@@ -120,18 +112,15 @@ protected:
 	float HapticAmplitude = 0.5f;
 
 	/**
-	 * Editor preview: hold the cap at full travel in the viewport so the press depth can be judged
-	 * against the mesh without playing. Untick to restore — it is not a runtime setting.
+	 * Editor preview: ghost the cap's outline at full travel in the viewport, so press depth can be
+	 * judged against the mesh without playing. Purely a drawing aid — it never moves the cap, so it
+	 * cannot be saved into the asset by accident.
 	 */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Press|Debug")
 	bool bPreviewPressed = false;
 
 private:
 	void ApplyDepth();
-#if WITH_EDITOR
-	/** The cap to preview: the driven component, or — for a Blueprint template — the SCS parent. */
-	UPrimitiveComponent* ResolvePreviewCap() const;
-#endif
 
 	// Cached at BeginPlay (world space; assumes the button actor itself does not move at runtime).
 	FTransform FaceRestWorld = FTransform::Identity;
@@ -155,12 +144,4 @@ private:
 	// that is nowhere near this button must not cancel the other hand's approach.
 	bool bPokeArmed[2] = { false, false };
 	float LastBroadcastValue = 0.f;
-
-	// Preview bookkeeping is serialized so the cap can be restored even if the level was saved
-	// while previewing (the alternative would strand the mesh at the pressed depth).
-	UPROPERTY()
-	bool bPreviewActive = false;
-
-	UPROPERTY()
-	FVector PreviewRestRelative = FVector::ZeroVector;
 };

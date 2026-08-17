@@ -2,12 +2,34 @@
 
 #include "FXR_PressVisualizer.h"
 #include "Interactable/FXR_Press.h"
+#include "Components/PrimitiveComponent.h"
 #include "SceneManagement.h"
 
 void FFXR_PressVisualizer::DrawVisualization(const UActorComponent* Component, const FSceneView* View, FPrimitiveDrawInterface* PDI)
 {
 	const UFXR_Press* Press = Cast<UFXR_Press>(Component);
-	if (!Press || !Press->IsDrawDebugEnabled())
+	if (!Press)
+	{
+		return;
+	}
+
+	// Preview ghost: outline the cap where full travel would put it. Drawn rather than moving the
+	// mesh, because a visualizer runs against real component instances (including the Blueprint
+	// editor's preview actor), whereas moving a component template does not reach the viewport.
+	if (Press->IsPreviewPressed())
+	{
+		if (const UPrimitiveComponent* Cap = Cast<UPrimitiveComponent>(Press->GetAttachParent()))
+		{
+			const FBoxSphereBounds LocalBounds = Cap->CalcBounds(FTransform::Identity);
+			const FBox LocalBox(LocalBounds.Origin - LocalBounds.BoxExtent, LocalBounds.Origin + LocalBounds.BoxExtent);
+
+			FMatrix GhostMatrix = Cap->GetComponentTransform().ToMatrixWithScale();
+			GhostMatrix.SetOrigin(GhostMatrix.GetOrigin() - Press->GetComponentTransform().GetUnitAxis(EAxis::Z) * Press->GetTravel());
+			DrawWireBox(PDI, GhostMatrix, LocalBox, FLinearColor(0.2f, 0.85f, 1.f), SDPG_World);
+		}
+	}
+
+	if (!Press->IsDrawDebugEnabled())
 	{
 		return;
 	}

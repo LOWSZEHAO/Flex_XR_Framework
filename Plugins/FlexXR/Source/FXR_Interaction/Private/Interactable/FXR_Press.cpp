@@ -7,12 +7,6 @@
 #include "GameFramework/Actor.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
-#if WITH_EDITOR
-#include "Engine/BlueprintGeneratedClass.h"
-#include "Engine/SimpleConstructionScript.h"
-#include "Engine/SCS_Node.h"
-#endif
-
 namespace
 {
 	/** Index into the per-hand arming state. */
@@ -209,119 +203,6 @@ void UFXR_Press::DrawInteractionDebug() const
 	DrawDebugCircle(World, Face - Normal * Depth, FaceRadius * 0.75f, 24, bPressed ? FColor::Green : FColor::Orange, false, -1.f, 0, 0.6f, AxisX, AxisY, false);
 }
 
-#if WITH_EDITOR
-void UFXR_Press::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	const FName Changed = PropertyChangedEvent.GetPropertyName();
-	if (Changed == GET_MEMBER_NAME_CHECKED(UFXR_Press, bPreviewPressed) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Press, Travel))
-	{
-		ApplyEditorPreview();
-	}
-}
-
-UPrimitiveComponent* UFXR_Press::ResolvePreviewCap() const
-{
-	// Placed instance: the normal driven-component rule applies.
-	if (UPrimitiveComponent* Cap = ResolveDrivenComponent())
-	{
-		return Cap;
-	}
-
-	// Blueprint editor: component templates carry no attach parent — the hierarchy lives in the
-	// construction script, so walk the SCS to find the node whose child is this template.
-	const UBlueprintGeneratedClass* BPClass = GetTypedOuter<UBlueprintGeneratedClass>();
-	USimpleConstructionScript* SCS = BPClass ? BPClass->SimpleConstructionScript : nullptr;
-	if (!SCS)
-	{
-		return nullptr;
-	}
-
-	const TArray<USCS_Node*>& Nodes = SCS->GetAllNodes();
-	USCS_Node* SelfNode = nullptr;
-	for (USCS_Node* Node : Nodes)
-	{
-		if (Node && Node->ComponentTemplate == this)
-		{
-			SelfNode = Node;
-			break;
-		}
-	}
-	if (!SelfNode)
-	{
-		return nullptr;
-	}
-
-	for (USCS_Node* Node : Nodes)
-	{
-		if (Node && Node->GetChildNodes().Contains(SelfNode))
-		{
-			return Cast<UPrimitiveComponent>(Node->ComponentTemplate);
-		}
-	}
-	return nullptr;
-}
-
-void UFXR_Press::ApplyEditorPreview()
-{
-	UPrimitiveComponent* Cap = ResolvePreviewCap();
-	if (!Cap)
-	{
-		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_Press '%s': Preview Pressed found no cap mesh — the press must be attached under the mesh it moves."),
-			*GetName());
-		bPreviewPressed = false;
-		return;
-	}
-
-	// Diagnostic: this preview has to work on both a placed instance and a Blueprint template, and
-	// the two resolve the cap by different routes — say which path ran.
-	UE_LOG(LogFXR, Log,
-		TEXT("FXR_Press '%s': preview %s | cap '%s' | context %s | travel %.2f"),
-		*GetName(),
-		bPreviewPressed ? TEXT("ON") : TEXT("OFF"),
-		*GetNameSafe(Cap),
-		GetOwner() ? TEXT("placed instance") : TEXT("blueprint template"),
-		Travel);
-
-	Cap->Modify();
-	Modify();
-
-	// Restore first so repeated edits (e.g. scrubbing Travel while previewing) never stack offsets.
-	if (bPreviewActive)
-	{
-		Cap->SetRelativeLocation(PreviewRestRelative);
-		bPreviewActive = false;
-	}
-
-	if (!bPreviewPressed)
-	{
-		return;
-	}
-
-	PreviewRestRelative = Cap->GetRelativeLocation();
-
-	// The cap moves in its own parent's space. A placed instance has live world transforms; a
-	// Blueprint template only has relative ones, where the press sits directly under the cap.
-	FVector Delta;
-	if (GetOwner())
-	{
-		const FVector WorldDelta = -GetComponentTransform().GetUnitAxis(EAxis::Z) * Travel;
-		const USceneComponent* CapParent = Cap->GetAttachParent();
-		Delta = CapParent ? CapParent->GetComponentTransform().InverseTransformVectorNoScale(WorldDelta) : WorldDelta;
-	}
-	else
-	{
-		const FVector PressAxisInCapSpace = GetRelativeRotation().RotateVector(FVector::UpVector);
-		Delta = Cap->GetRelativeRotation().RotateVector(-PressAxisInCapSpace * Travel);
-	}
-
-	Cap->SetRelativeLocation(PreviewRestRelative + Delta);
-	bPreviewActive = true;
-}
-#endif
 
 float UFXR_Press::GetPressValue() const
 {
