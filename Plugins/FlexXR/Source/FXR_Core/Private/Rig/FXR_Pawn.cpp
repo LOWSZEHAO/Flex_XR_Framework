@@ -240,6 +240,12 @@ void AFXR_Pawn::DrawDebugInteractors()
 		Interactor->GetGrabSphere(Center, Radius);
 		DrawDebugSphere(World, Center, Radius, 12, Color, false, -1.f, 0, 0.5f);
 
+		// Poke tip (green) — the fingertip probe driving FXR_Press; tune Poke Local Offset against it.
+		FVector PokeLocation;
+		float PokeRadius = 0.f;
+		Interactor->GetPokeTip(PokeLocation, PokeRadius);
+		DrawDebugSphere(World, PokeLocation, PokeRadius, 8, FColor::Green, false, -1.f, 0, 0.3f);
+
 		FVector Origin, Direction;
 		Interactor->GetFarRay(Origin, Direction);
 		DrawDebugLine(World, Origin, Origin + Direction * 200.f, Color, false, -1.f, 0, 0.3f);

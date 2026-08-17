@@ -48,6 +48,9 @@ public:
 	/** Set which hand this interactor drives (configured by the owning rig at construction). */
 	void SetHandSide(EFXR_HandSide Side) { HandSide = Side; }
 
+	/** Whether the query-shape gizmo (grab sphere + poke tip) is drawn — an authoring aid for offset tuning. */
+	bool IsDrawDebugEnabled() const { return bDrawDebug; }
+
 protected:
 	/** Transform the poses derive from — this component's transform by default; hand tracking overrides it. */
 	virtual FTransform GetTrackedTransform() const;
@@ -79,6 +82,10 @@ protected:
 	/** Radius (cm) of the poke-tip probe sphere (a fingertip pad). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor", meta = (ClampMin = "0.1"))
 	float PokeRadius = 1.f;
+
+	/** Draw this interactor's query shapes in the viewport when selected: grab sphere + poke tip (tune the offsets against the hand mesh). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor|Debug")
+	bool bDrawDebug = false;
 
 	bool bInteractorActive = true;
 };
