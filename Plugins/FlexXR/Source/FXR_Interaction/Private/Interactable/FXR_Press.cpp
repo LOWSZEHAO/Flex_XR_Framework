@@ -61,9 +61,12 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 
 	// Only fingertips over the face press it (the tip sphere may lap over the rim). Once engaged the
 	// rim is a little more forgiving, so a finger resting near the edge cannot flicker on and off.
-	const float RimRadius = FaceRadius + TipRadius + ((Depth > 0.f) ? TipRadius : 0.f);
+	const float RimRadius = FaceRadius + TipRadius + ((Depth > 0.f) ? EdgeTolerance : 0.f);
 	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(RimRadius))
 	{
+		// Sliding off the side ends this approach outright — returning must start from the front
+		// again, or a finger swinging back in below the face would re-press the button.
+		bPokeArmed = false;
 		return;
 	}
 
@@ -80,13 +83,15 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 		return;
 	}
 
-	// Behind the mechanism, or arrived from the side/back without ever being in front — ignore, so
-	// the cap never jumps to meet a finger that did not push it there.
-	if (!bPokeArmed || TipLocal.Z < -(Travel + TipRadius))
+	// Arrived from the side or behind without ever being in front — ignore, so the cap never jumps
+	// to meet a finger that did not push it there.
+	if (!bPokeArmed)
 	{
 		return;
 	}
 
+	// Pushing past the bottom of travel holds the button fully pressed; it must never spring back
+	// out from under a finger that is still driving it deeper.
 	const float ClampedDepth = FMath::Min(PokeDepth, Travel);
 	if (ClampedDepth >= PendingPokeDepth)
 	{

@@ -96,6 +96,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.1"))
 	float FaceRadius = 2.5f;
 
+	/**
+	 * Extra radial margin (cm) tolerated before an already-pressed button lets go at the rim.
+	 * Stops a fingertip resting on the edge from flickering; 0 releases exactly at the face radius.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.0"))
+	float EdgeTolerance = 1.f;
+
 	/** Fraction of the travel at which OnPressed fires (the click point). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.05", ClampMax = "1.0"))
 	float ActivationFraction = 0.7f;
