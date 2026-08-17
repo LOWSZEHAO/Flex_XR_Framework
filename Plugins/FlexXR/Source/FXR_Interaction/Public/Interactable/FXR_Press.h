@@ -41,6 +41,13 @@ public:
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	/**
+	 * Move the cap to (or back from) the previewed depth. Restores first, so repeated calls never
+	 * stack. Public because the editor module drives it too: on a Blueprint template the preview
+	 * also needs the Blueprint's actors rebuilt, which only editor code can request.
+	 */
+	void ApplyEditorPreview();
 #endif
 
 	/** Poke-driven, never grab-claimed. */
@@ -115,8 +122,6 @@ protected:
 private:
 	void ApplyDepth();
 #if WITH_EDITOR
-	/** Move the cap to (or back from) the previewed depth. Restores first, so edits never stack. */
-	void ApplyEditorPreview();
 	/** The cap to preview: the driven component, or — for a Blueprint template — the SCS parent. */
 	UPrimitiveComponent* ResolvePreviewCap() const;
 #endif
