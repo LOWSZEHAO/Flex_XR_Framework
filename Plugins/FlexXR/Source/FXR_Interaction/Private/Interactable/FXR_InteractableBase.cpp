@@ -34,26 +34,34 @@ void UFXR_InteractableBase::TickComponent(float DeltaTime, ELevelTick TickType, 
 
 	if (bDrawDebugRadius)
 	{
-		if (const UWorld* World = GetWorld())
+		DrawInteractionDebug();
+	}
+}
+
+void UFXR_InteractableBase::DrawInteractionDebug() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
+	if (HasOwnedGripPoints())
+	{
+		// Grip points are the only grab surface (ADR-007) — show state on them, not a
+		// misleading mesh radius.
+		for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
 		{
-			const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
-			if (HasOwnedGripPoints())
+			if (const UFXR_GripPoint* Point = WeakPoint.Get())
 			{
-				// Grip points are the only grab surface (ADR-007) — show state on them, not a
-				// misleading mesh radius.
-				for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
-				{
-					if (const UFXR_GripPoint* Point = WeakPoint.Get())
-					{
-						DrawDebugSphere(World, Point->GetComponentLocation(), Point->GetActivationRadius(), 12, Color, false, -1.f, 0, 0.5f);
-					}
-				}
-			}
-			else
-			{
-				DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
+				DrawDebugSphere(World, Point->GetComponentLocation(), Point->GetActivationRadius(), 12, Color, false, -1.f, 0, 0.5f);
 			}
 		}
+	}
+	else
+	{
+		DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
 	}
 }
 

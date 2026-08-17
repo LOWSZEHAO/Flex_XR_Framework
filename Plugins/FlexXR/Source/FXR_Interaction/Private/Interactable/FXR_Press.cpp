@@ -131,6 +131,34 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 	}
 }
 
+void UFXR_Press::DrawInteractionDebug() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Cached at BeginPlay, so this is the authored rest face even while the cap is pushed in.
+	const FVector Face = FaceRestWorld.GetLocation();
+	const FVector Normal = FaceRestWorld.GetUnitAxis(EAxis::Z);
+	const FVector AxisX = FaceRestWorld.GetUnitAxis(EAxis::X);
+	const FVector AxisY = FaceRestWorld.GetUnitAxis(EAxis::Y);
+
+	// Rest face (white) = the Face Radius the fingertip must be inside; bottom of travel (grey).
+	DrawDebugCircle(World, Face, FaceRadius, 24, FColor::White, false, -1.f, 0, 0.4f, AxisX, AxisY, false);
+	DrawDebugCircle(World, Face - Normal * Travel, FaceRadius, 24, FColor(90, 90, 90), false, -1.f, 0, 0.3f, AxisX, AxisY, false);
+
+	// Click threshold (yellow) — where OnPressed fires.
+	DrawDebugCircle(World, Face - Normal * (Travel * ActivationFraction), FaceRadius * 0.9f, 24, FColor::Yellow, false, -1.f, 0, 0.3f, AxisX, AxisY, false);
+
+	// Live cap depth: green once latched past the click point, orange on the way there.
+	DrawDebugCircle(World, Face - Normal * Depth, FaceRadius * 0.75f, 24, bPressed ? FColor::Green : FColor::Orange, false, -1.f, 0, 0.6f, AxisX, AxisY, false);
+
+	// Approach direction — fingers come from the +Z side.
+	DrawDebugDirectionalArrow(World, Face + Normal * 5.f, Face, 6.f, FColor::Cyan, false, -1.f, 0, 0.4f);
+}
+
 float UFXR_Press::GetPressValue() const
 {
 	return (Travel > KINDA_SMALL_NUMBER) ? FMath::Clamp(Depth / Travel, 0.f, 1.f) : 0.f;

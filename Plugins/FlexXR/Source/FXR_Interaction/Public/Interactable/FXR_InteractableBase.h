@@ -113,6 +113,9 @@ protected:
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);
 
+	/** Runtime debug draw while Draw Debug Radius is set — override to draw a type-specific shape. */
+	virtual void DrawInteractionDebug() const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	bool bInteractionEnabled = true;
 

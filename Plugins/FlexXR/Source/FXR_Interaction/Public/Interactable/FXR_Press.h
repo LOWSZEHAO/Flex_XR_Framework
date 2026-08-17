@@ -64,8 +64,12 @@ public:
 	//~ Gizmo accessors.
 	float GetTravel() const { return Travel; }
 	float GetFaceRadius() const { return FaceRadius; }
+	float GetActivationFraction() const { return ActivationFraction; }
 
 protected:
+	/** Face disc + live depth + click threshold — a press has no grab radius, so the base sphere would mislead. */
+	virtual void DrawInteractionDebug() const override;
+
 	/** Full press travel (cm) along the component's -Z. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.1"))
 	float Travel = 1.f;
