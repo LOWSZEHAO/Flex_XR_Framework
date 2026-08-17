@@ -20,9 +20,17 @@ void FFXR_PressVisualizer::DrawVisualization(const UActorComponent* Component, c
 	const float Radius = Press->GetFaceRadius();
 	const float Travel = Press->GetTravel();
 
-	// Face disc at rest (white) and the fully-pressed depth (green); normal arrow shows approach.
+	// Basic: the pressable disc (Face Radius) + the approach normal.
 	DrawCircle(PDI, Face, AxisX, AxisY, FLinearColor::White, Radius, 24, SDPG_World, 1.5f);
-	DrawCircle(PDI, Face - Normal * Travel, AxisX, AxisY, FLinearColor(0.15f, 1.f, 0.15f), Radius, 24, SDPG_World, 1.f);
 	PDI->DrawLine(Face, Face + Normal * 4.f, FLinearColor(0.f, 1.f, 1.f), SDPG_World, 1.5f);
+
+	if (!Press->IsFullDebug())
+	{
+		return;
+	}
+
+	// Full: travel depth and the click threshold where OnPressed fires.
+	DrawCircle(PDI, Face - Normal * Travel, AxisX, AxisY, FLinearColor(0.15f, 1.f, 0.15f), Radius, 24, SDPG_World, 1.f);
 	PDI->DrawLine(Face, Face - Normal * Travel, FLinearColor(0.15f, 1.f, 0.15f), SDPG_World, 1.5f);
+	DrawCircle(PDI, Face - Normal * (Travel * Press->GetActivationFraction()), AxisX, AxisY, FLinearColor(1.f, 0.9f, 0.f), Radius * 0.9f, 24, SDPG_World, 1.f);
 }

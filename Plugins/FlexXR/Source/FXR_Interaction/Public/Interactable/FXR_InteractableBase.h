@@ -70,8 +70,11 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
-	/** Whether the activation-radius debug draw / viewport gizmo is enabled. */
-	bool IsDrawDebugEnabled() const { return bDrawDebugRadius; }
+	/** Whether any debug draw / viewport gizmo is enabled. */
+	bool IsDrawDebugEnabled() const { return DebugDraw != EFXR_DebugDraw::Off; }
+
+	/** Whether thresholds, limits and live state are drawn on top of the basic shape. */
+	bool IsFullDebug() const { return DebugDraw == EFXR_DebugDraw::Full; }
 
 	/** World location used for narrow-phase scoring (the driven component, else this component). */
 	FVector GetInteractionLocation() const;
@@ -132,9 +135,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Training", meta = (EditCondition = "bExposeToTraining"))
 	FName InteractionId;
 
-	/** Draw the activation radius at runtime (green = held, orange = available, red = disabled). */
+	/** Authoring debug: Basic draws the defining shape, Full adds thresholds/limits and live state. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction|Debug")
-	bool bDrawDebugRadius = false;
+	EFXR_DebugDraw DebugDraw = EFXR_DebugDraw::Off;
 
 	bool bHeld = false;
 

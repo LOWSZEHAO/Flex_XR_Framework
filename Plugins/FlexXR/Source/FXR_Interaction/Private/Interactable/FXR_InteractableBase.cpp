@@ -11,7 +11,7 @@
 
 UFXR_InteractableBase::UFXR_InteractableBase()
 {
-	// Tick exists only for the optional debug draw; disabled unless bDrawDebugRadius is set.
+	// Tick exists only for the optional debug draw; disabled unless Debug Draw is set.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
@@ -25,14 +25,14 @@ void UFXR_InteractableBase::BeginPlay()
 		Subsystem->RegisterInteractable(this);
 	}
 
-	SetComponentTickEnabled(bDrawDebugRadius);
+	SetComponentTickEnabled(IsDrawDebugEnabled());
 }
 
 void UFXR_InteractableBase::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bDrawDebugRadius)
+	if (IsDrawDebugEnabled())
 	{
 		DrawInteractionDebug();
 	}

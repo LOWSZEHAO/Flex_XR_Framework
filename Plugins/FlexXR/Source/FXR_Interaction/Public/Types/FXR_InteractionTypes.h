@@ -25,6 +25,17 @@ enum class EFXR_AlreadyHeldPolicy : uint8
 	ForceRelease    UMETA(DisplayName = "Force Release")
 };
 
+/** How much authoring debug an interactable draws (viewport gizmo and runtime). */
+UENUM(BlueprintType)
+enum class EFXR_DebugDraw : uint8
+{
+	Off   UMETA(DisplayName = "Off"),
+	// The defining shape only — grab radius, latch arc, press face.
+	Basic UMETA(DisplayName = "Basic (shape only)"),
+	// Adds thresholds, limits, direction markers and live state.
+	Full  UMETA(DisplayName = "Full (+ thresholds and live state)")
+};
+
 /** Which hand(s) a grip point accepts. */
 UENUM(BlueprintType)
 enum class EFXR_GripHandedness : uint8
