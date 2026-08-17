@@ -5,6 +5,8 @@
 #include "FXR_InteractableVisualizer.h"
 #include "FXR_LatchVisualizer.h"
 #include "FXR_PressVisualizer.h"
+#include "FXR_InteractorVisualizer.h"
+#include "Interactor/FXR_InteractorComponent.h"
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_Latch.h"
@@ -43,6 +45,14 @@ void FFXR_InteractionEditorModule::StartupModule()
 		GUnrealEd->RegisterComponentVisualizer(UFXR_Press::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
+	{
+		// Interactor query shapes (grab sphere + poke tip) so their offsets can be tuned visually.
+		// Registered on the base: visualizer lookup walks up the class hierarchy, so the controller,
+		// tracked-hand and desktop-sim interactors all inherit it.
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_InteractorVisualizer>();
+		GUnrealEd->RegisterComponentVisualizer(UFXR_InteractorComponent::StaticClass()->GetFName(), Visualizer);
+		Visualizer->OnRegister();
+	}
 }
 
 void FFXR_InteractionEditorModule::ShutdownModule()
@@ -56,6 +66,7 @@ void FFXR_InteractionEditorModule::ShutdownModule()
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Grab::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Press::StaticClass()->GetFName());
+	GUnrealEd->UnregisterComponentVisualizer(UFXR_InteractorComponent::StaticClass()->GetFName());
 }
 
 #undef LOCTEXT_NAMESPACE

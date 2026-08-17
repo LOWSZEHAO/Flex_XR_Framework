@@ -20,6 +20,7 @@ public class FXR_InteractionEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd",
+			"FXR_Core",       // interactor query-shape gizmo (grab sphere + poke tip)
 			"FXR_Interaction"
 		});
 	}
