@@ -36,6 +36,10 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 	/** Poke-driven, never grab-claimed. */
 	virtual bool IsGrabTarget() const override { return false; }
 
@@ -94,8 +98,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float HapticAmplitude = 0.5f;
 
+	/**
+	 * Editor preview: hold the cap at full travel in the viewport so the press depth can be judged
+	 * against the mesh without playing. Untick to restore — it is not a runtime setting.
+	 */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|Press|Debug")
+	bool bPreviewPressed = false;
+
 private:
 	void ApplyDepth();
+#if WITH_EDITOR
+	/** Move the cap to (or back from) the previewed depth. Restores first, so edits never stack. */
+	void ApplyEditorPreview();
+#endif
 
 	// Cached at BeginPlay (world space; assumes the button actor itself does not move at runtime).
 	FTransform FaceRestWorld = FTransform::Identity;
@@ -107,4 +122,12 @@ private:
 	bool bPokedThisFrame = false;
 	bool bPressed = false;
 	IFXR_Interactor* PressingInteractor = nullptr; // haptics target; valid only while poked
+
+	// Preview bookkeeping is serialized so the cap can be restored even if the level was saved
+	// while previewing (the alternative would strand the mesh at the pressed depth).
+	UPROPERTY()
+	bool bPreviewActive = false;
+
+	UPROPERTY()
+	FVector PreviewRestRelative = FVector::ZeroVector;
 };

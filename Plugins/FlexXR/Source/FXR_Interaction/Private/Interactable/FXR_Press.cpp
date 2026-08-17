@@ -145,19 +145,60 @@ void UFXR_Press::DrawInteractionDebug() const
 	const FVector AxisX = FaceRestWorld.GetUnitAxis(EAxis::X);
 	const FVector AxisY = FaceRestWorld.GetUnitAxis(EAxis::Y);
 
-	// Rest face (white) = the Face Radius the fingertip must be inside; bottom of travel (grey).
+	// Basic: the pressable disc (the Face Radius a fingertip must be inside) + approach direction.
 	DrawDebugCircle(World, Face, FaceRadius, 24, FColor::White, false, -1.f, 0, 0.4f, AxisX, AxisY, false);
-	DrawDebugCircle(World, Face - Normal * Travel, FaceRadius, 24, FColor(90, 90, 90), false, -1.f, 0, 0.3f, AxisX, AxisY, false);
-
-	// Click threshold (yellow) — where OnPressed fires.
-	DrawDebugCircle(World, Face - Normal * (Travel * ActivationFraction), FaceRadius * 0.9f, 24, FColor::Yellow, false, -1.f, 0, 0.3f, AxisX, AxisY, false);
-
-	// Live cap depth: green once latched past the click point, orange on the way there.
-	DrawDebugCircle(World, Face - Normal * Depth, FaceRadius * 0.75f, 24, bPressed ? FColor::Green : FColor::Orange, false, -1.f, 0, 0.6f, AxisX, AxisY, false);
-
-	// Approach direction — fingers come from the +Z side.
 	DrawDebugDirectionalArrow(World, Face + Normal * 5.f, Face, 6.f, FColor::Cyan, false, -1.f, 0, 0.4f);
+
+	if (!IsFullDebug())
+	{
+		return;
+	}
+
+	// Full: bottom of travel (grey), click threshold (yellow), and the live cap depth
+	// (green once latched past the click point, orange on the way there).
+	DrawDebugCircle(World, Face - Normal * Travel, FaceRadius, 24, FColor(90, 90, 90), false, -1.f, 0, 0.3f, AxisX, AxisY, false);
+	DrawDebugCircle(World, Face - Normal * (Travel * ActivationFraction), FaceRadius * 0.9f, 24, FColor::Yellow, false, -1.f, 0, 0.3f, AxisX, AxisY, false);
+	DrawDebugCircle(World, Face - Normal * Depth, FaceRadius * 0.75f, 24, bPressed ? FColor::Green : FColor::Orange, false, -1.f, 0, 0.6f, AxisX, AxisY, false);
 }
+
+#if WITH_EDITOR
+void UFXR_Press::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName Changed = PropertyChangedEvent.GetPropertyName();
+	if (Changed == GET_MEMBER_NAME_CHECKED(UFXR_Press, bPreviewPressed) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Press, Travel))
+	{
+		ApplyEditorPreview();
+	}
+}
+
+void UFXR_Press::ApplyEditorPreview()
+{
+	UPrimitiveComponent* Cap = ResolveDrivenComponent();
+	if (!Cap)
+	{
+		return;
+	}
+
+	// Restore first so repeated edits (e.g. scrubbing Travel while previewing) never stack offsets.
+	if (bPreviewActive)
+	{
+		Cap->SetRelativeLocation(PreviewRestRelative);
+		bPreviewActive = false;
+	}
+
+	if (bPreviewPressed)
+	{
+		// The press is a child of the cap, so moving the cap moves it too — but translation leaves
+		// the rotation (and therefore the press normal) intact, so one offset is enough.
+		PreviewRestRelative = Cap->GetRelativeLocation();
+		Cap->AddWorldOffset(-GetComponentTransform().GetUnitAxis(EAxis::Z) * Travel);
+		bPreviewActive = true;
+	}
+}
+#endif
 
 float UFXR_Press::GetPressValue() const
 {
