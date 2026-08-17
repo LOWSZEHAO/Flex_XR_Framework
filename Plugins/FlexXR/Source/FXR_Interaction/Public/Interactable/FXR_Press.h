@@ -151,7 +151,9 @@ private:
 
 	// A fingertip must be seen in front of the face before it may press: without this, a finger
 	// entering from the side or behind reads as an instant deep press and the cap snaps to it.
-	bool bPokeArmed = false;
+	// Tracked per hand — the driver offers every fingertip to every press each frame, so the hand
+	// that is nowhere near this button must not cancel the other hand's approach.
+	bool bPokeArmed[2] = { false, false };
 	float LastBroadcastValue = 0.f;
 
 	// Preview bookkeeping is serialized so the cap can be restored even if the level was saved

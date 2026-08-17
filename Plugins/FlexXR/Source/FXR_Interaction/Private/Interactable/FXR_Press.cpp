@@ -13,6 +13,15 @@
 #include "Engine/SCS_Node.h"
 #endif
 
+namespace
+{
+	/** Index into the per-hand arming state. */
+	int32 FXR_HandIndex(const IFXR_Interactor* Interactor)
+	{
+		return (Interactor && Interactor->GetHandSide() == EFXR_HandSide::Left) ? 0 : 1;
+	}
+}
+
 UFXR_Press::UFXR_Press()
 {
 	// A press ticks while poked (cap follow) and while returning to rest; idle it sleeps.
@@ -56,6 +65,8 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 		return;
 	}
 
+	const int32 HandIndex = FXR_HandIndex(Interactor);
+
 	// Work in the rest-face frame: +Z out of the button, the face plane at Z = 0.
 	const FVector TipLocal = FaceRestWorld.InverseTransformPositionNoScale(TipLocation);
 
@@ -64,9 +75,9 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 	const float RimRadius = FaceRadius + TipRadius + ((Depth > 0.f) ? EdgeTolerance : 0.f);
 	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(RimRadius))
 	{
-		// Sliding off the side ends this approach outright — returning must start from the front
-		// again, or a finger swinging back in below the face would re-press the button.
-		bPokeArmed = false;
+		// Sliding off the side ends this hand's approach outright — returning must start from the
+		// front again, or a finger swinging back in below the face would re-press the button.
+		bPokeArmed[HandIndex] = false;
 		return;
 	}
 
@@ -79,13 +90,13 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 	// In front of the face: nothing to press yet, but this is where a legitimate approach starts.
 	if (PokeDepth <= 0.f)
 	{
-		bPokeArmed = true;
+		bPokeArmed[HandIndex] = true;
 		return;
 	}
 
 	// Arrived from the side or behind without ever being in front — ignore, so the cap never jumps
 	// to meet a finger that did not push it there.
-	if (!bPokeArmed)
+	if (!bPokeArmed[HandIndex])
 	{
 		return;
 	}
@@ -132,10 +143,11 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 	}
 	PendingPokeDepth = 0.f;
 
-	// Leaving the face disarms, so the next press must again approach from the front.
+	// No fingertip anywhere near the face — clear both hands so the next press approaches afresh.
 	if (!bOverFace)
 	{
-		bPokeArmed = false;
+		bPokeArmed[0] = false;
+		bPokeArmed[1] = false;
 	}
 
 	ApplyDepth();
