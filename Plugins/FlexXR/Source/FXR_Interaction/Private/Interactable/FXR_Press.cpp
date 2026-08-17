@@ -41,6 +41,17 @@ void UFXR_Press::OnRegister()
 #endif
 }
 
+void UFXR_Press::OnUnregister()
+{
+#if WITH_EDITOR
+	// A preview instance can be torn down mid-cycle (a Blueprint recompile rebuilds the preview
+	// actor). Put the cap back first, so it is never left sitting at a pressed depth.
+	EndEditorPreview();
+#endif
+
+	Super::OnUnregister();
+}
+
 void UFXR_Press::BeginPlay()
 {
 	Super::BeginPlay();
@@ -232,17 +243,24 @@ void UFXR_Press::DrawInteractionDebug() const
 
 
 #if WITH_EDITOR
+void UFXR_Press::EndEditorPreview()
+{
+	if (!bPreviewCaptured)
+	{
+		return;
+	}
+
+	// Always leave the cap where it was found, so an authoring aid can never be saved in.
+	Depth = 0.f;
+	ApplyDepth();
+	bPreviewCaptured = false;
+}
+
 void UFXR_Press::TickEditorPreview(float DeltaTime)
 {
 	if (!bPreviewPressed)
 	{
-		// Always leave the cap where it was found, so an authoring aid can never be saved in.
-		if (bPreviewCaptured)
-		{
-			Depth = 0.f;
-			ApplyDepth();
-			bPreviewCaptured = false;
-		}
+		EndEditorPreview();
 		return;
 	}
 
@@ -253,6 +271,8 @@ void UFXR_Press::TickEditorPreview(float DeltaTime)
 		{
 			return;
 		}
+		// Rest is captured while the cap is known to be at rest: the previous run always restores
+		// it, so a stopped-and-restarted preview cannot creep the mesh downward.
 		FaceRestWorld = GetComponentTransform();
 		DrivenRestWorld = Driven->GetComponentTransform();
 		PreviewTime = 0.f;

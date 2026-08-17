@@ -37,6 +37,7 @@ public:
 	UFXR_Press();
 
 	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -119,6 +120,8 @@ private:
 #if WITH_EDITOR
 	/** Animate the cap through its travel in an editor viewport (runs on real instances, not templates). */
 	void TickEditorPreview(float DeltaTime);
+	/** Put the cap back at its captured rest and stop previewing. Safe to call when not previewing. */
+	void EndEditorPreview();
 #endif
 
 	// Cached at BeginPlay (world space; assumes the button actor itself does not move at runtime).
