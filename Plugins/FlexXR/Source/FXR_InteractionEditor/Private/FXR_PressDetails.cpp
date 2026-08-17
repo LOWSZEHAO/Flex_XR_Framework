@@ -8,6 +8,7 @@
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Types/FXR_LogChannels.h"
 
 TSharedRef<IDetailCustomization> FFXR_PressDetails::MakeInstance()
 {
@@ -49,13 +50,19 @@ void FFXR_PressDetails::RefreshPreview()
 		Press->ApplyEditorPreview();
 
 		// A placed instance already shows the move. A Blueprint template does not: the preview
-		// actor is built from templates, so ask for the Blueprint's actors to be rebuilt.
-		if (const UBlueprintGeneratedClass* BPClass = Press->GetTypedOuter<UBlueprintGeneratedClass>())
+		// actor is built from templates, so the Blueprint has to be rebuilt. A plain actor rebuild
+		// does not always refresh the editor's preview actor, so mark it structurally modified —
+		// that recompiles and reconstructs, which does.
+		const UBlueprintGeneratedClass* BPClass = Press->GetTypedOuter<UBlueprintGeneratedClass>();
+		UBlueprint* Blueprint = BPClass ? Cast<UBlueprint>(BPClass->ClassGeneratedBy) : nullptr;
+
+		UE_LOG(LogFXR, Log, TEXT("FXR_Press details: preview refresh on '%s' | blueprint '%s'"),
+			*Press->GetName(), *GetNameSafe(Blueprint));
+
+		if (Blueprint)
 		{
-			if (UBlueprint* Blueprint = Cast<UBlueprint>(BPClass->ClassGeneratedBy))
-			{
-				FBlueprintEditorUtils::PostEditChangeBlueprintActors(Blueprint, /*bComponentEditChange*/ true);
-			}
+			FBlueprintEditorUtils::PostEditChangeBlueprintActors(Blueprint, /*bComponentEditChange*/ true);
+			FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		}
 	}
 }

@@ -276,6 +276,16 @@ void UFXR_Press::ApplyEditorPreview()
 		return;
 	}
 
+	// Diagnostic: this preview has to work on both a placed instance and a Blueprint template, and
+	// the two resolve the cap by different routes — say which path ran.
+	UE_LOG(LogFXR, Log,
+		TEXT("FXR_Press '%s': preview %s | cap '%s' | context %s | travel %.2f"),
+		*GetName(),
+		bPreviewPressed ? TEXT("ON") : TEXT("OFF"),
+		*GetNameSafe(Cap),
+		GetOwner() ? TEXT("placed instance") : TEXT("blueprint template"),
+		Travel);
+
 	Cap->Modify();
 	Modify();
 
