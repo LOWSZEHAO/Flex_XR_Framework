@@ -59,32 +59,41 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 	// Work in the rest-face frame: +Z out of the button, the face plane at Z = 0.
 	const FVector TipLocal = FaceRestWorld.InverseTransformPositionNoScale(TipLocation);
 
-	// Only fingertips over the face press it (the tip sphere may lap over the rim).
-	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(FaceRadius + TipRadius))
+	// Only fingertips over the face press it (the tip sphere may lap over the rim). Once engaged the
+	// rim is a little more forgiving, so a finger resting near the edge cannot flicker on and off.
+	const float RimRadius = FaceRadius + TipRadius + ((Depth > 0.f) ? TipRadius : 0.f);
+	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(RimRadius))
 	{
 		return;
 	}
 
-	// Reject approaches from behind the mechanism.
-	if (TipLocal.Z < -(Travel + TipRadius))
-	{
-		return;
-	}
+	LastOverFaceFrame = GFrameCounter;
+	SetComponentTickEnabled(true);
 
 	// Depth the tip sphere's leading surface has pushed past the rest face.
-	const float PokeDepth = FMath::Clamp(TipRadius - static_cast<float>(TipLocal.Z), 0.f, Travel);
+	const float PokeDepth = TipRadius - static_cast<float>(TipLocal.Z);
+
+	// In front of the face: nothing to press yet, but this is where a legitimate approach starts.
 	if (PokeDepth <= 0.f)
+	{
+		bPokeArmed = true;
+		return;
+	}
+
+	// Behind the mechanism, or arrived from the side/back without ever being in front — ignore, so
+	// the cap never jumps to meet a finger that did not push it there.
+	if (!bPokeArmed || TipLocal.Z < -(Travel + TipRadius))
 	{
 		return;
 	}
 
-	if (PokeDepth >= PendingPokeDepth)
+	const float ClampedDepth = FMath::Min(PokeDepth, Travel);
+	if (ClampedDepth >= PendingPokeDepth)
 	{
-		PendingPokeDepth = PokeDepth;
+		PendingPokeDepth = ClampedDepth;
 		PressingInteractor = Interactor;
 	}
-	bPokedThisFrame = true;
-	SetComponentTickEnabled(true);
+	LastPokeFrame = GFrameCounter;
 }
 
 void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -93,32 +102,48 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Press_Tick);
 
-	if (bPokedThisFrame)
+	// A one-frame tolerance: the driver feeding pokes may tick after this component.
+	const bool bPoked = (GFrameCounter - LastPokeFrame) <= 1;
+	const bool bOverFace = (GFrameCounter - LastOverFaceFrame) <= 1;
+
+	if (bPoked)
 	{
 		// The cap follows the fingertip directly — a button under a finger must never lag it.
 		Depth = PendingPokeDepth;
 	}
 	else
 	{
-		// No finger: spring back to rest, then sleep (unless the debug draw keeps the tick alive).
+		// No finger on the face: spring back to rest, then sleep (unless debug keeps ticking).
 		PressingInteractor = nullptr;
 		Depth = FMath::FInterpTo(Depth, 0.f, DeltaTime, ReturnSpeed);
 		if (Depth < KINDA_SMALL_NUMBER)
 		{
 			Depth = 0.f;
-			if (!IsDrawDebugEnabled())
+			if (!IsDrawDebugEnabled() && !bOverFace)
 			{
 				SetComponentTickEnabled(false);
 			}
 		}
 	}
 	PendingPokeDepth = 0.f;
-	bPokedThisFrame = false;
+
+	// Leaving the face disarms, so the next press must again approach from the front.
+	if (!bOverFace)
+	{
+		bPokeArmed = false;
+	}
 
 	ApplyDepth();
 
-	// Click edges with hysteresis; haptic tick on the press edge (design 5.2 / motion spec seam).
+	// Analog depth for partial-press visuals / audio, then the click edges.
 	const float Value = GetPressValue();
+	if (!FMath::IsNearlyEqual(Value, LastBroadcastValue, 1e-3f))
+	{
+		LastBroadcastValue = Value;
+		OnPressValueChanged.Broadcast(Value);
+	}
+
+	// Click edges with hysteresis; haptic tick on the press edge (design 5.2 / motion spec seam).
 	if (!bPressed && Value >= ActivationFraction)
 	{
 		bPressed = true;

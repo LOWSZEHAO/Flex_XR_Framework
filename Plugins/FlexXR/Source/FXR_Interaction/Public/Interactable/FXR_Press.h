@@ -12,6 +12,9 @@ class IFXR_Interactor;
 /** Broadcast on the activation edges of an FXR_Press (crossing / leaving the click point). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_PressDelegate);
 
+/** Broadcast as the press's normalized depth (0..1) changes. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PressValueChanged, float, PressValue);
+
 /**
  * UFXR_Press — poke interactions: buttons, keypads, touchscreens (§4).
  *
@@ -64,6 +67,10 @@ public:
 	/** Depth fell back below the release point (or the finger left). */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Press")
 	FFXR_PressDelegate OnReleased;
+
+	/** Fires as the normalized depth changes — bind for partial-press visuals, audio or analog input. */
+	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Press")
+	FFXR_PressValueChanged OnPressValueChanged;
 
 	//~ Gizmo accessors.
 	float GetTravel() const { return Travel; }
@@ -121,9 +128,19 @@ private:
 
 	float Depth = 0.f;            // cm, 0 = rest .. Travel = fully pressed
 	float PendingPokeDepth = 0.f; // deepest tip offered since the last tick
-	bool bPokedThisFrame = false;
 	bool bPressed = false;
 	IFXR_Interactor* PressingInteractor = nullptr; // haptics target; valid only while poked
+
+	// Frame stamps rather than per-frame flags: the driver that feeds pokes lives on the pawn, so
+	// UE gives no ordering guarantee between it and this component. Tolerating a one-frame gap
+	// stops the cap flickering when the press happens to tick first.
+	uint64 LastPokeFrame = 0;
+	uint64 LastOverFaceFrame = 0;
+
+	// A fingertip must be seen in front of the face before it may press: without this, a finger
+	// entering from the side or behind reads as an instant deep press and the cap snaps to it.
+	bool bPokeArmed = false;
+	float LastBroadcastValue = 0.f;
 
 	// Preview bookkeeping is serialized so the cap can be restored even if the level was saved
 	// while previewing (the alternative would strand the mesh at the pressed depth).
