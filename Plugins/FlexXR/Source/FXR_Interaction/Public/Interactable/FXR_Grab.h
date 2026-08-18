@@ -91,15 +91,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float UseReleaseThreshold = 0.35f;
 
+	/** How fast the object swings onto aim when the second hand joins (higher = snappier; ~10 is roughly 100 ms). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (ClampMin = "0.1", EditCondition = "bAllowTwoHanded"))
+	float TwoHandAimSpeed = 10.f;
+
 private:
 	/**
-	 * Two-hand pose: the one-hand hold rotated about the primary grip so the authored secondary grip
-	 * point points at the second hand. Aiming by the authored handle (rather than the object's X
-	 * axis) is what makes the rotation read as "held by both grips" instead of arbitrary.
+	 * Two-hand pose, solved symmetrically: the object's grip-to-grip axis is aligned to the line
+	 * between the hands, their midpoints are matched, and roll comes from both wrists. Neither hand
+	 * is an anchor, so moving either one does the natural thing — a broom sweeps whichever hand
+	 * drives it — and no role ever has to switch mid-hold.
 	 */
 	FTransform MakeTwoHandTransform() const;
-	/** Re-resolve the secondary attach point on the object — a rail slides, a point grip does not. */
-	void UpdateSecondaryGripLocal();
+	/** Re-resolve where each hand holds the object — a rail slides under the hand, a point grip does not. */
+	void UpdateGripLocals();
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
 	void ReanchorToPrimary();
 
@@ -117,10 +122,22 @@ private:
 	IFXR_Interactor* PrimaryInteractor = nullptr;
 	IFXR_Interactor* SecondaryInteractor = nullptr;
 	TWeakObjectPtr<UFXR_HandPose> SecondaryHandPose;
+	TWeakObjectPtr<UFXR_GripPoint> PrimaryGripPoint;
 	TWeakObjectPtr<UFXR_GripPoint> SecondaryGripPoint;
-	/** Secondary grip point in the driven object's local space, captured when the second hand joins. */
+
+	// Where each hand holds the object, in its local space. Re-resolved every frame so a rail slides
+	// under the hand; that freedom is what lets both hands sit exactly on a broom shaft whatever
+	// their spacing, instead of one of them hanging in the air.
+	FVector PrimaryGripLocal = FVector::ZeroVector;
 	FVector SecondaryGripLocal = FVector::ZeroVector;
 	bool bHasSecondaryGrip = false;
+	/** Object-space frame of the grip-to-grip axis, captured on join — the two-hand rotation reference. */
+	FQuat TwoHandLocalFrame = FQuat::Identity;
+
+	// The second hand rarely lands exactly on its grip, so the aim correction is eased in over a
+	// moment rather than snapping the object the instant the hand closes.
+	FTransform TwoHandJoinOffset = FTransform::Identity;
+	float TwoHandBlend = 1.f;
 
 	FVector LastLocation = FVector::ZeroVector;
 	FQuat LastRotation = FQuat::Identity;
