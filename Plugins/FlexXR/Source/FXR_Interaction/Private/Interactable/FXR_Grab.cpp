@@ -119,6 +119,12 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 			HeldOffset.Blend(SnapProceduralOffset, SnapTargetOffset, SnapAlpha);
 		}
 
+		// Once the object has arrived, the hand rides its grip point from then on.
+		if (SnapAlpha >= 1.f && PrimaryGripPoint.IsValid())
+		{
+			bPrimaryAttached = true;
+		}
+
 		Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
@@ -184,6 +190,7 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 	ActiveHandPose = nullptr;
 	PrimaryInteractor = nullptr;
 	PrimaryGripPoint = nullptr;
+	bPrimaryAttached = false;
 	SecondaryInteractor = nullptr;
 	SecondaryHandPose = nullptr;
 	SecondaryGripPoint = nullptr;
@@ -263,10 +270,13 @@ void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
 			OnUseEnded.Broadcast();
 		}
 
-		// The survivor inherits the grip point too, so it keeps its pose and its rail.
+		// The survivor inherits the grip point too, so it keeps its pose and its rail. It was already
+		// riding that grip, so keep it attached: the object is about to travel home to the hand, and
+		// the hand should travel with it rather than blink back to the controller.
 		PrimaryInteractor = SecondaryInteractor;
 		ActiveHandPose = SecondaryHandPose;
 		PrimaryGripPoint = SecondaryGripPoint;
+		bPrimaryAttached = SecondaryGripPoint.IsValid();
 		SecondaryInteractor = nullptr;
 		SecondaryHandPose = nullptr;
 		SecondaryGripPoint = nullptr;
@@ -385,7 +395,7 @@ bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransf
 		Interactor = SecondaryInteractor;
 		GripPoint = SecondaryGripPoint.Get();
 	}
-	else if (PrimaryInteractor && PrimaryInteractor->GetHandSide() == Side && SnapAlpha >= 1.f)
+	else if (PrimaryInteractor && PrimaryInteractor->GetHandSide() == Side && bPrimaryAttached)
 	{
 		// Only once any snap has finished — during a Smooth snap the object is still travelling to
 		// the hand, and the hand should wait for it rather than fly out to meet it.
@@ -403,12 +413,42 @@ bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransf
 
 void UFXR_Grab::ReanchorToPrimary()
 {
-	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
+	const UPrimitiveComponent* Driven = HeldComponent.Get();
+	if (!Driven || !PrimaryInteractor)
 	{
-		if (PrimaryInteractor)
-		{
-			HeldOffset = Driven->GetComponentTransform().GetRelativeTransform(PrimaryInteractor->GetGripTransform());
-			SnapAlpha = 1.f;
-		}
+		return;
+	}
+
+	const FTransform PrimaryGrip = PrimaryInteractor->GetGripTransform();
+
+	// Where the object sits right now relative to the surviving hand — the start of the return.
+	SnapProceduralOffset = Driven->GetComponentTransform().GetRelativeTransform(PrimaryGrip);
+
+	const UFXR_GripPoint* GripPoint = PrimaryGripPoint.Get();
+	const EFXR_GripSnapMode SnapMode = GripPoint ? GripPoint->GetSnapMode() : EFXR_GripSnapMode::None;
+
+	if (!GripPoint || SnapMode == EFXR_GripSnapMode::None)
+	{
+		// Nothing authored to return to: keep the object where it lies relative to the hand.
+		HeldOffset = SnapProceduralOffset;
+		SnapAlpha = 1.f;
+		return;
+	}
+
+	// Re-snap to the surviving hand. Without this the hand inherits whatever offset the other hand
+	// had carried the object to, leaving it hanging in space once that hand lets go.
+	const FTransform GripPose = GripPoint->GetGripTransformFor(PrimaryGrip.GetLocation());
+	SnapTargetOffset = GripPose.GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
+
+	if (SnapMode == EFXR_GripSnapMode::Smooth)
+	{
+		HeldOffset = SnapProceduralOffset;
+		SnapAlpha = 0.f;
+		SnapInterpSpeed = GripPoint->GetSnapInterpSpeed();
+	}
+	else
+	{
+		HeldOffset = SnapTargetOffset;
+		SnapAlpha = 1.f;
 	}
 }

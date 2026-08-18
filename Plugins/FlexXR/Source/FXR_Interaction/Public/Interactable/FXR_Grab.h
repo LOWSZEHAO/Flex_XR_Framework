@@ -139,6 +139,11 @@ private:
 	/** Object-space frame of the grip-to-grip axis, captured on join — the two-hand rotation reference. */
 	FQuat TwoHandLocalFrame = FQuat::Identity;
 
+	// Whether the primary hand mesh currently rides its grip point. Sticky: once attached it stays
+	// attached through a re-snap, so a promoted hand travels home with the object instead of
+	// teleporting to the controller the instant the other hand lets go.
+	bool bPrimaryAttached = false;
+
 	// The second hand rarely lands exactly on its grip, so the aim correction is eased in over a
 	// moment rather than snapping the object the instant the hand closes.
 	FTransform TwoHandJoinOffset = FTransform::Identity;
