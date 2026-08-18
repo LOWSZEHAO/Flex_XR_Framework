@@ -333,7 +333,8 @@ FTransform UFXR_Grab::MakeTwoHandTransform() const
 	const FTransform PrimaryGrip = PrimaryInteractor ? PrimaryInteractor->GetGripTransform() : FTransform::Identity;
 	const FTransform Base = HeldOffset * PrimaryGrip;
 
-	if (!SecondaryInteractor || !bHasSecondaryGrip)
+	// Support: the second hand holds on for show, so the first hand's pose stands unchanged.
+	if (!SecondaryInteractor || !bHasSecondaryGrip || TwoHandMode == EFXR_TwoHandMode::Support)
 	{
 		return Base;
 	}

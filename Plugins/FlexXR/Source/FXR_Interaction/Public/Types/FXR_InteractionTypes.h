@@ -54,6 +54,18 @@ enum class EFXR_GripSnapMode : uint8
 	Smooth  UMETA(DisplayName = "Smooth (interpolate)")
 };
 
+/** What a second hand does to a two-handed hold. */
+UENUM(BlueprintType)
+enum class EFXR_TwoHandMode : uint8
+{
+	// Both hands steer: the object's grip-to-grip axis follows the line between the hands, so
+	// either hand can drive it — rifles, brooms, hoses, wheels.
+	Shared  UMETA(DisplayName = "Shared (both hands steer)"),
+	// The second hand attaches to its grip but the first hand alone poses the object — for props
+	// where a second hand reorienting things would read as a glitch (crates, panels).
+	Support UMETA(DisplayName = "Support (second hand does not steer)")
+};
+
 /**
  * Skeleton-agnostic finger pose: per-finger curl (0 = open, 1 = fully curled) + thumb
  * opposition. Not bone rotations — a hand Anim BP / Control Rig maps these to the active

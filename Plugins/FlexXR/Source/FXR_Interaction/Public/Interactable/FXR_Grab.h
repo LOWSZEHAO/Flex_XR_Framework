@@ -25,10 +25,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
  * the holding hand's Use value drives OnUseStarted / OnUseEnded and an analog UseValue, so a
  * gun or flashlight needs only this component — no separate FXR_Use.
  *
- * Two-handed hold is a checkbox, not a component (§4): with Allow Two-Handed the second hand
- * joins the hold and aims the object — the first hand keeps position and roll, while the object
- * pivots about it so its *secondary grip point* tracks the second hand (rifle foregrip). The
- * second hand's mesh glues to that grip point. Either hand may leave; the survivor carries on.
+ * Two-handed hold is a checkbox, not a component (§4). With Allow Two-Handed a second hand joins
+ * the hold and glues to its grip point; Two Hand Mode then decides whether it steers. Shared
+ * solves both hands symmetrically — the object's grip-to-grip axis follows the line between them,
+ * so either hand can drive (a broom sweeps from whichever hand moves). Support lets the second
+ * hand hold on without reorienting anything. Either hand may leave; the survivor carries on.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Grab : public UFXR_InteractableBase
@@ -82,6 +83,10 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand")
 	bool bAllowTwoHanded = false;
+
+	/** Whether the second hand steers the object, or merely holds on while the first hand poses it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (EditCondition = "bAllowTwoHanded"))
+	EFXR_TwoHandMode TwoHandMode = EFXR_TwoHandMode::Shared;
 
 	/** Use value at or above which OnUseStarted fires (controller trigger / tracked-hand index-squeeze). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
