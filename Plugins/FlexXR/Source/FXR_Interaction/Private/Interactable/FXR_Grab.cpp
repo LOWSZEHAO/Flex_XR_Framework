@@ -374,13 +374,29 @@ bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransf
 {
 	// The second hand glues to its handle, so it reads as gripping the object rather than hovering
 	// beside it. The first hand keeps the controller pose — the object was brought to that hand.
+	// Either hand glues to its own grip point. Gluing only the second one made the pair inconsistent:
+	// one hand rode the object while the other rode the controller, so they visibly parted as the
+	// object turned — and a promoted survivor would snap back to the controller when the other let go.
+	const IFXR_Interactor* Interactor = nullptr;
+	const UFXR_GripPoint* GripPoint = nullptr;
+
 	if (SecondaryInteractor && SecondaryInteractor->GetHandSide() == Side)
 	{
-		if (const UFXR_GripPoint* GripPoint = SecondaryGripPoint.Get())
-		{
-			OutTransform = GripPoint->GetGripTransformFor(SecondaryInteractor->GetGripTransform().GetLocation());
-			return true;
-		}
+		Interactor = SecondaryInteractor;
+		GripPoint = SecondaryGripPoint.Get();
+	}
+	else if (PrimaryInteractor && PrimaryInteractor->GetHandSide() == Side && SnapAlpha >= 1.f)
+	{
+		// Only once any snap has finished — during a Smooth snap the object is still travelling to
+		// the hand, and the hand should wait for it rather than fly out to meet it.
+		Interactor = PrimaryInteractor;
+		GripPoint = PrimaryGripPoint.Get();
+	}
+
+	if (Interactor && GripPoint && GripPoint->GetSnapMode() != EFXR_GripSnapMode::None)
+	{
+		OutTransform = GripPoint->GetGripTransformFor(Interactor->GetGripTransform().GetLocation());
+		return true;
 	}
 	return false;
 }
