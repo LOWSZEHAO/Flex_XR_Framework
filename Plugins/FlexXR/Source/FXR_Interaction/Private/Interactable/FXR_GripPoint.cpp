@@ -71,6 +71,33 @@ void UFXR_GripPoint::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 	}
 }
 
+FVector UFXR_GripPoint::GetClosestPointTo(const FVector& WorldLocation) const
+{
+	const FTransform Transform = GetComponentTransform();
+	if (!IsRail())
+	{
+		return Transform.GetLocation();
+	}
+
+	// Clamp the hand onto the rail segment: local X, centred on the component.
+	const FVector Centre = Transform.GetLocation();
+	const FVector Axis = Transform.GetUnitAxis(EAxis::X);
+	const float HalfLength = RailLength * 0.5f;
+	const float Along = FMath::Clamp(static_cast<float>(FVector::DotProduct(WorldLocation - Centre, Axis)), -HalfLength, HalfLength);
+	return Centre + Axis * Along;
+}
+
+FTransform UFXR_GripPoint::GetGripTransformFor(const FVector& WorldLocation) const
+{
+	FTransform Transform = GetComponentTransform();
+	if (IsRail())
+	{
+		// Authored orientation, but slid along the rail to meet the hand.
+		Transform.SetLocation(GetClosestPointTo(WorldLocation));
+	}
+	return Transform;
+}
+
 bool UFXR_GripPoint::AcceptsHand(EFXR_HandSide Side) const
 {
 	switch (Handedness)

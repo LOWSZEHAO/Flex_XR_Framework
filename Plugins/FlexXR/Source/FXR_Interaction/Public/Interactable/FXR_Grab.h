@@ -98,6 +98,8 @@ private:
 	 * axis) is what makes the rotation read as "held by both grips" instead of arbitrary.
 	 */
 	FTransform MakeTwoHandTransform() const;
+	/** Re-resolve the secondary attach point on the object — a rail slides, a point grip does not. */
+	void UpdateSecondaryGripLocal();
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
 	void ReanchorToPrimary();
 

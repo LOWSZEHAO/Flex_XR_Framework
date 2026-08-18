@@ -36,8 +36,10 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 
 		if (GripPoint && SnapMode != EFXR_GripSnapMode::None)
 		{
-			// Offset that aligns the grip point to the hand's grip pose.
-			SnapTargetOffset = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
+			// Offset that aligns the grip point to the hand's grip pose. On a rail the alignment
+			// point slides to wherever the hand took hold, so a long object is not yanked to centre.
+			const FTransform GripPose = GripPoint->GetGripTransformFor(Interactor->GetGripTransform().GetLocation());
+			SnapTargetOffset = GripPose.GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
 
 			if (SnapMode == EFXR_GripSnapMode::Smooth)
 			{
@@ -91,7 +93,9 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 	if (SecondaryInteractor)
 	{
-		// Two-hand hold: position and roll ride the primary hand, aim follows the secondary handle.
+		// Two-hand hold: position and roll ride the primary hand, aim follows the secondary handle
+		// (which slides, if that handle is a rail).
+		UpdateSecondaryGripLocal();
 		Driven->SetWorldTransform(MakeTwoHandTransform(), false, nullptr, ETeleportType::TeleportPhysics);
 	}
 	else
@@ -197,15 +201,12 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 	SecondaryGripPoint = GripPoint;
 	SecondaryHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
-	// Remember where that handle sits on the object, so the aim survives the object moving.
+	// Remember where that handle sits on the object, so the aim survives the object moving. A rail
+	// re-resolves each frame instead (see UpdateSecondaryGripLocal), letting the hand slide along it.
 	bHasSecondaryGrip = false;
-	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
+	if (GripPoint)
 	{
-		if (GripPoint)
-		{
-			SecondaryGripLocal = Driven->GetComponentTransform().InverseTransformPosition(GripPoint->GetComponentLocation());
-			bHasSecondaryGrip = true;
-		}
+		UpdateSecondaryGripLocal();
 	}
 
 	// Finish any in-flight snap: from here the two-hand solve owns the pose.
@@ -258,6 +259,22 @@ UFXR_HandPose* UFXR_Grab::GetActiveHandPose(EFXR_HandSide Side) const
 	return ActiveHandPose.Get();
 }
 
+void UFXR_Grab::UpdateSecondaryGripLocal()
+{
+	const UFXR_GripPoint* GripPoint = SecondaryGripPoint.Get();
+	const UPrimitiveComponent* Driven = HeldComponent.Get();
+	if (!GripPoint || !Driven || !SecondaryInteractor)
+	{
+		return;
+	}
+
+	// On a rail the attach point follows the hand along the handguard; a point grip is fixed, so
+	// resolving it every frame simply returns the same spot.
+	const FVector HandLocation = SecondaryInteractor->GetGripTransform().GetLocation();
+	SecondaryGripLocal = Driven->GetComponentTransform().InverseTransformPosition(GripPoint->GetClosestPointTo(HandLocation));
+	bHasSecondaryGrip = true;
+}
+
 FTransform UFXR_Grab::MakeTwoHandTransform() const
 {
 	// Start from the one-hand hold: the first hand keeps the object's position and roll.
@@ -294,7 +311,7 @@ bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransf
 	{
 		if (const UFXR_GripPoint* GripPoint = SecondaryGripPoint.Get())
 		{
-			OutTransform = GripPoint->GetComponentTransform();
+			OutTransform = GripPoint->GetGripTransformFor(SecondaryInteractor->GetGripTransform().GetLocation());
 			return true;
 		}
 	}

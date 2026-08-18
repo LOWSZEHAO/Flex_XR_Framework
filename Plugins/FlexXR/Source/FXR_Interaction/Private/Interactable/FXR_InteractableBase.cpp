@@ -142,7 +142,7 @@ bool UFXR_InteractableBase::IsInGrabReach(const FVector& GrabCenter, float GrabR
 			{
 				continue;
 			}
-			const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+			const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetClosestPointTo(GrabCenter));
 			const float Reach = Point->GetActivationRadius() + GrabRadius;
 			if (DistanceSq <= FMath::Square(Reach) && DistanceSq < OutDistanceSq)
 			{
@@ -197,7 +197,7 @@ UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interact
 		{
 			continue;
 		}
-		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetClosestPointTo(GrabCenter));
 		const float Reach = Point->GetActivationRadius() + GrabRadius;
 		if (DistanceSq > FMath::Square(Reach))
 		{
