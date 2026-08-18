@@ -147,18 +147,30 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		const FVector NewLocation = Driven->GetComponentLocation();
 		const FQuat NewRotation = Driven->GetComponentQuat();
 
-		TrackedLinearVelocity = (NewLocation - LastLocation) / DeltaTime;
-
-		FQuat DeltaQuat = NewRotation * LastRotation.Inverse();
-		DeltaQuat.Normalize();
-		FVector Axis;
-		float Angle;
-		DeltaQuat.ToAxisAndAngle(Axis, Angle);
-		if (Angle > PI)
+		// While the framework is settling the object — a grip snap, the two-hand join, or the return
+		// to a promoted hand — the object moves on its own. That is not a throw, and handing that
+		// speed to physics on release would fling it away.
+		const bool bSettling = (SnapAlpha < 1.f) || (TwoHandBlend < 1.f);
+		if (bSettling)
 		{
-			Angle -= 2.f * PI;
+			TrackedLinearVelocity = FVector::ZeroVector;
+			TrackedAngularVelocity = FVector::ZeroVector;
 		}
-		TrackedAngularVelocity = Axis * (Angle / DeltaTime);
+		else
+		{
+			TrackedLinearVelocity = (NewLocation - LastLocation) / DeltaTime;
+
+			FQuat DeltaQuat = NewRotation * LastRotation.Inverse();
+			DeltaQuat.Normalize();
+			FVector Axis;
+			float Angle;
+			DeltaQuat.ToAxisAndAngle(Axis, Angle);
+			if (Angle > PI)
+			{
+				Angle -= 2.f * PI;
+			}
+			TrackedAngularVelocity = Axis * (Angle / DeltaTime);
+		}
 
 		LastLocation = NewLocation;
 		LastRotation = NewRotation;
