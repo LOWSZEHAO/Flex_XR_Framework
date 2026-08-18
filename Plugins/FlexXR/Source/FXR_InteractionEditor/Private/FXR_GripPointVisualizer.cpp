@@ -16,21 +16,20 @@ void FFXR_GripPointVisualizer::DrawVisualization(const UActorComponent* Componen
 
 	// Grip pose axes (the "shaped like this" orientation) + activation radius.
 	DrawCoordinateSystem(PDI, Transform.GetLocation(), Transform.Rotator(), 5.f, SDPG_Foreground);
-	// A rail is drawn as its grabbable extent — a sphere at each end plus the spine between them —
-	// so its length and orientation read at a glance. A point grip is just the one sphere.
+	const float Radius = GripPoint->GetActivationRadius();
 	if (GripPoint->IsRail())
 	{
-		const FVector Axis = Transform.GetUnitAxis(EAxis::X);
-		const FVector HalfSpan = Axis * (GripPoint->GetRailLength() * 0.5f);
-		const FVector Start = Transform.GetLocation() - HalfSpan;
-		const FVector End = Transform.GetLocation() + HalfSpan;
+		// One capsule, not two spheres: a hand may take the rail anywhere inside this volume, so
+		// drawing only the end caps would wrongly read as two separate grab spots.
+		const FVector RailAxis = Transform.GetUnitAxis(EAxis::X);
+		const float HalfHeight = GripPoint->GetRailLength() * 0.5f + Radius;
 
-		DrawWireSphere(PDI, Start, FColor::Magenta, GripPoint->GetActivationRadius(), 12, SDPG_World);
-		DrawWireSphere(PDI, End, FColor::Magenta, GripPoint->GetActivationRadius(), 12, SDPG_World);
-		PDI->DrawLine(Start, End, FLinearColor(1.f, 0.f, 1.f), SDPG_World, 2.f);
+		DrawWireCapsule(PDI, Transform.GetLocation(),
+			Transform.GetUnitAxis(EAxis::Y), Transform.GetUnitAxis(EAxis::Z), RailAxis,
+			FLinearColor(1.f, 0.f, 1.f), Radius, HalfHeight, 16, SDPG_World);
 	}
 	else
 	{
-		DrawWireSphere(PDI, Transform.GetLocation(), FColor::Magenta, GripPoint->GetActivationRadius(), 16, SDPG_World);
+		DrawWireSphere(PDI, Transform.GetLocation(), FColor::Magenta, Radius, 16, SDPG_World);
 	}
 }
