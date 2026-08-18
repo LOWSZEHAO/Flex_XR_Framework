@@ -39,7 +39,7 @@ void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		if (const UFXR_InteractableBase* Held = ResolveHeldInteractable())
 		{
 			FTransform Attach;
-			if (Held->GetHandAttachTransform(Attach))
+			if (Held->GetHandAttachTransform(HandSide, Attach))
 			{
 				GripSource = Attach;
 			}

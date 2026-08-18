@@ -26,8 +26,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
  * gun or flashlight needs only this component — no separate FXR_Use.
  *
  * Two-handed hold is a checkbox, not a component (§4): with Allow Two-Handed the second hand
- * joins the hold and aims the object — position from the first hand, orientation from the line
- * between the hands (rifle-style). Either hand may leave; the survivor carries the hold.
+ * joins the hold and aims the object — the first hand keeps position and roll, while the object
+ * pivots about it so its *secondary grip point* tracks the second hand (rifle foregrip). The
+ * second hand's mesh glues to that grip point. Either hand may leave; the survivor carries on.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Grab : public UFXR_InteractableBase
@@ -46,6 +47,9 @@ public:
 
 	/** The hand pose the given hand forms (its grip point's pose), or null (procedural hold). */
 	virtual UFXR_HandPose* GetActiveHandPose(EFXR_HandSide Side) const override;
+
+	/** The second hand glues to its grip point; the first keeps the controller pose (the object came to it). */
+	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const override;
 
 	/** True while a second hand is joined to the hold. */
 	UFUNCTION(BlueprintPure, Category = "Grab|TwoHand")
@@ -72,9 +76,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
 	float ThrowVelocityScale = 1.f;
 
-	/** Let a second hand join the hold to aim the object (position from the first hand, direction from the second). */
+	/**
+	 * Let a second hand join the hold to aim the object (rifles, big tools, steering). Off by
+	 * default: for an ordinary prop a second hand swinging the aim reads as a glitch, not a feature.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand")
-	bool bAllowTwoHanded = true;
+	bool bAllowTwoHanded = false;
 
 	/** Use value at or above which OnUseStarted fires (controller trigger / tracked-hand index-squeeze). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -85,8 +92,12 @@ protected:
 	float UseReleaseThreshold = 0.35f;
 
 private:
-	/** Orientation frame for a two-hand hold: primary grip location, X toward the secondary grip. */
-	FTransform MakeTwoHandFrame() const;
+	/**
+	 * Two-hand pose: the one-hand hold rotated about the primary grip so the authored secondary grip
+	 * point points at the second hand. Aiming by the authored handle (rather than the object's X
+	 * axis) is what makes the rotation read as "held by both grips" instead of arbitrary.
+	 */
+	FTransform MakeTwoHandTransform() const;
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
 	void ReanchorToPrimary();
 
@@ -104,7 +115,10 @@ private:
 	IFXR_Interactor* PrimaryInteractor = nullptr;
 	IFXR_Interactor* SecondaryInteractor = nullptr;
 	TWeakObjectPtr<UFXR_HandPose> SecondaryHandPose;
-	FTransform TwoHandOffset = FTransform::Identity;
+	TWeakObjectPtr<UFXR_GripPoint> SecondaryGripPoint;
+	/** Secondary grip point in the driven object's local space, captured when the second hand joins. */
+	FVector SecondaryGripLocal = FVector::ZeroVector;
+	bool bHasSecondaryGrip = false;
 
 	FVector LastLocation = FVector::ZeroVector;
 	FQuat LastRotation = FQuat::Identity;

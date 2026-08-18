@@ -176,7 +176,7 @@ UFXR_HandPose* UFXR_Latch::GetActiveHandPose(EFXR_HandSide Side) const
 	return ActiveHandPose.Get();
 }
 
-bool UFXR_Latch::GetHandAttachTransform(FTransform& OutTransform) const
+bool UFXR_Latch::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const
 {
 	// Pin the hand to the handle (eased per the grip point's snap mode) so it tracks the object as
 	// the latch moves. Snap mode None — or no grip point — keeps the hand on the controller.

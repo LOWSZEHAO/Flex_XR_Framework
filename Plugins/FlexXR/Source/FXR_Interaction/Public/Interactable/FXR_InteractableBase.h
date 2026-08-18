@@ -104,7 +104,7 @@ public:
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
 	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).
 	 */
-	virtual bool GetHandAttachTransform(FTransform& OutTransform) const { return false; }
+	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const { return false; }
 
 protected:
 	/** The primitive this interactable moves/affects: the attach-parent primitive, else the actor root primitive. */

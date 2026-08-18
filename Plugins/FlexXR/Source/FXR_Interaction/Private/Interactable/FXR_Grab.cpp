@@ -91,8 +91,8 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 	if (SecondaryInteractor)
 	{
-		// Two-hand hold: position rides the primary hand, aim follows the hand-to-hand line.
-		Driven->SetWorldTransform(TwoHandOffset * MakeTwoHandFrame(), false, nullptr, ETeleportType::TeleportPhysics);
+		// Two-hand hold: position and roll ride the primary hand, aim follows the secondary handle.
+		Driven->SetWorldTransform(MakeTwoHandTransform(), false, nullptr, ETeleportType::TeleportPhysics);
 	}
 	else
 	{
@@ -169,6 +169,8 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 	PrimaryInteractor = nullptr;
 	SecondaryInteractor = nullptr;
 	SecondaryHandPose = nullptr;
+	SecondaryGripPoint = nullptr;
+	bHasSecondaryGrip = false;
 	TrackedLinearVelocity = FVector::ZeroVector;
 	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
@@ -189,15 +191,24 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 
 	SecondaryInteractor = Interactor;
 
-	// The second hand's grip point (hand-side filtered — e.g. a LeftOnly foregrip) shapes it.
-	const UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	// The second hand's grip point (hand-side filtered — e.g. a LeftOnly foregrip) both shapes the
+	// fingers and becomes the handle the object aims at.
+	UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
+	SecondaryGripPoint = GripPoint;
 	SecondaryHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
-	// Capture the object relative to the two-hand frame as it is right now — joining never pops.
+	// Remember where that handle sits on the object, so the aim survives the object moving.
+	bHasSecondaryGrip = false;
 	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
 	{
-		TwoHandOffset = Driven->GetComponentTransform().GetRelativeTransform(MakeTwoHandFrame());
+		if (GripPoint)
+		{
+			SecondaryGripLocal = Driven->GetComponentTransform().InverseTransformPosition(GripPoint->GetComponentLocation());
+			bHasSecondaryGrip = true;
+		}
 	}
+
+	// Finish any in-flight snap: from here the two-hand solve owns the pose.
 	SnapAlpha = 1.f;
 }
 
@@ -208,6 +219,8 @@ void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
 	{
 		SecondaryInteractor = nullptr;
 		SecondaryHandPose = nullptr;
+		SecondaryGripPoint = nullptr;
+		bHasSecondaryGrip = false;
 		ReanchorToPrimary();
 		return;
 	}
@@ -226,6 +239,8 @@ void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
 		ActiveHandPose = SecondaryHandPose;
 		SecondaryInteractor = nullptr;
 		SecondaryHandPose = nullptr;
+		SecondaryGripPoint = nullptr;
+		bHasSecondaryGrip = false;
 		ReanchorToPrimary();
 		return;
 	}
@@ -243,25 +258,47 @@ UFXR_HandPose* UFXR_Grab::GetActiveHandPose(EFXR_HandSide Side) const
 	return ActiveHandPose.Get();
 }
 
-FTransform UFXR_Grab::MakeTwoHandFrame() const
+FTransform UFXR_Grab::MakeTwoHandTransform() const
 {
+	// Start from the one-hand hold: the first hand keeps the object's position and roll.
 	const FTransform PrimaryGrip = PrimaryInteractor ? PrimaryInteractor->GetGripTransform() : FTransform::Identity;
-	if (!SecondaryInteractor)
+	const FTransform Base = HeldOffset * PrimaryGrip;
+
+	if (!SecondaryInteractor || !bHasSecondaryGrip)
 	{
-		return PrimaryGrip;
+		return Base;
 	}
 
-	const FVector From = PrimaryGrip.GetLocation();
-	const FVector To = SecondaryInteractor->GetGripTransform().GetLocation();
-	FVector Aim = To - From;
-	if (Aim.SizeSquared() < KINDA_SMALL_NUMBER)
+	// Then pivot about the first hand so the authored secondary grip point swings onto the second
+	// hand — the object points its foregrip at you, rather than an arbitrary local axis.
+	const FVector Pivot = PrimaryGrip.GetLocation();
+	const FVector CurrentDir = (Base.TransformPosition(SecondaryGripLocal) - Pivot).GetSafeNormal();
+	const FVector DesiredDir = (SecondaryInteractor->GetGripTransform().GetLocation() - Pivot).GetSafeNormal();
+
+	if (CurrentDir.IsNearlyZero() || DesiredDir.IsNearlyZero())
 	{
-		return PrimaryGrip; // Hands coincide — degenerate; hold the primary frame.
+		return Base; // Hands coincide with the grip — degenerate; hold the one-hand pose.
 	}
 
-	// X aims along the hand-to-hand line; the primary grip's up resolves the roll.
-	const FQuat Rotation = FRotationMatrix::MakeFromXZ(Aim, PrimaryGrip.GetRotation().GetUpVector()).ToQuat();
-	return FTransform(Rotation, From);
+	const FQuat Swing = FQuat::FindBetweenNormals(CurrentDir, DesiredDir);
+	const FQuat NewRotation = Swing * Base.GetRotation();
+	const FVector NewLocation = Pivot + Swing.RotateVector(Base.GetLocation() - Pivot);
+	return FTransform(NewRotation, NewLocation, Base.GetScale3D());
+}
+
+bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const
+{
+	// The second hand glues to its handle, so it reads as gripping the object rather than hovering
+	// beside it. The first hand keeps the controller pose — the object was brought to that hand.
+	if (SecondaryInteractor && SecondaryInteractor->GetHandSide() == Side)
+	{
+		if (const UFXR_GripPoint* GripPoint = SecondaryGripPoint.Get())
+		{
+			OutTransform = GripPoint->GetComponentTransform();
+			return true;
+		}
+	}
+	return false;
 }
 
 void UFXR_Grab::ReanchorToPrimary()

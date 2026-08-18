@@ -40,7 +40,7 @@ public:
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime) override;
 	virtual void OnEnd(EFXR_EndReason Reason) override;
 	virtual UFXR_HandPose* GetActiveHandPose(EFXR_HandSide Side) const override;
-	virtual bool GetHandAttachTransform(FTransform& OutTransform) const override;
+	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const override;
 
 #if WITH_EDITOR
 	virtual void CheckForErrors() override;
