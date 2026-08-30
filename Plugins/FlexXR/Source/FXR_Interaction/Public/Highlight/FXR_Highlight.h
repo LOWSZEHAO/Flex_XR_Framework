@@ -36,6 +36,9 @@ public:
 
 	EFXR_HighlightScope GetScope() const { return Scope; }
 
+	/** Direction the Sweep band travels, in world space. */
+	FVector GetSweepDirection() const { return SweepDirection; }
+
 protected:
 	/**
 	 * Which primitives light up. Everything glows the object as a whole; Target Mesh glows only the
@@ -71,4 +74,11 @@ protected:
 	/** Pulses per second for Inner Blink and Sweep. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Highlight", meta = (ClampMin = "0.0", EditCondition = "bOverridePulseRate"))
 	float PulseRate = 1.5f;
+
+	/**
+	 * Direction the Sweep band travels. Up suits an upright object being scanned; point it along the
+	 * axis a part actually moves for "pull this lever" reads.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Highlight")
+	FVector SweepDirection = FVector::UpVector;
 };

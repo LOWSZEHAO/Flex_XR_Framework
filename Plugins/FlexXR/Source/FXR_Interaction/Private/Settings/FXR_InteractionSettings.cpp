@@ -17,6 +17,7 @@ UFXR_InteractionSettings::UFXR_InteractionSettings()
 	StateColors.Add(EFXR_HighlightState::Selected, FLinearColor(0.2f, 1.f, 0.4f, 1.f));
 
 	OutlineMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Outline.M_FXR_Outline")));
+	OverlayMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_HighlightOverlay.M_FXR_HighlightOverlay")));
 }
 
 EFXR_HighlightStyle UFXR_InteractionSettings::GetStyleFor(EFXR_HighlightState State) const
