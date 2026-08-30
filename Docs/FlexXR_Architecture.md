@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.7 (presentation config — highlight lives on its own component)
+**Version:** 0.8 (highlight rendering — state-keyed stencil, overlay styles, far ray)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -720,6 +720,18 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.8 — Highlight rendering & far ray**
+- The Outline stencil carries the highlight *state* (1 Hover, 2 Guidance, 3 Selected), not the style. One
+  full-screen pass serves every outlined object, so it can never read a per-object colour; state is the only
+  axis it can vary along, and this also lets a project outline all three states in three colours. Requires
+  `r.CustomDepth=3`, and the pass attaches to the view target's camera component so no post-process volume
+  or FlexXR-specific pawn is needed. Per-object colour therefore applies to Inner Blink and Sweep only.
+- Outline and overlay carry separate intensities: the overlay draws unlit, so a shared multiplier above 1
+  clipped every colour to white and made Highlight Color decorative.
+- `FXR_RayTarget` ships: far-ray focus and selection, traced on the `FXR_Interaction` channel per ADR-002.
+  Far yields to near, arbitrated in the interaction driver because only it sees both. Distance grab and the
+  Far Interaction Policy that gates it are deliberately still to come — the policy has no teeth without it.
 
 **v0.7 — Presentation config**
 - Highlight configuration lives only on the optional `FXR_Highlight`; the shared base panel no longer carries
