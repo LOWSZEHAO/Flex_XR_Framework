@@ -100,14 +100,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Right Turn Mode"))
 	EFXR_TurnMode RightHandTurn = EFXR_TurnMode::Snap;
 
-	//~ Movement
+	//~ Smooth Move — only the tuning; which hand smooth-moves is set per hand above.
 	/** Frame the move stick is relative to (Hip approximates to Head — the rig has no hip tracker). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Smooth Move")
 	EFXR_MoveDirectionSource MoveDirectionSource = EFXR_MoveDirectionSource::HeadRelative;
 
 	/** Smooth-move speed (cm/s) — 250 ≈ 2.5 m/s. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Smooth Move", meta = (ClampMin = "1.0"))
 	float SmoothMoveSpeed = 250.f;
+
+	//~ Teleport
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
+	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
 
 	/**
 	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration; Blink
@@ -115,12 +119,8 @@ protected:
 	 * with the world visible (the only one that creates optical flow, so it vignettes); Instant
 	 * cuts with no transition at all.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
-	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
-
-	//~ Teleport
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
-	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
+	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
 
 	/** Straight-ray reach / arc distance cap (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "50.0"))
