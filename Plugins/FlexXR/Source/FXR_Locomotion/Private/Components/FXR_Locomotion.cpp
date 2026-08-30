@@ -277,22 +277,16 @@ void UFXR_Locomotion::TryBindInput()
 		}
 	}
 
-	if (TeleportAction)
+	if (LeftStickAction)
 	{
-		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTeleport);
-		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportCompleted);
+		EnhancedInput->BindAction(LeftStickAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleLeftStick);
+		EnhancedInput->BindAction(LeftStickAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleLeftStickCompleted);
 	}
 
-	if (TurnAction)
+	if (RightStickAction)
 	{
-		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTurn);
-		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnCompleted);
-	}
-
-	if (MoveAction)
-	{
-		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleMove);
-		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleMoveCompleted);
+		EnhancedInput->BindAction(RightStickAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleRightStick);
+		EnhancedInput->BindAction(RightStickAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleRightStickCompleted);
 	}
 
 	bInputBound = true;
@@ -319,27 +313,33 @@ bool UFXR_Locomotion::ResolveMovementHand(EFXR_HandMovement Movement, EFXR_HandS
 	return false;
 }
 
-bool UFXR_Locomotion::ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const
+bool UFXR_Locomotion::CanHandTurn(EFXR_HandSide Side) const
 {
-	switch (Assignment)
+	// A hand set to Smooth Move spends its X on strafing, so it cannot also turn.
+	return !IsHandBusy(Side) && MovementForHand(Side) != EFXR_HandMovement::SmoothMove;
+}
+
+bool UFXR_Locomotion::ResolveTurnHand(EFXR_HandSide& OutSide) const
+{
+	switch (TurnHand)
 	{
 	case EFXR_LocomotionHand::Left:
 		OutSide = EFXR_HandSide::Left;
-		return !IsHandBusy(OutSide);
+		return CanHandTurn(OutSide);
 
 	case EFXR_LocomotionHand::Right:
 		OutSide = EFXR_HandSide::Right;
-		return !IsHandBusy(OutSide);
+		return CanHandTurn(OutSide);
 
 	case EFXR_LocomotionHand::Both:
 	default:
-		// Either hand may drive, so prefer one that is free; only yield when both are occupied.
-		if (!IsHandBusy(EFXR_HandSide::Right))
+		// Either hand may turn, so take whichever can right now; only yield when neither can.
+		if (CanHandTurn(EFXR_HandSide::Right))
 		{
 			OutSide = EFXR_HandSide::Right;
 			return true;
 		}
-		if (!IsHandBusy(EFXR_HandSide::Left))
+		if (CanHandTurn(EFXR_HandSide::Left))
 		{
 			OutSide = EFXR_HandSide::Left;
 			return true;
@@ -349,58 +349,60 @@ bool UFXR_Locomotion::ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR
 	}
 }
 
-void UFXR_Locomotion::TryBeginTeleportAim()
+void UFXR_Locomotion::TryBeginTeleportAim(EFXR_HandSide Side)
 {
 	if (!bLocomotionEnabled || !bTeleportEnabled || Phase != ETeleportPhase::Idle)
 	{
 		return;
 	}
 
-	EFXR_HandSide Side;
-	if (!ResolveMovementHand(EFXR_HandMovement::Teleport, Side)) // no free hand set to teleport
+	if (MovementForHand(Side) != EFXR_HandMovement::Teleport || IsHandBusy(Side))
 	{
-		return;
+		return; // this stick doesn't teleport, or its hand is holding something (ADR-005)
 	}
 
 	AimingHand = Side;
 	Phase = ETeleportPhase::Aiming;
 }
 
-void UFXR_Locomotion::HandleTeleport(const FInputActionValue& Value)
+void UFXR_Locomotion::HandleLeftStick(const FInputActionValue& Value)
 {
-	// Read as a float so one binding serves both a thumbstick and a button (a button reads 1.0).
-	// Thresholding here rather than in the mapping keeps it directional: Enhanced Input actuates a
-	// digital action on magnitude, which would let pulling the stick *back* teleport as well.
-	const float Push = Value.Get<float>();
+	ApplyStick(EFXR_HandSide::Left, Value.Get<FVector2D>());
+}
 
-	if (Push >= TeleportActivationThreshold)
+void UFXR_Locomotion::HandleRightStick(const FInputActionValue& Value)
+{
+	ApplyStick(EFXR_HandSide::Right, Value.Get<FVector2D>());
+}
+
+void UFXR_Locomotion::HandleLeftStickCompleted()
+{
+	ApplyStick(EFXR_HandSide::Left, FVector2D::ZeroVector);
+}
+
+void UFXR_Locomotion::HandleRightStickCompleted()
+{
+	ApplyStick(EFXR_HandSide::Right, FVector2D::ZeroVector);
+}
+
+void UFXR_Locomotion::ApplyStick(EFXR_HandSide Side, FVector2D Axis)
+{
+	StickAxis[static_cast<int32>(Side)] = Axis;
+
+	if (MovementForHand(Side) != EFXR_HandMovement::Teleport)
 	{
-		TryBeginTeleportAim();
+		return; // smooth move and turning are polled in tick; only teleport is edge-driven
 	}
-	else if (Phase == ETeleportPhase::Aiming)
+
+	if (Axis.Y >= TeleportActivationThreshold)
 	{
-		// Eased back below the threshold without fully centring — that is still a commit.
+		TryBeginTeleportAim(Side);
+	}
+	else if (Phase == ETeleportPhase::Aiming && AimingHand == Side)
+	{
+		// Released, or eased back below the threshold without fully centring — both commit.
 		CommitTeleport();
 	}
-}
-
-void UFXR_Locomotion::HandleTeleportCompleted()
-{
-	// Stick centred (or button released) — the action stops triggering, so commit from here.
-	if (Phase == ETeleportPhase::Aiming)
-	{
-		CommitTeleport();
-	}
-}
-
-void UFXR_Locomotion::HandleTurn(const FInputActionValue& Value)
-{
-	CurrentTurnAxis = Value.Get<float>();
-}
-
-void UFXR_Locomotion::HandleMove(const FInputActionValue& Value)
-{
-	CurrentMoveAxis = Value.Get<FVector2D>();
 }
 
 void UFXR_Locomotion::ProcessTurn(float DeltaTime)
@@ -411,12 +413,12 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	}
 
 	EFXR_HandSide Side;
-	if (!ResolveLocomotionHand(TurnHand, Side)) // yield: the turning hand is holding an interactable
+	if (!ResolveTurnHand(Side)) // yield: the turning hand is holding something, or is strafing
 	{
 		return;
 	}
 
-	const float Axis = CurrentTurnAxis;
+	const float Axis = StickAxis[static_cast<int32>(Side)].X;
 	const float AbsAxis = FMath::Abs(Axis);
 
 	// A flick past the snap threshold yaws once and disarms until the stick re-centres.
@@ -446,7 +448,7 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 
 void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 {
-	if (!bLocomotionEnabled || CurrentMoveAxis.IsNearlyZero())
+	if (!bLocomotionEnabled)
 	{
 		return;
 	}
@@ -457,7 +459,12 @@ void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 		return;
 	}
 
-	const FVector2D Axis = CurrentMoveAxis;
+	const FVector2D Axis = StickAxis[static_cast<int32>(MovingSide)];
+	if (Axis.IsNearlyZero())
+	{
+		return;
+	}
+
 	AActor* Owner = GetOwner();
 	IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(Owner);
 	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;

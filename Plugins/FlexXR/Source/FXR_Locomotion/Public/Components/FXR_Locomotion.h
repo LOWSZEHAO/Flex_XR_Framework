@@ -35,8 +35,9 @@ struct FInputActionValue;
  * with any project's pawn. Yields to interaction: a hand currently holding an interactable drives
  * no locomotion.
  *
- * Add it to the pawn, assign a teleport input action + mapping context, hold to aim the arc and
- * release to commit. The arc + reticle draw as debug lines until arc/reticle meshes are assigned.
+ * Add it to the pawn and assign the mapping context plus one Axis2D action per thumbstick; push a
+ * stick forward to aim the arc and release to commit. The arc + reticle draw as debug lines until
+ * arc/reticle meshes are assigned.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_LOCOMOTION_API UFXR_Locomotion : public UActorComponent
@@ -147,7 +148,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "TurnMode == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
 
-	/** Which hand turns. Both = either stick, whichever is pushed harder. */
+	/**
+	 * Which stick's sideways axis turns. Both = whichever hand is free to. A hand set to Smooth
+	 * Move needs its X for strafing, so it never turns regardless of what is chosen here.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (EditCondition = "TurnMode != EFXR_TurnMode::None"))
 	EFXR_LocomotionHand TurnHand = EFXR_LocomotionHand::Right;
 
@@ -184,28 +188,30 @@ protected:
 	TObjectPtr<UInputMappingContext> LocomotionContext;
 
 	/**
-	 * One action per mode. Bind both hands' controls to each action in the mapping context — which
-	 * hand actually drives a mode is decided by Left/Right Hand Movement and Turn Hand above, not
-	 * by the bindings, so the same context serves every hand layout.
+	 * One Axis2D action per hand — bind the left thumbstick to one and the right to the other, and
+	 * never touch the mapping context again. What a stick *does* is read off Left/Right Hand
+	 * Movement and Turn Hand above, so changing the hand layout is a detail-panel edit.
 	 *
-	 * Teleport: Axis1D (thumbstick Y) or a button. The value is read as a float and thresholded
-	 * here, so pushing the stick forward aims and pulling it back does nothing. Add a Negate
-	 * modifier if your stick reads forward as negative.
+	 * An action per hand rather than per mode is what makes that honest: Enhanced Input cannot say
+	 * which hand actuated a shared action, so a per-mode action bound to both sticks would let the
+	 * left stick start the right hand's teleport.
+	 *
+	 *   Y (forward)  → that hand's movement mode (teleport aim, or smooth-move forward)
+	 *   X (sideways) → turning, if that hand is the turn hand; strafe while smooth-moving
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TeleportAction;
+	TObjectPtr<UInputAction> LeftStickAction;
 
-	/** Stick push at or above which the arc appears (a button reads 1.0, so any value under 1 works). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
+	TObjectPtr<UInputAction> RightStickAction;
+
+	/**
+	 * Forward push at or above which the teleport arc appears. Thresholding here rather than in the
+	 * mapping keeps it directional — Enhanced Input actuates on magnitude, which would let pulling
+	 * the stick back teleport as well.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input", meta = (ClampMin = "0.05", ClampMax = "1.0"))
 	float TeleportActivationThreshold = 0.6f;
-
-	/** Turn: Axis1D (thumbstick X) — sign turns left/right. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TurnAction;
-
-	/** Smooth move: Axis2D (thumbstick XY) — X = strafe, Y = forward. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> MoveAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	int32 InputPriority = 0;
@@ -234,21 +240,32 @@ private:
 	void ApplyPreset(EFXR_LocomotionPreset InPreset);
 	void TryBindInput();
 
-	void HandleTeleport(const FInputActionValue& Value);
-	void HandleTeleportCompleted();
-	void HandleTurn(const FInputActionValue& Value);
-	void HandleTurnCompleted() { CurrentTurnAxis = 0.f; }
-	void HandleMove(const FInputActionValue& Value);
-	void HandleMoveCompleted() { CurrentMoveAxis = FVector2D::ZeroVector; }
-	/** Begin aiming if the assigned hand may right now (enabled, idle, not holding anything). */
-	void TryBeginTeleportAim();
+	void HandleLeftStick(const FInputActionValue& Value);
+	void HandleRightStick(const FInputActionValue& Value);
+	void HandleLeftStickCompleted();
+	void HandleRightStickCompleted();
+
+	/** Store one hand's stick and act on its forward axis; turning is polled from it in ProcessTurn. */
+	void ApplyStick(EFXR_HandSide Side, FVector2D Axis);
+
+	/** What this hand's stick is set to do. */
+	EFXR_HandMovement MovementForHand(EFXR_HandSide Side) const
+	{
+		return (Side == EFXR_HandSide::Left) ? LeftHandMovement : RightHandMovement;
+	}
+
+	/** Begin aiming if this hand may right now (enabled, idle, set to Teleport, not holding anything). */
+	void TryBeginTeleportAim(EFXR_HandSide Side);
+
+	/** True if this hand's stick X is free to turn: not holding anything (ADR-005), not strafing. */
+	bool CanHandTurn(EFXR_HandSide Side) const;
 
 	/**
-	 * The hand a turn should act through. A single hand is used if free; Both prefers the hand that
-	 * is not holding anything, so turning keeps working while the other hand is occupied.
-	 * Returns false when every assigned hand is busy — the mode then yields entirely (ADR-005).
+	 * The hand a turn should act through. A single assigned hand is used if it can turn; Both takes
+	 * whichever can, so turning keeps working while the other hand is occupied. Returns false when
+	 * neither can — the mode then yields entirely (ADR-005).
 	 */
-	bool ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const;
+	bool ResolveTurnHand(EFXR_HandSide& OutSide) const;
 
 	/**
 	 * A free hand set to this movement mode, if any. Both hands may carry the same mode, in which
@@ -290,9 +307,9 @@ private:
 	float TargetFacingYaw = 0.f;
 	float FadeElapsed = 0.f;
 
-	float CurrentTurnAxis = 0.f;
+	/** Latest thumbstick per hand, indexed by EFXR_HandSide — the one place input lands. */
+	FVector2D StickAxis[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
 	bool bTurnArmed = true;
-	FVector2D CurrentMoveAxis = FVector2D::ZeroVector;
 	/** Which hand owns the teleport arc in flight — resolved when aiming starts, held until it ends. */
 	EFXR_HandSide AimingHand = EFXR_HandSide::Right;
 
