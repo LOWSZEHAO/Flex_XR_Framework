@@ -45,6 +45,9 @@ private:
 	void DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_InteractableBase>& Held, float& PrevSelect, float DeltaTime);
 	/** Offer this hand's fingertip to presses in range (FXR_Press travel). */
 	void DrivePokes(EFXR_HandSide Side);
+
+	/** Publish this hand's hover/selected into the focus subsystem, for highlight and UI to read. */
+	void PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held);
 	IFXR_Interactor* GetActiveInteractor(EFXR_HandSide Side) const;
 
 	TWeakObjectPtr<UFXR_InteractableBase> LeftHeld;

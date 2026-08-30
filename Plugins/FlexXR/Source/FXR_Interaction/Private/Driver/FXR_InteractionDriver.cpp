@@ -2,6 +2,7 @@
 
 #include "Driver/FXR_InteractionDriver.h"
 #include "Detection/FXR_InteractionSubsystem.h"
+#include "Detection/FXR_FocusSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_Press.h"
 #include "Interactor/FXR_Interactor.h"
@@ -23,6 +24,46 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 	DriveHand(EFXR_HandSide::Right, RightHeld, RightPrevSelect, DeltaTime);
 	DrivePokes(EFXR_HandSide::Left);
 	DrivePokes(EFXR_HandSide::Right);
+
+	// After the hands are driven, so a grab claimed this frame publishes as Selected rather than
+	// spending a frame as Hovered first.
+	PublishFocus(EFXR_HandSide::Left, LeftHeld);
+	PublishFocus(EFXR_HandSide::Right, RightHeld);
+}
+
+void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held)
+{
+	UFXR_FocusSubsystem* Focus = UFXR_FocusSubsystem::Get(this);
+	if (!Focus)
+	{
+		return;
+	}
+
+	UFXR_InteractableBase* HeldNow = Held.Get();
+	Focus->SetSelected(Side, HeldNow);
+
+	// A hand that owns something is not shopping for the next thing: holding a valve must not keep
+	// the crate behind it lit. Hover resolves only for a free hand.
+	if (HeldNow)
+	{
+		Focus->SetHovered(Side, nullptr);
+		return;
+	}
+
+	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+	if (!Interactor || !Subsystem)
+	{
+		Focus->SetHovered(Side, nullptr);
+		return;
+	}
+
+	// The same query the grab claim uses, run every frame instead of only on the rising edge —
+	// which is what makes the object that lights up provably the object you would take.
+	FVector GrabCenter;
+	float GrabRadius = 0.f;
+	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+	Focus->SetHovered(Side, Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side));
 }
 
 void UFXR_InteractionDriver::DrivePokes(EFXR_HandSide Side)
