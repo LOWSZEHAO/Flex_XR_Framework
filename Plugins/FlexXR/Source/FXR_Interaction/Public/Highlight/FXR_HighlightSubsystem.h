@@ -10,6 +10,7 @@
 #include "FXR_HighlightSubsystem.generated.h"
 
 class UFXR_InteractableBase;
+class UMaterialInstanceDynamic;
 class UPrimitiveComponent;
 
 /**
@@ -55,8 +56,24 @@ private:
 	/** The primitives that should light up, honouring the component's Scope when one is present. */
 	void GatherTargets(const UFXR_InteractableBase* Interactable, TArray<UPrimitiveComponent*>& OutTargets) const;
 
-	/** Stencil value a style writes, so one post-process material can branch on style. */
-	static int32 StencilFor(EFXR_HighlightStyle Style);
+	/**
+	 * Stencil value written for a state, which is how the one full-screen outline pass knows what
+	 * colour to draw. State rather than style, because a shared pass cannot read a per-object colour
+	 * but can read the stencil: state is the only axis it can vary along.
+	 */
+	static int32 StencilFor(EFXR_HighlightState State);
+
+	/**
+	 * Put the outline pass on the player camera the first time something outlines. Lazy because the
+	 * player controller need not exist at world BeginPlay, and free when a project never outlines.
+	 */
+	void EnsureOutlineBlendable();
+
+	// Held so the outline colours and thickness can be pushed without rebuilding the blendable.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> OutlineMID;
+
+	bool bOutlineBlendableAdded = false;
 
 	// Guidance is authored state, so it is stored rather than derived. Hover and Selected are not
 	// stored at all — the focus subsystem already owns them and a second copy could drift.

@@ -9,6 +9,11 @@
 #include "GameFramework/Actor.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 
 UFXR_HighlightSubsystem* UFXR_HighlightSubsystem::Get(const UObject* WorldContextObject)
 {
@@ -129,17 +134,64 @@ void UFXR_HighlightSubsystem::GatherTargets(const UFXR_InteractableBase* Interac
 	}
 }
 
-int32 UFXR_HighlightSubsystem::StencilFor(EFXR_HighlightStyle Style)
+int32 UFXR_HighlightSubsystem::StencilFor(EFXR_HighlightState State)
 {
-	// One value per style so a single post-process material can branch rather than needing one
-	// material per style.
-	switch (Style)
+	// The outline pass is one full-screen draw shared by every outlined object, so it cannot read a
+	// per-object colour. Encoding state here is what lets it colour hover differently from guidance.
+	switch (State)
 	{
-	case EFXR_HighlightStyle::Outline:    return 1;
-	case EFXR_HighlightStyle::InnerBlink: return 2;
-	case EFXR_HighlightStyle::Sweep:      return 3;
-	default:                              return 0;
+	case EFXR_HighlightState::Hover:    return 1;
+	case EFXR_HighlightState::Guidance: return 2;
+	case EFXR_HighlightState::Selected: return 3;
+	default:                            return 0;
 	}
+}
+
+void UFXR_HighlightSubsystem::EnsureOutlineBlendable()
+{
+	if (bOutlineBlendableAdded)
+	{
+		return;
+	}
+
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+	if (!Settings)
+	{
+		return;
+	}
+
+	UMaterialInterface* Source = Settings->OutlineMaterial.LoadSynchronous();
+	if (!Source)
+	{
+		return; // cleared on purpose disables outlines; the stencil still gets written for other passes
+	}
+
+	// The view target's camera component, not the camera manager: the manager only carries a blend
+	// cache that is rebuilt every frame, while the component holds a blendable that persists.
+	APlayerCameraManager* Manager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	AActor* ViewTarget = Manager ? Manager->GetViewTarget() : nullptr;
+	UCameraComponent* Camera = ViewTarget ? ViewTarget->FindComponentByClass<UCameraComponent>() : nullptr;
+	if (!Camera)
+	{
+		return; // no local player or no camera yet — retried on the next highlight
+	}
+
+	OutlineMID = UMaterialInstanceDynamic::Create(Source, this);
+	if (!OutlineMID)
+	{
+		return;
+	}
+
+	OutlineMID->SetVectorParameterValue(TEXT("HoverColor"), Settings->GetColorFor(EFXR_HighlightState::Hover));
+	OutlineMID->SetVectorParameterValue(TEXT("GuidanceColor"), Settings->GetColorFor(EFXR_HighlightState::Guidance));
+	OutlineMID->SetVectorParameterValue(TEXT("SelectedColor"), Settings->GetColorFor(EFXR_HighlightState::Selected));
+	OutlineMID->SetScalarParameterValue(TEXT("OutlineThickness"), Settings->OutlineThickness);
+	OutlineMID->SetScalarParameterValue(TEXT("OutlineIntensity"), Settings->HighlightIntensity);
+
+	// Found through the view target rather than requiring a post-process volume or a FlexXR pawn, so
+	// a dropped-in interactable outlines with no level setup and whatever pawn the project ships.
+	Camera->PostProcessSettings.AddBlendable(OutlineMID, 1.f);
+	bOutlineBlendableAdded = true;
 }
 
 void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
@@ -165,7 +217,15 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 			: (Settings ? Settings->GetStyleFor(State) : EFXR_HighlightStyle::None);
 	}
 
-	const int32 Stencil = StencilFor(Style);
+	// Style picks the mechanism, not the colour: Outline is one full-screen pass keyed off the
+	// stencil, while Inner Blink and Sweep draw per mesh through the overlay material slot.
+	const bool bOutline = (Style == EFXR_HighlightStyle::Outline);
+	const int32 Stencil = bOutline ? StencilFor(State) : 0;
+
+	if (bOutline)
+	{
+		EnsureOutlineBlendable();
+	}
 
 	TArray<UPrimitiveComponent*> Targets;
 	GatherTargets(Interactable, Targets);

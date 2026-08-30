@@ -29,7 +29,8 @@ public:
 	/** The style for a state on this object: an override here, else the project default. */
 	EFXR_HighlightStyle ResolveStyle(EFXR_HighlightState State) const;
 
-	FLinearColor ResolveColor() const;
+	/** The colour for a state on this object: an override here, else the project's colour for that state. */
+	FLinearColor ResolveColor(EFXR_HighlightState State) const;
 	float ResolveIntensity() const;
 	float ResolvePulseRate() const;
 
@@ -47,7 +48,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Highlight")
 	TMap<EFXR_HighlightState, EFXR_HighlightStyle> StyleOverrides;
 
-	/** Tick to art-direct this object's colour; otherwise it follows the project. */
+	/**
+	 * Tick to art-direct this object's colour; otherwise it follows the project.
+	 * Applies to Inner Blink and Sweep, which draw per mesh. The Outline style is one full-screen
+	 * pass shared by every outlined object, so it can only vary by state, not per object.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Highlight")
 	bool bOverrideColor = false;
 
