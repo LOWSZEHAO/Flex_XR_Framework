@@ -52,7 +52,7 @@ void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	}
 
 	GripAlpha = FMath::FInterpTo(GripAlpha, Interactor->GetSelectValue(), DeltaTime, BlendSpeed);
-	TriggerAlpha = FMath::FInterpTo(TriggerAlpha, Interactor->GetTriggerValue(), DeltaTime, BlendSpeed);
+	TriggerAlpha = FMath::FInterpTo(TriggerAlpha, Interactor->GetUseValue(), DeltaTime, BlendSpeed);
 
 	// Finger curls: the held grip point's authored pose, else a uniform grip-driven curl.
 	FFXR_FingerCurls Target;

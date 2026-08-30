@@ -39,7 +39,7 @@ public:
 	// unimplemented pure virtuals. The base is Abstract (never placed); concrete types override these.
 	virtual EFXR_InteractorType GetInteractorType() const override { return EFXR_InteractorType::DesktopSim; }
 	virtual float GetSelectValue() const override { return 0.f; }
-	virtual float GetTriggerValue() const override { return 0.f; }
+	virtual float GetUseValue() const override { return 0.f; }
 	//~ End IFXR_Interactor
 
 	/** Set whether this interactor is the active source for its hand (driven by UFXR_XRSubsystem hot-swap). */

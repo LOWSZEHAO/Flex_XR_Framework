@@ -43,7 +43,7 @@ void UFXR_HandInteractor::SampleHandTracking()
 		bHasValidHand = false;
 		bHasValidIndexTip = false;
 		SelectValue = 0.f;
-		TriggerValue = 0.f;
+		UseValue = 0.f;
 		return;
 	}
 
@@ -74,8 +74,8 @@ void UFXR_HandInteractor::SampleHandTracking()
 	{
 		const float PinchDistance = FVector::Dist(Thumb.GetLocation(), Index.GetLocation());
 		SelectValue = 1.f - FMath::Clamp(PinchDistance / PinchDistanceThreshold, 0.f, 1.f);
-		// TODO(FXR_Core): derive the trigger (index-squeeze) from index-finger curl independently of the pinch.
-		TriggerValue = SelectValue;
+		// TODO(FXR_Core): derive Use (index-squeeze) from index-finger curl independently of the pinch.
+		UseValue = SelectValue;
 	}
 }
 

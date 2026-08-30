@@ -17,17 +17,17 @@ void UFXR_ControllerInteractor::BindInput(UEnhancedInputComponent* InputComponen
 
 	const bool bLeft = (HandSide == EFXR_HandSide::Left);
 	UInputAction* SelectAction = bLeft ? InputConfig->SelectActionLeft : InputConfig->SelectActionRight;
-	UInputAction* TriggerAction = bLeft ? InputConfig->TriggerActionLeft : InputConfig->TriggerActionRight;
+	UInputAction* UseAction = bLeft ? InputConfig->UseActionLeft : InputConfig->UseActionRight;
 
 	if (SelectAction)
 	{
 		InputComponent->BindAction(SelectAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleSelect);
 		InputComponent->BindAction(SelectAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleSelect);
 	}
-	if (TriggerAction)
+	if (UseAction)
 	{
-		InputComponent->BindAction(TriggerAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleTrigger);
-		InputComponent->BindAction(TriggerAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleTrigger);
+		InputComponent->BindAction(UseAction, ETriggerEvent::Triggered, this, &UFXR_ControllerInteractor::HandleUse);
+		InputComponent->BindAction(UseAction, ETriggerEvent::Completed, this, &UFXR_ControllerInteractor::HandleUse);
 	}
 }
 
@@ -36,9 +36,9 @@ void UFXR_ControllerInteractor::HandleSelect(const FInputActionValue& Value)
 	SelectValue = Value.Get<float>();
 }
 
-void UFXR_ControllerInteractor::HandleTrigger(const FInputActionValue& Value)
+void UFXR_ControllerInteractor::HandleUse(const FInputActionValue& Value)
 {
-	TriggerValue = Value.Get<float>();
+	UseValue = Value.Get<float>();
 }
 
 void UFXR_ControllerInteractor::SendHapticFeedback(float Amplitude, float Duration)

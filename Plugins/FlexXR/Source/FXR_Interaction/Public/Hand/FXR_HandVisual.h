@@ -37,7 +37,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetGripAlpha() const { return GripAlpha; }
 
-	/** Smoothed trigger blend 0..1 — for index-finger / point poses. */
+	/** Smoothed trigger (Use) blend 0..1 — for index-finger / point poses. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetTriggerAlpha() const { return TriggerAlpha; }
 

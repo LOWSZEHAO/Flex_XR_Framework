@@ -10,8 +10,8 @@ class UPrimitiveComponent;
 class UFXR_GripPoint;
 class UFXR_HandPose;
 
-/** Broadcast on the trigger edges of a held FXR_Grab (trigger pull / index-squeeze). */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabTriggerDelegate);
+/** Broadcast on the use-input edges of a held FXR_Grab (trigger pull / index-squeeze). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
 
 /**
  * UFXR_Grab — free 6-DOF grab.
@@ -21,8 +21,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabTriggerDelegate);
  * pass of the solver behaviour (SetWorldTransform for now); a later slice swaps in the
  * kinematic-target constraint solver and release velocity.
  *
- * Built-in trigger events (§4 FXR_Grab) cover the "hold grip, pull trigger" 80% case: while held,
- * the holding hand's trigger drives OnTriggerStarted / OnTriggerEnded and an analog TriggerValue, so a
+ * Built-in use events (§4 FXR_Grab) cover the "hold grip, pull trigger" 80% case: while held,
+ * the holding hand's Use value drives OnUseStarted / OnUseEnded and an analog UseValue, so a
  * gun or flashlight needs only this component — no separate FXR_Use.
  *
  * Two-handed hold is a checkbox, not a component (§4). With Allow Two-Handed a second hand joins
@@ -56,21 +56,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Grab|TwoHand")
 	bool IsTwoHanded() const { return SecondaryInteractor != nullptr; }
 
-	/** Analog trigger value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
-	UFUNCTION(BlueprintPure, Category = "Grab|Trigger")
-	float GetTriggerValue() const { return CurrentTriggerValue; }
+	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
+	UFUNCTION(BlueprintPure, Category = "Grab|Use")
+	float GetUseValue() const { return CurrentUseValue; }
 
-	/** True while the trigger is held past its threshold (hysteresis-latched). */
-	UFUNCTION(BlueprintPure, Category = "Grab|Trigger")
-	bool IsTriggerHeld() const { return bTriggerHeld; }
+	/** True while use is held past its threshold (hysteresis-latched). */
+	UFUNCTION(BlueprintPure, Category = "Grab|Use")
+	bool IsUsing() const { return bUsing; }
 
-	/** Trigger crossed Trigger Threshold while held — "pull the trigger" (fire, toggle the light). */
-	UPROPERTY(BlueprintAssignable, Category = "Grab|Trigger")
-	FFXR_GrabTriggerDelegate OnTriggerStarted;
+	/** Use crossed Use Threshold while held — "pull the trigger" (fire, toggle the light). */
+	UPROPERTY(BlueprintAssignable, Category = "Grab|Use")
+	FFXR_GrabUseDelegate OnUseStarted;
 
-	/** Trigger fell below Trigger Release Threshold, or the object was released while pulled. */
-	UPROPERTY(BlueprintAssignable, Category = "Grab|Trigger")
-	FFXR_GrabTriggerDelegate OnTriggerEnded;
+	/** Use fell below Use Release Threshold, or the object was released while using. */
+	UPROPERTY(BlueprintAssignable, Category = "Grab|Use")
+	FFXR_GrabUseDelegate OnUseEnded;
 
 protected:
 	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
@@ -88,13 +88,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (EditCondition = "bAllowTwoHanded"))
 	EFXR_TwoHandMode TwoHandMode = EFXR_TwoHandMode::Shared;
 
-	/** Trigger value at or above which OnTriggerStarted fires (controller trigger / tracked-hand index-squeeze). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Trigger", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float TriggerThreshold = 0.5f;
+	/** Use value at or above which OnUseStarted fires (controller trigger / tracked-hand index-squeeze). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float UseThreshold = 0.5f;
 
-	/** Trigger value below which OnTriggerEnded fires — keep under Trigger Threshold for hysteresis. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Trigger", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float TriggerReleaseThreshold = 0.35f;
+	/** Use value below which OnUseEnded fires — keep under Use Threshold for hysteresis. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float UseReleaseThreshold = 0.35f;
 
 	/** How fast the object swings onto aim when the second hand joins (higher = snappier; ~10 is roughly 100 ms). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (ClampMin = "0.1", EditCondition = "bAllowTwoHanded"))
@@ -154,6 +154,6 @@ private:
 	FVector TrackedLinearVelocity = FVector::ZeroVector;
 	FVector TrackedAngularVelocity = FVector::ZeroVector;
 
-	float CurrentTriggerValue = 0.f;
-	bool bTriggerHeld = false;
+	float CurrentUseValue = 0.f;
+	bool bUsing = false;
 };

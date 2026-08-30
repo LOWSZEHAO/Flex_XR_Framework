@@ -62,8 +62,8 @@ public:
 	/** Normalized 0..1 select strength — grip on controllers, grab-pinch on tracked hands. */
 	virtual float GetSelectValue() const = 0;
 
-	/** Normalized 0..1 trigger strength — trigger on controllers, index-squeeze on tracked hands. */
-	virtual float GetTriggerValue() const = 0;
+	/** Normalized 0..1 use strength — trigger on controllers, index-squeeze on tracked hands. */
+	virtual float GetUseValue() const = 0;
 
 	/** Fire a haptic pulse on this interactor's device; no-op where unsupported. */
 	virtual void SendHapticFeedback(float Amplitude, float Duration) = 0;

@@ -276,12 +276,12 @@ void AFXR_Pawn::DrawDebugInteractors()
 		if (Right)
 		{
 			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Yellow,
-				FString::Printf(TEXT("R  [%s]  select=%.2f  trig=%.2f"), TypeName(Right), Right->GetSelectValue(), Right->GetTriggerValue()));
+				FString::Printf(TEXT("R  [%s]  select=%.2f  use=%.2f"), TypeName(Right), Right->GetSelectValue(), Right->GetUseValue()));
 		}
 		if (Left)
 		{
 			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Cyan,
-				FString::Printf(TEXT("L  [%s]  select=%.2f  trig=%.2f"), TypeName(Left), Left->GetSelectValue(), Left->GetTriggerValue()));
+				FString::Printf(TEXT("L  [%s]  select=%.2f  use=%.2f"), TypeName(Left), Left->GetSelectValue(), Left->GetUseValue()));
 		}
 	}
 }
