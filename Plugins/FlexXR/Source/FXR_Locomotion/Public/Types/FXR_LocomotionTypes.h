@@ -52,13 +52,12 @@ enum class EFXR_LandingRotation : uint8
 	FaceArc          UMETA(DisplayName = "Face Arc")
 };
 
-/** Turning style. Snap and smooth are mutually exclusive unless Both. */
+/** Turning style. */
 UENUM(BlueprintType)
 enum class EFXR_TurnMode : uint8
 {
 	Snap   UMETA(DisplayName = "Snap"),
 	Smooth UMETA(DisplayName = "Smooth"),
-	Both   UMETA(DisplayName = "Both"),
 	None   UMETA(DisplayName = "None")
 };
 
