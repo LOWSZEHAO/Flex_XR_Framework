@@ -282,13 +282,13 @@ Left Turn Mode:          None ▾            (None / Snap / Smooth)
 Right Hand:              Teleport ▾
 Right Turn Mode:         Snap ▾
 
-── Movement ─────────────────────────────────────────────────
+── Smooth Move ──────────────────────────────────────────────
 Move Direction Source:   Head Relative ▾   (Head / Hand / Hip Relative)
 Smooth Move Speed:       2.5 m/s
-Transition:              Fade ▾            (Fade / Blink / Dash / Instant)
 
 ── Teleport ─────────────────────────────────────────────────
 Aim Style:               Projectile Arc ▾  (Projectile Arc / Straight Ray)
+Transition:              Fade ▾            (Fade / Blink / Dash / Instant)
 Max Distance:            10 m
 Validation:              NavMesh ▾         (NavMesh / Surface Angle / Anchors Only / Custom Channel)
 Max Surface Angle:       35°               [EditCondition: Validation == Surface Angle]
