@@ -25,9 +25,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
  * the holding hand's Use value drives OnUseStarted / OnUseEnded and an analog UseValue, so a
  * gun or flashlight needs only this component — no separate FXR_Use.
  *
- * Two-handed hold is a checkbox, not a component (§4): with Allow Two-Handed the second hand
- * joins the hold and aims the object — position from the first hand, orientation from the line
- * between the hands (rifle-style). Either hand may leave; the survivor carries the hold.
+ * Two-handed hold is a checkbox, not a component (§4). With Allow Two-Handed a second hand joins
+ * the hold and glues to its grip point; Two Hand Mode then decides whether it steers. Shared
+ * solves both hands symmetrically — the object's grip-to-grip axis follows the line between them,
+ * so either hand can drive (a broom sweeps from whichever hand moves). Support lets the second
+ * hand hold on without reorienting anything. Either hand may leave; the survivor carries on.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Grab : public UFXR_InteractableBase
@@ -46,6 +48,9 @@ public:
 
 	/** The hand pose the given hand forms (its grip point's pose), or null (procedural hold). */
 	virtual UFXR_HandPose* GetActiveHandPose(EFXR_HandSide Side) const override;
+
+	/** The second hand glues to its grip point; the first keeps the controller pose (the object came to it). */
+	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const override;
 
 	/** True while a second hand is joined to the hold. */
 	UFUNCTION(BlueprintPure, Category = "Grab|TwoHand")
@@ -72,9 +77,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
 	float ThrowVelocityScale = 1.f;
 
-	/** Let a second hand join the hold to aim the object (position from the first hand, direction from the second). */
+	/**
+	 * Let a second hand join the hold to aim the object (rifles, big tools, steering). Off by
+	 * default: for an ordinary prop a second hand swinging the aim reads as a glitch, not a feature.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand")
-	bool bAllowTwoHanded = true;
+	bool bAllowTwoHanded = false;
+
+	/** Whether the second hand steers the object, or merely holds on while the first hand poses it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (EditCondition = "bAllowTwoHanded"))
+	EFXR_TwoHandMode TwoHandMode = EFXR_TwoHandMode::Shared;
 
 	/** Use value at or above which OnUseStarted fires (controller trigger / tracked-hand index-squeeze). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -84,9 +96,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float UseReleaseThreshold = 0.35f;
 
+	/** How fast the object swings onto aim when the second hand joins (higher = snappier; ~10 is roughly 100 ms). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand", meta = (ClampMin = "0.1", EditCondition = "bAllowTwoHanded"))
+	float TwoHandAimSpeed = 10.f;
+
 private:
-	/** Orientation frame for a two-hand hold: primary grip location, X toward the secondary grip. */
-	FTransform MakeTwoHandFrame() const;
+	/**
+	 * Two-hand pose, solved symmetrically: the object's grip-to-grip axis is aligned to the line
+	 * between the hands, their midpoints are matched, and roll comes from both wrists. Neither hand
+	 * is an anchor, so moving either one does the natural thing — a broom sweeps whichever hand
+	 * drives it — and no role ever has to switch mid-hold.
+	 */
+	FTransform MakeTwoHandTransform() const;
+	/** Re-resolve where each hand holds the object — a rail slides under the hand, a point grip does not. */
+	void UpdateGripLocals();
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
 	void ReanchorToPrimary();
 
@@ -104,7 +127,27 @@ private:
 	IFXR_Interactor* PrimaryInteractor = nullptr;
 	IFXR_Interactor* SecondaryInteractor = nullptr;
 	TWeakObjectPtr<UFXR_HandPose> SecondaryHandPose;
-	FTransform TwoHandOffset = FTransform::Identity;
+	TWeakObjectPtr<UFXR_GripPoint> PrimaryGripPoint;
+	TWeakObjectPtr<UFXR_GripPoint> SecondaryGripPoint;
+
+	// Where each hand holds the object, in its local space. Re-resolved every frame so a rail slides
+	// under the hand; that freedom is what lets both hands sit exactly on a broom shaft whatever
+	// their spacing, instead of one of them hanging in the air.
+	FVector PrimaryGripLocal = FVector::ZeroVector;
+	FVector SecondaryGripLocal = FVector::ZeroVector;
+	bool bHasSecondaryGrip = false;
+	/** Object-space frame of the grip-to-grip axis, captured on join — the two-hand rotation reference. */
+	FQuat TwoHandLocalFrame = FQuat::Identity;
+
+	// Whether the primary hand mesh currently rides its grip point. Sticky: once attached it stays
+	// attached through a re-snap, so a promoted hand travels home with the object instead of
+	// teleporting to the controller the instant the other hand lets go.
+	bool bPrimaryAttached = false;
+
+	// The second hand rarely lands exactly on its grip, so the aim correction is eased in over a
+	// moment rather than snapping the object the instant the hand closes.
+	FTransform TwoHandJoinOffset = FTransform::Identity;
+	float TwoHandBlend = 1.f;
 
 	FVector LastLocation = FVector::ZeroVector;
 	FQuat LastRotation = FQuat::Identity;

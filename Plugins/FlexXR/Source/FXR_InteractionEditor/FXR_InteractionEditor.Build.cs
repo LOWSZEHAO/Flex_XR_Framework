@@ -20,6 +20,10 @@ public class FXR_InteractionEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd",
+			"PropertyEditor", // detail customizations (hiding inherited fields that do not apply)
+			"Slate",
+			"SlateCore",
+			"FXR_Core",       // interactor query-shape gizmo (grab sphere + poke tip)
 			"FXR_Interaction"
 		});
 	}

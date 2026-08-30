@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.5 (GripPoint authority & ownership — ADR-007)
+**Version:** 0.6 (per-hand locomotion input — ADR-008; climbing — ADR-009)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -82,7 +82,8 @@ Depends on **FXR_Interaction** (never the reverse) for two reasons:
    The locomotion component queries interactor state and suppresses input for any hand that currently owns an
    interaction.
 
-Ships: `FXR_Locomotion` (pawn component), `FXR_TeleportAnchor` and `FXR_TeleportBlocker` (world components).
+Ships: `FXR_Locomotion` (pawn component), `FXR_TeleportAnchor`, `FXR_TeleportBlocker` and `FXR_ClimbHold`
+(world components), plus `UFXR_TeleportRegistry` (world subsystem).
 
 ---
 
@@ -270,17 +271,21 @@ comfort settings are global, and hand ownership is shared. Splitting them into s
 require an arbiter anyway — so the arbiter **is** the component. (Same reasoning as two-hand grab being a
 checkbox, not a component. See ADR-005.)
 
-**Detail panel:**
+**The panel describes each hand, not each mode** (ADR-008). A thumbstick has two axes, and the component spends
+them explicitly: forward is that hand's movement, sideways is its turn — or strafe, when it has no turn mode.
+An unplayable layout is therefore impossible to author rather than something to warn about.
 
 ```
-Preset:  Comfort ▾        (Comfort / Standard / Free / Custom)
-                          └ fills every field below; editing any field flips to Custom
+── Hands ────────────────────────────────────────────────────
+Left Hand:               Smooth Move ▾     (None / Teleport / Smooth Move)
+Left Turn Mode:          None ▾            (None / Snap / Smooth)
+Right Hand:              Teleport ▾
+Right Turn Mode:         Snap ▾
 
 ── Movement ─────────────────────────────────────────────────
-☑ Allow Teleport        ☑ Allow Smooth Move        ☐ Allow Climb
-Smooth Move Direction:   Head Relative ▾   (Head / Hand / Hip Relative)
+Move Direction Source:   Head Relative ▾   (Head / Hand / Hip Relative)
 Smooth Move Speed:       2.5 m/s
-Teleport Transition:     Fade ▾            (Fade / Blink / Dash / Instant)
+Transition:              Fade ▾            (Fade / Blink / Dash / Instant)
 
 ── Teleport ─────────────────────────────────────────────────
 Aim Style:               Projectile Arc ▾  (Projectile Arc / Straight Ray)
@@ -288,40 +293,51 @@ Max Distance:            10 m
 Validation:              NavMesh ▾         (NavMesh / Surface Angle / Anchors Only / Custom Channel)
 Max Surface Angle:       35°               [EditCondition: Validation == Surface Angle]
 Landing Rotation:        Keep Facing ▾     (Keep Facing / Thumbstick Choose / Face Arc)
-Fade Duration:           0.15 s
+Fade Duration:           0.15 s            [EditCondition: Transition == Fade or Dash]
 
 ── Turning ──────────────────────────────────────────────────
-Turn Mode:               Snap ▾            (Snap / Smooth / Both / None)
-Snap Angle:              30°               [EditCondition: Snap or Both]
-Smooth Turn Rate:        90 °/s            [EditCondition: Smooth or Both]
+Snap Angle:              30°               [EditCondition: either hand snaps]
+Smooth Turn Rate:        90 °/s            [EditCondition: either hand turns smoothly]
+
+── Climbing ─────────────────────────────────────────────────
+Climb Fall Gravity:      980 cm/s²
+Max Climb Fall Speed:    1200 cm/s
 
 ── Comfort ──────────────────────────────────────────────────
 Vignette:                Dynamic ▾         (Off / Dynamic / Always)
 Vignette Strength:       0.6
 ☑ Vignette On Turn      ☑ Vignette On Smooth Move
 
-── Visuals ──────────────────────────────────────────────────
-Arc mesh · reticle mesh · valid/invalid materials (arc + reticle)
+── Hand Tracking ────────────────────────────────────────────
+Hand Pinch Threshold:    0.7               (middle-finger pinch; index pinch is grab)
 
-── Training ─────────────────────────────────────────────────
-☐ Expose to Training     InteractionId: "MoveTo_Station_A"
+── Input ────────────────────────────────────────────────────
+Locomotion Context:      IMC_FXR_Locomotion
+Left Stick Action:       IA_FXR_Stick_L    (Axis2D)
+Right Stick Action:      IA_FXR_Stick_R    (Axis2D)
+Teleport Activation Threshold: 0.6
+
+── Visuals ──────────────────────────────────────────────────
+Reticle mesh · valid/invalid materials · vignette material
 ```
 
-**Presets** do the heavy lifting, in keeping with the framework's preset-first principle:
+**Transitions.** `Fade` blacks out and back over Fade Duration. `Blink` is the same on a fixed short cut that
+cannot be slowed — a blink a designer can stretch is just a fade. `Dash` slides the play space with the world
+visible, eased at both ends, and is the only transition that creates optical flow, so it drives the comfort
+vignette. `Instant` cuts.
 
-| Preset | Teleport | Smooth move | Turn | Vignette |
-|---|---|---|---|---|
-| **Comfort** | ✅ fade | ❌ | Snap 30° | Always |
-| **Standard** | ✅ fade | ✅ 2.5 m/s | Snap 30° | Dynamic |
-| **Free** | ✅ dash | ✅ 4 m/s | Smooth 90°/s | Off |
-| **Custom** | — | — | — | — |
+**Presets were removed.** Four preset-owned fields had grown to seven across two sections, and a preset that
+silently rewrites half a panel makes every value in it untrustworthy. Defaults now read as the layout they
+produce.
 
-**Enums:** `EFXR_LocomotionPreset`, `EFXR_TeleportTransition`, `EFXR_TeleportAim`, `EFXR_TeleportValidation`,
-`EFXR_LandingRotation`, `EFXR_TurnMode`, `EFXR_VignetteMode`, `EFXR_MoveDirectionSource`.
+**Enums:** `EFXR_HandMovement`, `EFXR_TurnMode`, `EFXR_TeleportTransition`, `EFXR_TeleportAim`,
+`EFXR_TeleportValidation`, `EFXR_LandingRotation`, `EFXR_VignetteMode`, `EFXR_MoveDirectionSource`.
 
 **Runtime API:** `SetLocomotionEnabled(bool)`, `SetTeleportEnabled(bool)`, `SetTurnEnabled(bool)`,
-`TeleportToLocation(FVector, FRotator)`, `SetPreset(EFXR_LocomotionPreset)`. Same enable/disable semantics as
-`UFXR_InteractableBase` — one mechanism, two callers (games gate directly; SOP hard-lock steps call the same API).
+`TeleportToLocation(FVector, FRotator)`, `IsAimingTeleport()`, `GetVignetteIntensity()`. Same enable/disable
+semantics as `UFXR_InteractableBase` — one mechanism, two callers (games gate directly; SOP hard-lock steps call
+the same API). `SetTeleportEnabled` gates a runtime flag separate from the authored hand assignment, so a lock
+can suspend the mode without forgetting which hand owns it.
 
 ### FXR_TeleportAnchor *(world component)*
 A fixed, legal destination. With `Validation = Anchors Only`, the player may *only* land on anchors — the strict
@@ -330,7 +346,19 @@ industrial variant ("you may stand at exactly these four positions at this machi
 
 ### FXR_TeleportBlocker *(world component)*
 A volume that invalidates any landing point inside it, regardless of what NavMesh says. Hazard zones, edges,
-scripted no-go areas.
+scripted no-go areas. `Box Extent` is a half-size in world cm along the component's own axes — component scale
+does not apply, so what the debug box draws is exactly what is tested.
+
+Both anchors and blockers draw in the **level viewport as well as in play** (`Draw Debug`), because a landing
+spot and an invisible volume are things you position by eye. Both fire `On Aim` / `On Exit` as the reticle
+enters and leaves them, and the anchor adds `On Teleported` — enough to drive a highlight or a sound without
+polling. A visual is a Static Mesh Component added under them in the Blueprint.
+
+### FXR_ClimbHold *(world component)*
+A ladder rung, ledge or pipe the player can pull themselves along. Subclasses `UFXR_InteractableBase`, so
+grabbing it is ordinary detection with grip points and hand poses; it only marks the hold as climbable. The
+play space is moved by `FXR_Locomotion`, never from here — see ADR-009. Both hands may hold it, and
+hand-over-hand across separate holds works because each grab re-anchors. Letting go above the floor falls.
 
 ---
 
@@ -614,7 +642,7 @@ Day-one in FXR_Core: `EFXR_Mode { VR, MR }` threaded through pawn/rig and render
 |---|---|---|
 | **1 — FXR_Core** | Repo scaffolding (README skeleton, `CODING_STANDARDS.md`, CI, ADR seed); pawn/rig, `IFXR_Interactor` (controller + tracked hand + desktop sim), input mapping, capability detection, event bus, MR flags | 3–4 wks |
 | **2 — Interaction core** | `UFXR_InteractionSubsystem` + detection pipeline, `FFXR_ConstraintSolver`, InteractableBase (enable API, driven-component rule), FXR_Grab (+ use events, two-hand), FXR_GripPoint + pose pipeline + retargeting, FXR_Latch, FXR_Press | 4–6 wks |
-| **2.5 — FXR_Locomotion** | Teleport (arc, validation, room-scale origin, transitions), smooth move, snap/smooth turn, comfort vignette, hand-tracking gesture parity + fallback, anchors & blockers, presets | 2–3 wks |
+| **2.5 — FXR_Locomotion** | Teleport (arc, validation, room-scale origin, all four transitions, all three landing modes), per-hand control layout (ADR-008), smooth move, snap/smooth turn, comfort vignette, hand-tracking pinch gesture + fallback, anchors & blockers, climbing (ADR-009) | 2–3 wks |
 | **3 — FXR_UI + presentation** | Spatial UI kit, motion-design spec, FXR_RayTarget + focus manager, FXR_Socket, highlight system (3 styles, per-tier impls), guidance primitives, validation panel | 3–4 wks |
 | **4 — FXR_Training + SOP demo** | Step graph (`FFXR_StepRunner` + `UFXR_StepGraph` DataAssets, per ADR-004), modes, reporting; **fire safety training demo** built entirely on FlexXR | 4–6 wks |
 | **5 — Optimization + standalone** | Quest build, Insights profiling, budget enforcement, **performance case study** | 3–4 wks |

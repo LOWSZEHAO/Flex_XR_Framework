@@ -58,6 +58,22 @@ public:
 	/** True if the given interactable is one of this grip point's resolved owners. */
 	bool IsOwnedBy(const UFXR_InteractableBase* Interactable) const;
 
+	/** True when this is a rail (a grabbable extent) rather than a single point. */
+	bool IsRail() const { return RailLength > KINDA_SMALL_NUMBER; }
+
+	/** Rail length (cm) along the component's local X, centred on the component. 0 = point grip. */
+	float GetRailLength() const { return RailLength; }
+
+	/**
+	 * Where on this grip a hand at WorldLocation lands: the nearest point along the rail, or simply
+	 * the component's location for a point grip. Reach, snapping and hand attachment all measure
+	 * from here, which is what lets a hand take a handrail anywhere along its length.
+	 */
+	FVector GetClosestPointTo(const FVector& WorldLocation) const;
+
+	/** The authored grip pose for a hand at WorldLocation — component rotation, rail-slid location. */
+	FTransform GetGripTransformFor(const FVector& WorldLocation) const;
+
 	int32 GetPriority() const { return Priority; }
 	float GetActivationRadius() const { return ActivationRadius; }
 	EFXR_GripSnapMode GetSnapMode() const { return SnapMode; }
@@ -88,6 +104,14 @@ protected:
 	/** Radius (cm) from the hand's grip within which this point is a candidate. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.5"))
 	float ActivationRadius = 8.f;
+
+	/**
+	 * Rail length (cm) along this component's local X, centred on it — hands grab anywhere along a
+	 * handrail, pipe or rifle handguard and slide, instead of snapping to one spot. 0 = a single
+	 * point. The Activation Radius then measures from the rail, so it reads as the rail's thickness.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.0"))
+	float RailLength = 0.f;
 
 	/** How the object arrives at this grip pose when grabbed here. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")

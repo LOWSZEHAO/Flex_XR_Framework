@@ -11,7 +11,7 @@
 
 UFXR_InteractableBase::UFXR_InteractableBase()
 {
-	// Tick exists only for the optional debug draw; disabled unless bDrawDebugRadius is set.
+	// Tick exists only for the optional debug draw; disabled unless Debug Draw is set.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
@@ -25,35 +25,43 @@ void UFXR_InteractableBase::BeginPlay()
 		Subsystem->RegisterInteractable(this);
 	}
 
-	SetComponentTickEnabled(bDrawDebugRadius);
+	SetComponentTickEnabled(IsDrawDebugEnabled());
 }
 
 void UFXR_InteractableBase::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bDrawDebugRadius)
+	if (IsDrawDebugEnabled())
 	{
-		if (const UWorld* World = GetWorld())
+		DrawInteractionDebug();
+	}
+}
+
+void UFXR_InteractableBase::DrawInteractionDebug() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
+	if (HasOwnedGripPoints())
+	{
+		// Grip points are the only grab surface (ADR-007) — show state on them, not a
+		// misleading mesh radius.
+		for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
 		{
-			const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
-			if (HasOwnedGripPoints())
+			if (const UFXR_GripPoint* Point = WeakPoint.Get())
 			{
-				// Grip points are the only grab surface (ADR-007) — show state on them, not a
-				// misleading mesh radius.
-				for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
-				{
-					if (const UFXR_GripPoint* Point = WeakPoint.Get())
-					{
-						DrawDebugSphere(World, Point->GetComponentLocation(), Point->GetActivationRadius(), 12, Color, false, -1.f, 0, 0.5f);
-					}
-				}
-			}
-			else
-			{
-				DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
+				DrawDebugSphere(World, Point->GetComponentLocation(), Point->GetActivationRadius(), 12, Color, false, -1.f, 0, 0.5f);
 			}
 		}
+	}
+	else
+	{
+		DrawDebugSphere(World, GetInteractionLocation(), ActivationRadius, 16, Color, false, -1.f, 0, 0.5f);
 	}
 }
 
@@ -134,7 +142,7 @@ bool UFXR_InteractableBase::IsInGrabReach(const FVector& GrabCenter, float GrabR
 			{
 				continue;
 			}
-			const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+			const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetClosestPointTo(GrabCenter));
 			const float Reach = Point->GetActivationRadius() + GrabRadius;
 			if (DistanceSq <= FMath::Square(Reach) && DistanceSq < OutDistanceSq)
 			{
@@ -189,7 +197,7 @@ UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interact
 		{
 			continue;
 		}
-		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetComponentLocation());
+		const float DistanceSq = FVector::DistSquared(GrabCenter, Point->GetClosestPointTo(GrabCenter));
 		const float Reach = Point->GetActivationRadius() + GrabRadius;
 		if (DistanceSq > FMath::Square(Reach))
 		{

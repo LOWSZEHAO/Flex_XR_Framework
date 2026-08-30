@@ -70,8 +70,11 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
-	/** Whether the activation-radius debug draw / viewport gizmo is enabled. */
-	bool IsDrawDebugEnabled() const { return bDrawDebugRadius; }
+	/** Whether any debug draw / viewport gizmo is enabled. */
+	bool IsDrawDebugEnabled() const { return DebugDraw != EFXR_DebugDraw::Off; }
+
+	/** Whether thresholds, limits and live state are drawn on top of the basic shape. */
+	bool IsFullDebug() const { return DebugDraw == EFXR_DebugDraw::Full; }
 
 	/** World location used for narrow-phase scoring (the driven component, else this component). */
 	FVector GetInteractionLocation() const;
@@ -101,7 +104,7 @@ public:
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
 	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).
 	 */
-	virtual bool GetHandAttachTransform(FTransform& OutTransform) const { return false; }
+	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const { return false; }
 
 protected:
 	/** The primitive this interactable moves/affects: the attach-parent primitive, else the actor root primitive. */
@@ -112,6 +115,9 @@ protected:
 
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);
+
+	/** Runtime debug draw while Draw Debug Radius is set — override to draw a type-specific shape. */
+	virtual void DrawInteractionDebug() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	bool bInteractionEnabled = true;
@@ -129,9 +135,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Training", meta = (EditCondition = "bExposeToTraining"))
 	FName InteractionId;
 
-	/** Draw the activation radius at runtime (green = held, orange = available, red = disabled). */
+	/** Authoring debug: Basic draws the defining shape, Full adds thresholds/limits and live state. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction|Debug")
-	bool bDrawDebugRadius = false;
+	EFXR_DebugDraw DebugDraw = EFXR_DebugDraw::Off;
 
 	bool bHeld = false;
 

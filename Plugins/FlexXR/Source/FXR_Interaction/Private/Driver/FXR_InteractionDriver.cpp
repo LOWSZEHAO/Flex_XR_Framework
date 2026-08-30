@@ -19,8 +19,8 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_Tick);
 
-	DriveHand(EFXR_HandSide::Left, LeftHeld, DeltaTime);
-	DriveHand(EFXR_HandSide::Right, RightHeld, DeltaTime);
+	DriveHand(EFXR_HandSide::Left, LeftHeld, LeftPrevSelect, DeltaTime);
+	DriveHand(EFXR_HandSide::Right, RightHeld, RightPrevSelect, DeltaTime);
 	DrivePokes(EFXR_HandSide::Left);
 	DrivePokes(EFXR_HandSide::Right);
 }
@@ -73,15 +73,21 @@ UFXR_InteractableBase* UFXR_InteractionDriver::GetHeldInteractable(EFXR_HandSide
 	return (Side == EFXR_HandSide::Left ? LeftHeld : RightHeld).Get();
 }
 
-void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_InteractableBase>& Held, float DeltaTime)
+void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_InteractableBase>& Held, float& PrevSelect, float DeltaTime)
 {
 	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
 	if (!Interactor)
 	{
+		PrevSelect = 0.f;
 		return;
 	}
 
 	const float Select = Interactor->GetSelectValue();
+
+	// Claiming needs the rising edge, not merely a held grip: otherwise a closed hand moving through
+	// the world picks up everything it touches.
+	const bool bGrabPressed = (Select >= GrabThreshold) && (PrevSelect < GrabThreshold);
+	PrevSelect = Select;
 
 	if (UFXR_InteractableBase* Current = Held.Get())
 	{
@@ -104,7 +110,7 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 		return;
 	}
 
-	if (Select >= GrabThreshold)
+	if (bGrabPressed)
 	{
 		FVector GrabCenter;
 		float GrabRadius = 0.f;

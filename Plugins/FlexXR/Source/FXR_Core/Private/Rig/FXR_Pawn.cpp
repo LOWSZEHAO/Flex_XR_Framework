@@ -116,6 +116,16 @@ void AFXR_Pawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	}
 }
 
+USceneComponent* AFXR_Pawn::GetTrackingOriginComponent() const
+{
+	return VROrigin;
+}
+
+USceneComponent* AFXR_Pawn::GetHMDComponent() const
+{
+	return Camera;
+}
+
 IFXR_Interactor* AFXR_Pawn::GetActiveInteractor(EFXR_HandSide Side) const
 {
 	UFXR_InteractorComponent* Ordered[3] = { nullptr, nullptr, DesktopSim };
@@ -229,6 +239,12 @@ void AFXR_Pawn::DrawDebugInteractors()
 		float Radius = 0.f;
 		Interactor->GetGrabSphere(Center, Radius);
 		DrawDebugSphere(World, Center, Radius, 12, Color, false, -1.f, 0, 0.5f);
+
+		// Poke tip (green) — the fingertip probe driving FXR_Press; tune Poke Local Offset against it.
+		FVector PokeLocation;
+		float PokeRadius = 0.f;
+		Interactor->GetPokeTip(PokeLocation, PokeRadius);
+		DrawDebugSphere(World, PokeLocation, PokeRadius, 8, FColor::Green, false, -1.f, 0, 0.3f);
 
 		FVector Origin, Direction;
 		Interactor->GetFarRay(Origin, Direction);

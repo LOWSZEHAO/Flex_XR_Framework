@@ -30,6 +30,10 @@ Build/
 Plugins/**/Binaries/
 Plugins/**/Intermediate/
 
+# Third-party dev tooling linked in from outside the repo (not part of the framework).
+Plugins/Uplink/
+.mcp.json
+
 # ── OS ─────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

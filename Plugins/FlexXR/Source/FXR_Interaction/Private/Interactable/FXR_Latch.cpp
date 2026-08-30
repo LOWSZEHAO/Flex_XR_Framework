@@ -77,7 +77,7 @@ void UFXR_Latch::OnBegin(IFXR_Interactor* Interactor)
 	HandSnapAlpha = (HandSnapMode == EFXR_GripSnapMode::Smooth) ? 0.f : 1.f;
 	if (GripPoint)
 	{
-		EasedHandTransform.Blend(Interactor->GetGripTransform(), GripPoint->GetComponentTransform(), HandSnapAlpha);
+		EasedHandTransform.Blend(Interactor->GetGripTransform(), GripPoint->GetGripTransformFor(Interactor->GetGripTransform().GetLocation()), HandSnapAlpha);
 	}
 
 	const FVector HandLocation = Interactor->GetGripTransform().GetLocation();
@@ -107,7 +107,7 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 	// (grip point, else the driven mesh), release it rather than driving from an implausible reach.
 	if (DetachDistance > 0.f)
 	{
-		const FVector RefLocation = ActiveGripPoint.IsValid() ? ActiveGripPoint->GetComponentLocation() : GetInteractionLocation();
+		const FVector RefLocation = ActiveGripPoint.IsValid() ? ActiveGripPoint->GetClosestPointTo(HandLocation) : GetInteractionLocation();
 		if (FVector::DistSquared(HandLocation, RefLocation) > FMath::Square(DetachDistance))
 		{
 			ForceRelease();
@@ -150,7 +150,7 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		{
 			HandSnapAlpha = FMath::Min(HandSnapAlpha + DeltaTime * HandSnapSpeed, 1.f);
 		}
-		EasedHandTransform.Blend(Interactor->GetGripTransform(), ActiveGripPoint->GetComponentTransform(), HandSnapAlpha);
+		EasedHandTransform.Blend(Interactor->GetGripTransform(), ActiveGripPoint->GetGripTransformFor(HandLocation), HandSnapAlpha);
 	}
 }
 
@@ -176,7 +176,7 @@ UFXR_HandPose* UFXR_Latch::GetActiveHandPose(EFXR_HandSide Side) const
 	return ActiveHandPose.Get();
 }
 
-bool UFXR_Latch::GetHandAttachTransform(FTransform& OutTransform) const
+bool UFXR_Latch::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const
 {
 	// Pin the hand to the handle (eased per the grip point's snap mode) so it tracks the object as
 	// the latch moves. Snap mode None — or no grip point — keeps the hand on the controller.

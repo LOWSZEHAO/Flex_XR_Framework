@@ -25,6 +25,17 @@ enum class EFXR_AlreadyHeldPolicy : uint8
 	ForceRelease    UMETA(DisplayName = "Force Release")
 };
 
+/** How much authoring debug an interactable draws (viewport gizmo and runtime). */
+UENUM(BlueprintType)
+enum class EFXR_DebugDraw : uint8
+{
+	Off   UMETA(DisplayName = "Off"),
+	// The defining shape only — grab radius, latch arc, press face.
+	Basic UMETA(DisplayName = "Basic (shape only)"),
+	// Adds thresholds, limits, direction markers and live state.
+	Full  UMETA(DisplayName = "Full (+ thresholds and live state)")
+};
+
 /** Which hand(s) a grip point accepts. */
 UENUM(BlueprintType)
 enum class EFXR_GripHandedness : uint8
@@ -41,6 +52,18 @@ enum class EFXR_GripSnapMode : uint8
 	None    UMETA(DisplayName = "None (hold where grabbed)"),
 	Snap    UMETA(DisplayName = "Snap (instant)"),
 	Smooth  UMETA(DisplayName = "Smooth (interpolate)")
+};
+
+/** What a second hand does to a two-handed hold. */
+UENUM(BlueprintType)
+enum class EFXR_TwoHandMode : uint8
+{
+	// Both hands steer: the object's grip-to-grip axis follows the line between the hands, so
+	// either hand can drive it — rifles, brooms, hoses, wheels.
+	Shared  UMETA(DisplayName = "Shared (both hands steer)"),
+	// The second hand attaches to its grip but the first hand alone poses the object — for props
+	// where a second hand reorienting things would read as a glitch (crates, panels).
+	Support UMETA(DisplayName = "Support (second hand does not steer)")
 };
 
 /**
