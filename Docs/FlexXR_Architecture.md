@@ -99,11 +99,6 @@ Interaction
 ├─ Interactor Filter:  Any ▾      (hand side / interactor type / gameplay-tag
 │                                  conditions, e.g. "State.HasGloves")
 ├─ Driven Component:   Auto ▾     (see resolution rule below)
-Highlight
-├─ Highlight Style:    Outline ▾  (Outline / Inner Blink / Sweep /
-│                                  Project Default / None)
-├─ Highlight Color:    ▉ Bright Yellow (default)
-└─ Sweep Direction:    Left → Right ▾   (shown only when Style = Sweep)
 Training
 ├─ ☐ Expose to Training
 └─ InteractionId:      "Open_FireDoor_A"
@@ -247,11 +242,17 @@ Every interactable already gets the default highlight automatically (Outline, br
 ```
 ├─ Per-state style overrides   (Hover / Guidance / Selected → any style)
 ├─ Color, intensity, pulse rate
-└─ Scope:  Everything ▾   (Everything / Parent Only)
+└─ Scope:  Everything ▾   (Everything / Target Mesh)
 ```
 
 - **Everything** *(default)* — all primitives on the actor + attached children glow as one object (extinguisher incl. pin, handle, hose). Hand meshes and other actors auto-excluded.
-- **Parent Only** — only the driven/parent mesh: "look at this *part*" (SOP guidance on just the safety pin).
+- **Target Mesh** — only the driven mesh: "look at this *part*" (SOP guidance on just the safety pin).
+
+**No highlight fields on `UFXR_InteractableBase`.** Defaults come from project settings and this component is
+the single place to override them. Putting Style/Color/Sweep on the base would grow every Grab, Latch, Press
+and Socket panel with fields they do not need, and would give colour two homes that can disagree. The cost —
+recolouring one object means adding a component rather than typing in a field — is the right trade for a rare
+case, and it sets the pattern for optional presentation components generally.
 
 **Three highlight styles**, each bound to a semantic state so training and games speak the same language:
 
