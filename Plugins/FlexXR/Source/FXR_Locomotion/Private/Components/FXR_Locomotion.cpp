@@ -22,6 +22,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/ConstructorHelpers.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -41,11 +43,43 @@ namespace
 	// the current one rather than snapping to whatever noise the stick reports near centre.
 	constexpr float LandingFacingDeadzone = 0.4f;
 
+	// The shipped arc mesh spans this far along +X, so a span stretches it by Length/ArcMeshLength.
+	constexpr float ArcMeshLength = 100.f;
+
 }
 
 UFXR_Locomotion::UFXR_Locomotion()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	// Enabled and automatic by default (design principle 2): comfort and the aim reticle ship with
+	// assets, so both work on a bare component instead of quietly needing content authored first.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultVignette(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultReticle(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultArc(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultValid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Valid.M_FXR_Reticle_Valid"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultInvalid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Invalid.M_FXR_Reticle_Invalid"));
+
+	if (DefaultVignette.Succeeded())
+	{
+		VignetteMaterial = DefaultVignette.Object;
+	}
+	if (DefaultReticle.Succeeded())
+	{
+		ReticleMesh = DefaultReticle.Object;
+	}
+	if (DefaultArc.Succeeded())
+	{
+		ArcMesh = DefaultArc.Object;
+	}
+	if (DefaultValid.Succeeded())
+	{
+		ValidMaterial = DefaultValid.Object;
+	}
+	if (DefaultInvalid.Succeeded())
+	{
+		InvalidMaterial = DefaultInvalid.Object;
+	}
 }
 
 void UFXR_Locomotion::BeginPlay()
@@ -166,6 +200,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			UpdateAimHover(nullptr, nullptr);
 		}
 		UpdateReticle(false);
+		UpdateArcMesh(false);
 	}
 
 	switch (Phase)
@@ -942,6 +977,11 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 		}
 	}
 
+	// The reticle marks the *surface*, not the destination. NavMesh projection moves the target onto
+	// the nav surface, which is baked above the floor, so drawing the ring there leaves it hovering
+	// however high this level's nav settings put it. An anchor is its own visual spot.
+	ReticleLocation = HitAnchor ? OutTarget : HitLocation;
+
 	UpdateAimHover(HitAnchor, HitBlocker);
 	return OutValid;
 }
@@ -1126,28 +1166,94 @@ void UFXR_Locomotion::ExecuteMove()
 	bTargetValid = false;
 }
 
-void UFXR_Locomotion::DrawAim() const
+void UFXR_Locomotion::DrawAim()
 {
 	const UWorld* World = GetWorld();
 	if (!World || ArcPoints.Num() == 0)
 	{
 		UpdateReticle(false);
+		UpdateArcMesh(false);
 		return;
 	}
 
 	UpdateReticle(true);
+	UpdateArcMesh(true);
 
 	const FColor Color = bTargetValid ? FColor::Green : FColor::Red;
-	for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
+
+	// Debug lines are the fallback, so an assigned Arc Mesh replaces them rather than doubling up.
+	if (!ArcMesh)
 	{
-		DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
+		for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
+		{
+			DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
+		}
 	}
 
 	// The debug circle is the fallback marker; an assigned Reticle Mesh replaces it.
 	if (!ReticleComponent)
 	{
-		const FVector Reticle = bTargetValid ? TargetLocation : ArcPoints.Last();
-		DrawDebugCircle(World, Reticle + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+		DrawDebugCircle(World, ReticleLocation + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+	}
+}
+
+void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
+{
+	const int32 SpanCount = (bVisible && ArcMesh) ? FMath::Max(ArcPoints.Num() - 1, 0) : 0;
+
+	AActor* Owner = GetOwner();
+	while (Owner && ArcSegments.Num() < SpanCount)
+	{
+		UStaticMeshComponent* Segment = NewObject<UStaticMeshComponent>(Owner);
+		Segment->SetupAttachment(Owner->GetRootComponent());
+		Segment->SetMobility(EComponentMobility::Movable);
+		Segment->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Segment->SetGenerateOverlapEvents(false);
+		Segment->SetCastShadow(false);
+		Segment->SetAbsolute(true, true, true); // spans are world points, not carried by the rig
+		Segment->SetStaticMesh(ArcMesh);
+		Segment->SetHiddenInGame(true);
+		Segment->RegisterComponent();
+		ArcSegments.Add(Segment);
+	}
+
+	UMaterialInterface* Material = GetArcMaterial();
+
+	for (int32 Index = 0; Index < ArcSegments.Num(); ++Index)
+	{
+		UStaticMeshComponent* Segment = ArcSegments[Index];
+		if (!Segment)
+		{
+			continue;
+		}
+
+		if (Index >= SpanCount)
+		{
+			Segment->SetHiddenInGame(true);
+			continue;
+		}
+
+		const FVector Start = ArcPoints[Index];
+		const FVector Span = ArcPoints[Index + 1] - Start;
+		const float Length = Span.Size();
+		if (Length <= KINDA_SMALL_NUMBER)
+		{
+			Segment->SetHiddenInGame(true);
+			continue;
+		}
+
+		// Plain transformed meshes rather than spline meshes: the arc is already a dense polyline,
+		// so every span is straight, and a rotation plus a stretch along X is exact. Spline meshes
+		// buy curvature this does not need, at the cost of local-space and bounds rules that are
+		// easy to get subtly wrong.
+		Segment->SetWorldLocationAndRotation(Start, Span.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
+		Segment->SetWorldScale3D(FVector(Length / ArcMeshLength, ArcWidth, ArcWidth));
+
+		if (Material && Segment->GetMaterial(0) != Material)
+		{
+			Segment->SetMaterial(0, Material);
+		}
+		Segment->SetHiddenInGame(false);
 	}
 }
 
@@ -1164,14 +1270,16 @@ void UFXR_Locomotion::UpdateReticle(bool bVisible) const
 		return;
 	}
 
-	const FVector Location = bTargetValid ? TargetLocation : ArcPoints.Last();
+	// Nudged clear of the surface it marks, or a flat reticle z-fights the floor it lies on.
+	const FVector Location = ReticleLocation + FVector(0.f, 0.f, ReticleGroundOffset);
 
 	// Faces the landing yaw so a directional reticle shows which way you will be looking; that is
 	// the whole point of Face Arc and Thumbstick Choose being visible before you commit.
 	const FRotator Rotation(0.f, bApplyLandingFacing ? TargetFacingYaw : 0.f, 0.f);
 	ReticleComponent->SetWorldLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	ReticleComponent->SetWorldScale3D(FVector(ReticleScale));
 
-	if (UMaterialInterface* Material = bTargetValid ? ValidMaterial : InvalidMaterial)
+	if (UMaterialInterface* Material = GetAimMaterial())
 	{
 		if (ReticleComponent->GetMaterial(0) != Material)
 		{

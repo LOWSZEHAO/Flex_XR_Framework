@@ -288,7 +288,7 @@ Smooth Move Speed:       2.5 m/s
 
 ── Teleport ─────────────────────────────────────────────────
 Aim Style:               Projectile Arc ▾  (Projectile Arc / Straight Ray)
-Transition:              Fade ▾            (Fade / Blink / Dash / Instant)
+Transition:              Fade ▾            (Fade / Dash / Instant)
 Max Distance:            10 m
 Validation:              NavMesh ▾         (NavMesh / Surface Angle / Anchors Only / Custom Channel)
 Max Surface Angle:       35°               [EditCondition: Validation == Surface Angle]
@@ -318,13 +318,15 @@ Right Stick Action:      IA_FXR_Stick_R    (Axis2D)
 Teleport Activation Threshold: 0.6
 
 ── Visuals ──────────────────────────────────────────────────
-Reticle mesh · valid/invalid materials · vignette material
+Reticle Mesh · Reticle Scale · Reticle Ground Offset
+Arc Mesh · Arc Width · Arc Valid/Invalid Material  (fall back to the reticle pair)
+Valid Material · Invalid Material · Vignette Material
 ```
 
-**Transitions.** `Fade` blacks out and back over Fade Duration. `Blink` is the same on a fixed short cut that
-cannot be slowed — a blink a designer can stretch is just a fade. `Dash` slides the play space with the world
-visible, eased at both ends, and is the only transition that creates optical flow, so it drives the comfort
-vignette. `Instant` cuts.
+**Transitions.** `Fade` blacks out and back over Fade Duration — a short Fade Duration (~0.06 s) *is* the
+"blink" comfort option, which is why there is no separate Blink mode: it was Fade with a hardcoded constant.
+`Dash` slides the play space with the world visible, eased at both ends, and is the only transition that creates
+optical flow, so it drives the comfort vignette. `Instant` cuts.
 
 **Presets were removed.** Four preset-owned fields had grown to seven across two sections, and a preset that
 silently rewrites half a panel makes every value in it untrustworthy. Defaults now read as the layout they

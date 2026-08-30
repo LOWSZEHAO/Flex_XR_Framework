@@ -4,6 +4,31 @@
 
 UFXR_ClimbHold::UFXR_ClimbHold()
 {
+	// The base ticks only to draw its debug shape, and only enables that at BeginPlay. A climb hold
+	// is positioned by reaching for it, so its reach sphere has to be visible while placing it.
+	bTickInEditor = true;
+}
+
+void UFXR_ClimbHold::OnRegister()
+{
+	Super::OnRegister();
+
+	RefreshTickState();
+}
+
+#if WITH_EDITOR
+void UFXR_ClimbHold::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Takes effect the moment Debug Draw changes, rather than at the next BeginPlay.
+	RefreshTickState();
+}
+#endif
+
+void UFXR_ClimbHold::RefreshTickState()
+{
+	SetComponentTickEnabled(IsDrawDebugEnabled());
 }
 
 void UFXR_ClimbHold::OnBegin(IFXR_Interactor* Interactor)
