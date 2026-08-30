@@ -98,10 +98,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0", EditCondition = "bAllowSmoothMove"))
 	float SmoothMoveSpeed = 250.f;
 
+	/** Which hand steers smooth movement. Both = either stick, whichever is pushed harder. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (EditCondition = "bAllowSmoothMove"))
+	EFXR_LocomotionHand MoveHand = EFXR_LocomotionHand::Left;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
 
 	//~ Teleport
+	/** Which hand aims teleport. Both = either hand may aim; the free one wins if the other is busy. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (EditCondition = "bAllowTeleport"))
+	EFXR_LocomotionHand TeleportHand = EFXR_LocomotionHand::Right;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
 	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
 
@@ -143,6 +151,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "TurnMode == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
 
+	/** Which hand turns. Both = either stick, whichever is pushed harder. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (EditCondition = "TurnMode != EFXR_TurnMode::None"))
+	EFXR_LocomotionHand TurnHand = EFXR_LocomotionHand::Right;
+
 	//~ Comfort
 	/** Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant narrowed FOV. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort")
@@ -176,19 +188,15 @@ protected:
 	TObjectPtr<UInputMappingContext> LocomotionContext;
 
 	/**
-	 * Which hand does what is declared by which actions you assign — there is deliberately no
-	 * separate "which hand" setting to contradict the wiring. Assign a hand's action and that hand
-	 * gains the mode; assign both and both hands have it; leave one empty and that hand does not.
+	 * One action per mode; bind it to whichever hand's control you like in the mapping context, and
+	 * say which hand owns it with the Hand setting beside each mode. Bind both sticks and set Both.
 	 *
 	 * Teleport: Axis1D (thumbstick Y) or a button. The value is read as a float and thresholded
 	 * here, so pushing the stick forward aims and pulling it back does nothing. Add a Negate
 	 * modifier if your stick reads forward as negative.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TeleportActionLeft;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TeleportActionRight;
+	TObjectPtr<UInputAction> TeleportAction;
 
 	/** Stick push at or above which the arc appears (a button reads 1.0, so any value under 1 works). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input", meta = (ClampMin = "0.05", ClampMax = "1.0"))
@@ -196,17 +204,11 @@ protected:
 
 	/** Turn: Axis1D (thumbstick X) — sign turns left/right. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TurnActionLeft;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> TurnActionRight;
+	TObjectPtr<UInputAction> TurnAction;
 
 	/** Smooth move: Axis2D (thumbstick XY) — X = strafe, Y = forward. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> MoveActionLeft;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
-	TObjectPtr<UInputAction> MoveActionRight;
+	TObjectPtr<UInputAction> MoveAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	int32 InputPriority = 0;
@@ -235,27 +237,21 @@ private:
 	void ApplyPreset(EFXR_LocomotionPreset InPreset);
 	void TryBindInput();
 
-	// Enhanced Input binds a bare member function, so each hand needs its own entry point; they all
-	// funnel straight into the shared per-side implementations below.
-	void HandleTeleportLeft(const FInputActionValue& Value) { HandleTeleport(EFXR_HandSide::Left, Value); }
-	void HandleTeleportRight(const FInputActionValue& Value) { HandleTeleport(EFXR_HandSide::Right, Value); }
-	void HandleTeleportLeftCompleted() { HandleTeleportReleased(EFXR_HandSide::Left); }
-	void HandleTeleportRightCompleted() { HandleTeleportReleased(EFXR_HandSide::Right); }
-	void HandleTurnLeft(const FInputActionValue& Value) { HandleTurn(EFXR_HandSide::Left, Value); }
-	void HandleTurnRight(const FInputActionValue& Value) { HandleTurn(EFXR_HandSide::Right, Value); }
-	void HandleTurnLeftCompleted() { TurnAxis[0] = 0.f; }
-	void HandleTurnRightCompleted() { TurnAxis[1] = 0.f; }
-	void HandleMoveLeft(const FInputActionValue& Value) { HandleMove(EFXR_HandSide::Left, Value); }
-	void HandleMoveRight(const FInputActionValue& Value) { HandleMove(EFXR_HandSide::Right, Value); }
-	void HandleMoveLeftCompleted() { MoveAxis[0] = FVector2D::ZeroVector; }
-	void HandleMoveRightCompleted() { MoveAxis[1] = FVector2D::ZeroVector; }
+	void HandleTeleport(const FInputActionValue& Value);
+	void HandleTeleportCompleted();
+	void HandleTurn(const FInputActionValue& Value);
+	void HandleTurnCompleted() { CurrentTurnAxis = 0.f; }
+	void HandleMove(const FInputActionValue& Value);
+	void HandleMoveCompleted() { CurrentMoveAxis = FVector2D::ZeroVector; }
+	/** Begin aiming if the assigned hand may right now (enabled, idle, not holding anything). */
+	void TryBeginTeleportAim();
 
-	void HandleTeleport(EFXR_HandSide Side, const FInputActionValue& Value);
-	void HandleTeleportReleased(EFXR_HandSide Side);
-	void HandleTurn(EFXR_HandSide Side, const FInputActionValue& Value);
-	void HandleMove(EFXR_HandSide Side, const FInputActionValue& Value);
-	/** Begin aiming with this hand if it may right now (enabled, idle, not holding anything). */
-	void TryBeginTeleportAim(EFXR_HandSide Side);
+	/**
+	 * The hand a mode should act through. A single hand is used if free; Both prefers the hand that
+	 * is not holding anything, so locomotion keeps working while the other hand is occupied.
+	 * Returns false when every assigned hand is busy — the mode then yields entirely (ADR-005).
+	 */
+	bool ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const;
 	void UpdateAim();
 	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
 	void CommitTeleport();
@@ -275,9 +271,6 @@ private:
 	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
 	/** The hand currently aiming a teleport (whichever one pushed its stick). */
 	IFXR_Interactor* GetAimInteractor() const { return GetInteractorForHand(AimingHand); }
-	/** True if that hand has a teleport action assigned — assignment is what grants a hand the mode. */
-	bool HandHasTeleport(EFXR_HandSide Side) const;
-	static int32 HandIndex(EFXR_HandSide Side) { return Side == EFXR_HandSide::Left ? 0 : 1; }
 
 	ETeleportPhase Phase = ETeleportPhase::Idle;
 	bool bLocomotionEnabled = true;
@@ -291,12 +284,10 @@ private:
 	float TargetFacingYaw = 0.f;
 	float FadeElapsed = 0.f;
 
-	// Per hand, indexed by HandIndex(). Both hands may be wired for the same mode, so each keeps its
-	// own axis and its own snap arming; the dominant push wins each frame rather than the two adding.
-	float TurnAxis[2] = { 0.f, 0.f };
-	bool bTurnArmed[2] = { true, true };
-	FVector2D MoveAxis[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
-	/** Which hand owns the teleport arc in flight — only one aims at a time. */
+	float CurrentTurnAxis = 0.f;
+	bool bTurnArmed = true;
+	FVector2D CurrentMoveAxis = FVector2D::ZeroVector;
+	/** Which hand owns the teleport arc in flight — resolved when aiming starts, held until it ends. */
 	EFXR_HandSide AimingHand = EFXR_HandSide::Right;
 
 	// Comfort: per-frame smooth-motion factors (0 for teleport/snap — those never vignette) feed the

@@ -52,6 +52,15 @@ enum class EFXR_LandingRotation : uint8
 	FaceArc          UMETA(DisplayName = "Face Arc")
 };
 
+/** Which hand(s) drive a locomotion mode. */
+UENUM(BlueprintType)
+enum class EFXR_LocomotionHand : uint8
+{
+	Left  UMETA(DisplayName = "Left Hand"),
+	Right UMETA(DisplayName = "Right Hand"),
+	Both  UMETA(DisplayName = "Both Hands")
+};
+
 /** Turning style. */
 UENUM(BlueprintType)
 enum class EFXR_TurnMode : uint8

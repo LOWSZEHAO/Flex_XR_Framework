@@ -150,8 +150,8 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	// Capability fallback (ADR-005): tracked hands have no thumbstick, so gesture-drive teleport and
 	// drop smooth move. Documented, not silent.
-	const bool bHandTeleport = (HandHasTeleport(EFXR_HandSide::Left) && IsHandTracking(EFXR_HandSide::Left))
-		|| (HandHasTeleport(EFXR_HandSide::Right) && IsHandTracking(EFXR_HandSide::Right));
+	const bool bHandTeleport = (TeleportHand != EFXR_LocomotionHand::Right && IsHandTracking(EFXR_HandSide::Left))
+		|| (TeleportHand != EFXR_LocomotionHand::Left && IsHandTracking(EFXR_HandSide::Right));
 	if (bHandTeleport)
 	{
 		if (!bLoggedHandFallback)
@@ -272,63 +272,75 @@ void UFXR_Locomotion::TryBindInput()
 		}
 	}
 
-	// Only the hands you wired get the mode: an unassigned action simply binds nothing.
-	if (TeleportActionLeft)
+	if (TeleportAction)
 	{
-		EnhancedInput->BindAction(TeleportActionLeft, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTeleportLeft);
-		EnhancedInput->BindAction(TeleportActionLeft, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportLeftCompleted);
-	}
-	if (TeleportActionRight)
-	{
-		EnhancedInput->BindAction(TeleportActionRight, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTeleportRight);
-		EnhancedInput->BindAction(TeleportActionRight, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportRightCompleted);
+		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTeleport);
+		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportCompleted);
 	}
 
-	if (TurnActionLeft)
+	if (TurnAction)
 	{
-		EnhancedInput->BindAction(TurnActionLeft, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTurnLeft);
-		EnhancedInput->BindAction(TurnActionLeft, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnLeftCompleted);
-	}
-	if (TurnActionRight)
-	{
-		EnhancedInput->BindAction(TurnActionRight, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTurnRight);
-		EnhancedInput->BindAction(TurnActionRight, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnRightCompleted);
+		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTurn);
+		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTurnCompleted);
 	}
 
-	if (MoveActionLeft)
+	if (MoveAction)
 	{
-		EnhancedInput->BindAction(MoveActionLeft, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleMoveLeft);
-		EnhancedInput->BindAction(MoveActionLeft, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleMoveLeftCompleted);
-	}
-	if (MoveActionRight)
-	{
-		EnhancedInput->BindAction(MoveActionRight, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleMoveRight);
-		EnhancedInput->BindAction(MoveActionRight, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleMoveRightCompleted);
+		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleMove);
+		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleMoveCompleted);
 	}
 
 	bInputBound = true;
 }
 
-bool UFXR_Locomotion::HandHasTeleport(EFXR_HandSide Side) const
+bool UFXR_Locomotion::ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const
 {
-	return (Side == EFXR_HandSide::Left) ? (TeleportActionLeft != nullptr) : (TeleportActionRight != nullptr);
+	switch (Assignment)
+	{
+	case EFXR_LocomotionHand::Left:
+		OutSide = EFXR_HandSide::Left;
+		return !IsHandBusy(OutSide);
+
+	case EFXR_LocomotionHand::Right:
+		OutSide = EFXR_HandSide::Right;
+		return !IsHandBusy(OutSide);
+
+	case EFXR_LocomotionHand::Both:
+	default:
+		// Either hand may drive, so prefer one that is free; only yield when both are occupied.
+		if (!IsHandBusy(EFXR_HandSide::Right))
+		{
+			OutSide = EFXR_HandSide::Right;
+			return true;
+		}
+		if (!IsHandBusy(EFXR_HandSide::Left))
+		{
+			OutSide = EFXR_HandSide::Left;
+			return true;
+		}
+		OutSide = EFXR_HandSide::Right;
+		return false;
+	}
 }
 
-void UFXR_Locomotion::TryBeginTeleportAim(EFXR_HandSide Side)
+void UFXR_Locomotion::TryBeginTeleportAim()
 {
 	if (!bLocomotionEnabled || !bAllowTeleport || Phase != ETeleportPhase::Idle)
 	{
 		return;
 	}
-	if (IsHandBusy(Side)) // yield: this hand is holding an interactable
+
+	EFXR_HandSide Side;
+	if (!ResolveLocomotionHand(TeleportHand, Side)) // yield: that hand is holding an interactable
 	{
 		return;
 	}
+
 	AimingHand = Side;
 	Phase = ETeleportPhase::Aiming;
 }
 
-void UFXR_Locomotion::HandleTeleport(EFXR_HandSide Side, const FInputActionValue& Value)
+void UFXR_Locomotion::HandleTeleport(const FInputActionValue& Value)
 {
 	// Read as a float so one binding serves both a thumbstick and a button (a button reads 1.0).
 	// Thresholding here rather than in the mapping keeps it directional: Enhanced Input actuates a
@@ -337,28 +349,32 @@ void UFXR_Locomotion::HandleTeleport(EFXR_HandSide Side, const FInputActionValue
 
 	if (Push >= TeleportActivationThreshold)
 	{
-		TryBeginTeleportAim(Side);
+		TryBeginTeleportAim();
 	}
-	else if (Phase == ETeleportPhase::Aiming && AimingHand == Side)
+	else if (Phase == ETeleportPhase::Aiming)
 	{
-		// Eased back below the threshold without fully centring — that is still a commit. Only the
-		// hand that started the arc may finish it, so the other hand cannot fire it by accident.
+		// Eased back below the threshold without fully centring — that is still a commit.
 		CommitTeleport();
 	}
 }
 
-void UFXR_Locomotion::HandleTeleportReleased(EFXR_HandSide Side)
+void UFXR_Locomotion::HandleTeleportCompleted()
 {
 	// Stick centred (or button released) — the action stops triggering, so commit from here.
-	if (Phase == ETeleportPhase::Aiming && AimingHand == Side)
+	if (Phase == ETeleportPhase::Aiming)
 	{
 		CommitTeleport();
 	}
 }
 
-void UFXR_Locomotion::HandleTurn(EFXR_HandSide Side, const FInputActionValue& Value)
+void UFXR_Locomotion::HandleTurn(const FInputActionValue& Value)
 {
-	TurnAxis[HandIndex(Side)] = Value.Get<float>();
+	CurrentTurnAxis = Value.Get<float>();
+}
+
+void UFXR_Locomotion::HandleMove(const FInputActionValue& Value)
+{
+	CurrentMoveAxis = Value.Get<FVector2D>();
 }
 
 void UFXR_Locomotion::ProcessTurn(float DeltaTime)
@@ -368,28 +384,13 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 		return;
 	}
 
-	// Both hands may be wired to turn; take the harder push rather than summing them, so two hands
-	// never turn at double rate. A hand holding something is skipped (interaction wins).
-	int32 Index = INDEX_NONE;
-	float Axis = 0.f;
-	for (int32 Candidate = 0; Candidate < 2; ++Candidate)
-	{
-		const EFXR_HandSide Side = (Candidate == 0) ? EFXR_HandSide::Left : EFXR_HandSide::Right;
-		if (IsHandBusy(Side))
-		{
-			continue;
-		}
-		if (FMath::Abs(TurnAxis[Candidate]) > FMath::Abs(Axis))
-		{
-			Axis = TurnAxis[Candidate];
-			Index = Candidate;
-		}
-	}
-	if (Index == INDEX_NONE)
+	EFXR_HandSide Side;
+	if (!ResolveLocomotionHand(TurnHand, Side)) // yield: the turning hand is holding an interactable
 	{
 		return;
 	}
 
+	const float Axis = CurrentTurnAxis;
 	const float AbsAxis = FMath::Abs(Axis);
 
 	// A flick past the snap threshold yaws once and disarms until the stick re-centres.
@@ -397,15 +398,15 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	{
 		if (AbsAxis >= TurnSnapThreshold)
 		{
-			if (bTurnArmed[Index])
+			if (bTurnArmed)
 			{
 				ApplyYaw(FMath::Sign(Axis) * SnapAngle);
-				bTurnArmed[Index] = false;
+				bTurnArmed = false;
 			}
 		}
 		else if (AbsAxis < TurnRearmThreshold)
 		{
-			bTurnArmed[Index] = true;
+			bTurnArmed = true;
 		}
 		return;
 	}
@@ -417,39 +418,20 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	}
 }
 
-void UFXR_Locomotion::HandleMove(EFXR_HandSide Side, const FInputActionValue& Value)
-{
-	MoveAxis[HandIndex(Side)] = Value.Get<FVector2D>();
-}
-
 void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 {
-	if (!bLocomotionEnabled || !bAllowSmoothMove)
+	if (!bLocomotionEnabled || !bAllowSmoothMove || CurrentMoveAxis.IsNearlyZero())
 	{
 		return;
 	}
 
-	// Whichever wired hand is pushing hardest steers; a hand holding something is skipped.
-	EFXR_HandSide MovingSide = EFXR_HandSide::Left;
-	FVector2D Axis = FVector2D::ZeroVector;
-	for (int32 Candidate = 0; Candidate < 2; ++Candidate)
-	{
-		const EFXR_HandSide Side = (Candidate == 0) ? EFXR_HandSide::Left : EFXR_HandSide::Right;
-		if (IsHandBusy(Side))
-		{
-			continue;
-		}
-		if (MoveAxis[Candidate].SizeSquared() > Axis.SizeSquared())
-		{
-			Axis = MoveAxis[Candidate];
-			MovingSide = Side;
-		}
-	}
-	if (Axis.IsNearlyZero())
+	EFXR_HandSide MovingSide;
+	if (!ResolveLocomotionHand(MoveHand, MovingSide)) // yield: the moving hand is holding something
 	{
 		return;
 	}
 
+	const FVector2D Axis = CurrentMoveAxis;
 	AActor* Owner = GetOwner();
 	IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(Owner);
 	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
@@ -547,18 +529,16 @@ void UFXR_Locomotion::ApplyVignetteToMaterial()
 
 void UFXR_Locomotion::ProcessHandTeleportGesture()
 {
-	// A hand gestures only if it was wired for teleport. While aiming, stay with the hand that
-	// started; otherwise prefer whichever wired hand is a tracked hand (left first, then right).
+	// While aiming, stay with the hand that started; otherwise take the hand this mode is assigned
+	// to (Both prefers a free hand, exactly as the stick path does).
 	EFXR_HandSide GestureSide = AimingHand;
-	if (Phase != ETeleportPhase::Aiming)
+	if (Phase != ETeleportPhase::Aiming && !ResolveLocomotionHand(TeleportHand, GestureSide))
 	{
-		GestureSide = (HandHasTeleport(EFXR_HandSide::Left) && IsHandTracking(EFXR_HandSide::Left))
-			? EFXR_HandSide::Left
-			: EFXR_HandSide::Right;
+		return;
 	}
 
 	IFXR_Interactor* Hand = GetInteractorForHand(GestureSide);
-	if (!Hand || !HandHasTeleport(GestureSide) || Hand->GetInteractorType() != EFXR_InteractorType::TrackedHand)
+	if (!Hand || Hand->GetInteractorType() != EFXR_InteractorType::TrackedHand)
 	{
 		return;
 	}
