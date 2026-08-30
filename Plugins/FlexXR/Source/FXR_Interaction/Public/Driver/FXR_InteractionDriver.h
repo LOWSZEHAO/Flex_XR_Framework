@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/HitResult.h"
 #include "Types/FXR_CoreTypes.h"
 #include "FXR_InteractionDriver.generated.h"
 
 class IFXR_Interactor;
+class UFXR_Grab;
 class UFXR_InteractableBase;
 class UFXR_RayTarget;
 
@@ -65,8 +67,15 @@ private:
 	void PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held,
 		TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect);
 
-	/** First FXR_RayTarget this hand's far ray reaches, or null. */
+	/** Cast both hands' far rays once per frame; hover and the distance-grab claim share the result. */
+	void UpdateFarHits();
+	bool CastFarRay(EFXR_HandSide Side, FHitResult& OutHit) const;
+	bool GetFarHit(EFXR_HandSide Side, FHitResult& OutHit) const;
+
+	/** What this hand's far ray currently offers: a ray target, else a summonable object. */
+	UFXR_InteractableBase* ResolveFarTarget(EFXR_HandSide Side) const;
 	UFXR_RayTarget* TraceRayTarget(EFXR_HandSide Side) const;
+	UFXR_Grab* TraceDistanceGrab(EFXR_HandSide Side) const;
 
 	/** Fire enter/exit as the aimed target changes, so listeners never strand a prompt on. */
 	void UpdateAimed(EFXR_HandSide Side, TWeakObjectPtr<UFXR_RayTarget>& Aimed, UFXR_RayTarget* Now);
@@ -85,4 +94,11 @@ private:
 	// What each hand's ray rests on, kept so enter/exit fire on change rather than every frame.
 	TWeakObjectPtr<UFXR_RayTarget> LeftAimed;
 	TWeakObjectPtr<UFXR_RayTarget> RightAimed;
+
+	// This frame's far-ray hits. Cached because three consumers want them and a line trace per
+	// consumer per hand adds up on a Quest frame budget.
+	FHitResult LeftFarHit;
+	FHitResult RightFarHit;
+	bool bLeftFarHit = false;
+	bool bRightFarHit = false;
 };
