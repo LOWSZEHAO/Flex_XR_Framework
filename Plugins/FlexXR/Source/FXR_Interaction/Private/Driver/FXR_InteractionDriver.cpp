@@ -3,6 +3,7 @@
 #include "Driver/FXR_InteractionDriver.h"
 #include "Detection/FXR_InteractionSubsystem.h"
 #include "Detection/FXR_FocusSubsystem.h"
+#include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_Press.h"
 #include "Interactable/FXR_RayTarget.h"
@@ -20,6 +21,10 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_Tick);
+
+	// One trace per hand, before anything reads it: DriveHand may claim a summonable object with it
+	// and PublishFocus hovers from it, and tracing per consumer adds up on a Quest frame budget.
+	UpdateFarHits();
 
 	// Sampled before DriveHand consumes the edge, so a ray selection can see the same press.
 	const float LeftSelect = ReadSelect(EFXR_HandSide::Left);
@@ -70,10 +75,13 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 
 	// Far yields to near. A hand already able to touch something must not also be pointing past it,
 	// or reaching for a valve would arm a selection on the wall behind it.
-	UFXR_RayTarget* RayNow = (HeldNow || Near) ? nullptr : TraceRayTarget(Side);
+	UFXR_InteractableBase* Far = (HeldNow || Near) ? nullptr : ResolveFarTarget(Side);
+	UFXR_RayTarget* RayNow = Cast<UFXR_RayTarget>(Far);
 	UpdateAimed(Side, Aimed, RayNow);
 
-	Focus->SetHovered(Side, Near ? Near : Cast<UFXR_InteractableBase>(RayNow));
+	// A distance-grabbable object hovers from range too, so what lights up is what the press takes —
+	// the same promise near hover makes.
+	Focus->SetHovered(Side, Near ? Near : Far);
 
 	// Same rising edge a grab would claim on, so pointing and pressing reads identically to reaching
 	// and squeezing.
@@ -196,21 +204,39 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 				{
 					Candidate->OnBegin(Interactor);
 					Held = Candidate;
+					return;
 				}
+			}
+		}
+
+		// Nothing in reach: fall back to what this hand is pointing at, if that object opts into being
+		// summoned. Tried only after the near query, so an object in the hand always wins.
+		if (UFXR_Grab* FarGrab = TraceDistanceGrab(Side))
+		{
+			if (FarGrab->CanBegin(Interactor))
+			{
+				FarGrab->BeginDistanceGrab(Interactor);
+				Held = FarGrab;
 			}
 		}
 	}
 }
 
-UFXR_RayTarget* UFXR_InteractionDriver::TraceRayTarget(EFXR_HandSide Side) const
+void UFXR_InteractionDriver::UpdateFarHits()
 {
-	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_TraceRay);
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_FarRays);
 
+	bLeftFarHit = CastFarRay(EFXR_HandSide::Left, LeftFarHit);
+	bRightFarHit = CastFarRay(EFXR_HandSide::Right, RightFarHit);
+}
+
+bool UFXR_InteractionDriver::CastFarRay(EFXR_HandSide Side, FHitResult& OutHit) const
+{
 	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
 	const UWorld* World = GetWorld();
 	if (!Interactor || !World)
 	{
-		return nullptr;
+		return false;
 	}
 
 	FVector Origin;
@@ -218,14 +244,37 @@ UFXR_RayTarget* UFXR_InteractionDriver::TraceRayTarget(EFXR_HandSide Side) const
 	Interactor->GetFarRay(Origin, Direction);
 	if (Direction.IsNearlyZero())
 	{
-		return nullptr;
+		return false;
 	}
 
 	// The one custom channel (ADR-002). It blocks by default, so ordinary world geometry occludes
 	// the ray and no per-object collision setup is needed to make a target hittable.
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(FXR_RayTarget), /*bTraceComplex=*/false, GetOwner());
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FXR_FarRay), /*bTraceComplex=*/false, GetOwner());
+	return World->LineTraceSingleByChannel(OutHit, Origin, Origin + Direction.GetSafeNormal() * RayLength, FXR_TraceChannel, Params);
+}
+
+bool UFXR_InteractionDriver::GetFarHit(EFXR_HandSide Side, FHitResult& OutHit) const
+{
+	const bool bLeft = (Side == EFXR_HandSide::Left);
+	OutHit = bLeft ? LeftFarHit : RightFarHit;
+	return bLeft ? bLeftFarHit : bRightFarHit;
+}
+
+UFXR_InteractableBase* UFXR_InteractionDriver::ResolveFarTarget(EFXR_HandSide Side) const
+{
+	// A RayTarget wins where an object has both: it is the deliberate "point at me" marker, whereas
+	// distance grab is a property an object merely permits.
+	if (UFXR_RayTarget* Target = TraceRayTarget(Side))
+	{
+		return Target;
+	}
+	return TraceDistanceGrab(Side);
+}
+
+UFXR_RayTarget* UFXR_InteractionDriver::TraceRayTarget(EFXR_HandSide Side) const
+{
 	FHitResult Hit;
-	if (!World->LineTraceSingleByChannel(Hit, Origin, Origin + Direction.GetSafeNormal() * RayLength, FXR_TraceChannel, Params))
+	if (!GetFarHit(Side, Hit))
 	{
 		return nullptr;
 	}
@@ -239,6 +288,23 @@ UFXR_RayTarget* UFXR_InteractionDriver::TraceRayTarget(EFXR_HandSide Side) const
 
 	// Its own shorter reach, so a small panel can be pointed at across a room only if it says so.
 	return (Hit.Distance <= Target->MaxRayDistance) ? Target : nullptr;
+}
+
+UFXR_Grab* UFXR_InteractionDriver::TraceDistanceGrab(EFXR_HandSide Side) const
+{
+	FHitResult Hit;
+	if (!GetFarHit(Side, Hit))
+	{
+		return nullptr;
+	}
+
+	const AActor* HitActor = Hit.GetActor();
+	UFXR_Grab* Grab = HitActor ? HitActor->FindComponentByClass<UFXR_Grab>() : nullptr;
+	if (!Grab || !Grab->AllowsDistanceGrab() || !Grab->IsInteractionEnabled() || Grab->IsHeld())
+	{
+		return nullptr;
+	}
+	return Grab;
 }
 
 void UFXR_InteractionDriver::UpdateAimed(EFXR_HandSide Side, TWeakObjectPtr<UFXR_RayTarget>& Aimed, UFXR_RayTarget* Now)

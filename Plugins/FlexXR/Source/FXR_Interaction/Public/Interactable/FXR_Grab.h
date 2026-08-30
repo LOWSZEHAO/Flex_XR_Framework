@@ -56,6 +56,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Grab|TwoHand")
 	bool IsTwoHanded() const { return SecondaryInteractor != nullptr; }
 
+	/** True while the object is flying to a hand that claimed it from range. */
+	UFUNCTION(BlueprintPure, Category = "Grab|Distance")
+	bool IsFlyingToHand() const { return bFlying; }
+
+	/** Whether a far ray may claim this object at all. */
+	bool AllowsDistanceGrab() const { return bDistanceGrab; }
+
+	/**
+	 * Claim from range: the object flies to the hand and then becomes an ordinary hold, so everything
+	 * downstream — grip point, pose blend, two-hand, throw — is the same code path as reaching for it.
+	 */
+	void BeginDistanceGrab(IFXR_Interactor* Interactor);
+
 	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
 	float GetUseValue() const { return CurrentUseValue; }
@@ -76,6 +89,21 @@ protected:
 	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
 	float ThrowVelocityScale = 1.f;
+
+	/**
+	 * Let this object be pulled to the hand from across the room. Off by default: being able to yank
+	 * something you cannot reach changes how it feels, and in a training sim it can quietly delete the
+	 * physical performance the exercise is meant to teach — so it is a deliberate tick, per object.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Distance")
+	bool bDistanceGrab = false;
+
+	/**
+	 * How long the flight takes, regardless of how far away the object was. Constant time rather than
+	 * constant speed: a fixed duration reads the same whether you summon from one metre or five.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Distance", meta = (ClampMin = "0.05", ClampMax = "2.0", Units = "s", EditCondition = "bDistanceGrab"))
+	float DistanceGrabDuration = 0.3f;
 
 	/**
 	 * Let a second hand join the hold to aim the object (rifles, big tools, steering). Off by
@@ -108,6 +136,10 @@ private:
 	 * drives it — and no role ever has to switch mid-hold.
 	 */
 	FTransform MakeTwoHandTransform() const;
+	/** Pose the object would be held in, so a distance grab arrives already seated. */
+	FTransform ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) const;
+	/** Advance the distance-grab flight, handing over to the ordinary hold on arrival. */
+	void TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime);
 	/** Re-resolve where each hand holds the object — a rail slides under the hand, a point grip does not. */
 	void UpdateGripLocals();
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
@@ -119,6 +151,15 @@ private:
 	float SnapAlpha = 1.f;
 	float SnapInterpSpeed = 10.f;
 	bool bRestorePhysics = false;
+
+	// Distance-grab flight. Interpolated from elapsed time and the live hand pose — deterministic, so
+	// an SOP replay reproduces it, which a physics impulse toward the hand would not (ADR-001).
+	bool bFlying = false;
+	float FlightElapsed = 0.f;
+	FTransform FlightStart = FTransform::Identity;
+	// Physics state is captured when the flight starts, so the later OnBegin does not read the
+	// already-disabled body and forget to restore simulation on release.
+	bool bPhysicsCaptured = false;
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 

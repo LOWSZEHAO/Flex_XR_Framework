@@ -22,7 +22,13 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 	HeldComponent = Driven;
 	if (Driven)
 	{
-		bRestorePhysics = Driven->IsSimulatingPhysics();
+		// Not re-read when a distance grab already captured it: by now the body is disabled, and
+		// reading it here would decide the object should stay kinematic forever after release.
+		if (!bPhysicsCaptured)
+		{
+			bRestorePhysics = Driven->IsSimulatingPhysics();
+			bPhysicsCaptured = true;
+		}
 		if (bRestorePhysics)
 		{
 			Driven->SetSimulatePhysics(false);
@@ -76,6 +82,13 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 	if (!Interactor)
 	{
+		return;
+	}
+
+	// Still on its way in from a distance grab: fly it, and hand over to the ordinary hold on arrival.
+	if (bFlying)
+	{
+		TickDistanceGrab(Interactor, DeltaTime);
 		return;
 	}
 
@@ -199,6 +212,9 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 
 	HeldComponent = nullptr;
 	bRestorePhysics = false;
+	bPhysicsCaptured = false;
+	bFlying = false;
+	FlightElapsed = 0.f;
 	ActiveHandPose = nullptr;
 	PrimaryInteractor = nullptr;
 	PrimaryGripPoint = nullptr;
@@ -462,5 +478,81 @@ void UFXR_Grab::ReanchorToPrimary()
 	{
 		HeldOffset = SnapTargetOffset;
 		SnapAlpha = 1.f;
+	}
+}
+
+void UFXR_Grab::BeginDistanceGrab(IFXR_Interactor* Interactor)
+{
+	UPrimitiveComponent* Driven = ResolveDrivenComponent();
+	if (!Interactor || !Driven || !bDistanceGrab)
+	{
+		return;
+	}
+
+	PrimaryInteractor = Interactor;
+	HeldComponent = Driven;
+
+	// Captured before the body is disabled, so release still restores simulation. OnBegin honours
+	// this on arrival rather than re-reading an already-kinematic body.
+	bRestorePhysics = Driven->IsSimulatingPhysics();
+	bPhysicsCaptured = true;
+	if (bRestorePhysics)
+	{
+		Driven->SetSimulatePhysics(false);
+	}
+
+	bFlying = true;
+	FlightElapsed = 0.f;
+	FlightStart = Driven->GetComponentTransform();
+
+	// Held from the moment the hand commits, so nothing else can claim the object mid-flight and the
+	// driver keeps updating it. The Began event waits for arrival, when it is genuinely in hand.
+	bHeld = true;
+}
+
+FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) const
+{
+	const FTransform Grip = Interactor->GetGripTransform();
+	const UPrimitiveComponent* Driven = HeldComponent.Get();
+	if (!Driven)
+	{
+		return Grip;
+	}
+
+	// Aim the flight at the pose the object would be held in, so it arrives already seated and the
+	// handover to the ordinary hold is invisible rather than a snap at the end.
+	if (UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor))
+	{
+		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform());
+		return PointRelative.Inverse() * Grip;
+	}
+	return Grip;
+}
+
+void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
+{
+	UPrimitiveComponent* Driven = HeldComponent.Get();
+	if (!Driven)
+	{
+		bFlying = false;
+		return;
+	}
+
+	FlightElapsed += DeltaTime;
+	const float Alpha = FMath::Clamp(FlightElapsed / FMath::Max(DistanceGrabDuration, KINDA_SMALL_NUMBER), 0.f, 1.f);
+
+	// Eased rather than linear: a constant-velocity slide reads as a conveyor belt, while easing out
+	// lets the object settle into the hand. Re-aimed every frame, so it tracks a hand that moves.
+	const float Eased = FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f);
+	FTransform Current;
+	Current.Blend(FlightStart, ComputeDistanceGrabTarget(Interactor), Eased);
+	Driven->SetWorldTransform(Current, false, nullptr, ETeleportType::TeleportPhysics);
+
+	if (Alpha >= 1.f)
+	{
+		// Arrived: hand over to the ordinary hold, which is what makes grip points, pose blending,
+		// two-hand and throw behave identically whether the object was reached for or summoned.
+		bFlying = false;
+		OnBegin(Interactor);
 	}
 }
