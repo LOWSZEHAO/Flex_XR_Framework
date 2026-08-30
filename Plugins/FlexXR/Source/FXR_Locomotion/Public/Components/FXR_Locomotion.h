@@ -165,17 +165,21 @@ protected:
 	bool bVignetteOnSmoothMove = true;
 
 	//~ Hand Tracking (gesture teleport when the hand is the active source; controllers ignore these)
+	//~ Point-and-pinch, the convention the Quest system UI already teaches: a relaxed hand turned
+	//~ palm-outward raises the arc, a pinch commits it. Palm-away rather than palm-down because a
+	//~ deliberate flat-down pose is tiring and is not what shipped hand-tracking titles ask for.
+
 	/** Pinch strength that commits a gesture teleport. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.1", ClampMax = "1.0"))
 	float HandPinchCommitThreshold = 0.7f;
 
-	/** Palm-local axis that points at the ground in the aim pose (palm down). Flip a sign in-headset if aiming reads inverted. */
+	/** Palm-local axis pointing out through the palm. Flip a sign in-headset if aiming reads inverted. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking")
-	FVector PalmDownAxisLocal = FVector(0.f, 0.f, -1.f);
+	FVector PalmForwardAxisLocal = FVector(0.f, 0.f, -1.f);
 
-	/** How closely the palm must face down (dot with world-down) to begin aiming. */
+	/** How far the palm must be turned away from the head (dot with the head→hand direction) to aim. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float PalmDownThreshold = 0.5f;
+	float PalmAwayThreshold = 0.5f;
 
 	//~ Input
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
@@ -282,7 +286,16 @@ private:
 	void ProcessSmoothMove(float DeltaTime);
 	void ProcessHandTeleportGesture();
 	bool IsHandTracking(EFXR_HandSide Side) const;
-	bool IsPalmDown(const IFXR_Interactor* Hand) const;
+
+	/** True when the palm is turned outward, away from the head — the gesture-teleport aim pose. */
+	bool IsPalmFacingAway(const IFXR_Interactor* Hand) const;
+
+	/**
+	 * True when something grabbable is within this hand's grab sphere. Gesture teleport yields to
+	 * it because a pinch means both "grab" and "commit" — reaching for an object must not launch
+	 * the player across the room. Controllers need no such rule: grip and stick are separate.
+	 */
+	bool HasGrabCandidate(EFXR_HandSide Side) const;
 	void UpdateVignette(float DeltaTime);
 	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */

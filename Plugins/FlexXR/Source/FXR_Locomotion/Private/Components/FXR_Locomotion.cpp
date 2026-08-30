@@ -5,6 +5,7 @@
 #include "Interactor/FXR_Interactor.h"
 #include "Interactor/FXR_InteractorComponent.h"
 #include "Driver/FXR_InteractionDriver.h"
+#include "Detection/FXR_InteractionSubsystem.h"
 #include "Detection/FXR_TeleportRegistry.h"
 #include "World/FXR_TeleportAnchor.h"
 #include "World/FXR_TeleportBlocker.h"
@@ -74,16 +75,29 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	SmoothMoveFactor = 0.f;
 	SmoothTurnFactor = 0.f;
 
-	// Capability fallback (ADR-005): tracked hands have no thumbstick, so gesture-drive teleport and
-	// drop smooth move. Documented, not silent.
-	const bool bHandTeleport = (LeftHandMovement == EFXR_HandMovement::Teleport && IsHandTracking(EFXR_HandSide::Left))
-		|| (RightHandMovement == EFXR_HandMovement::Teleport && IsHandTracking(EFXR_HandSide::Right));
-	if (bHandTeleport)
+	// Capability fallback (ADR-005): tracked hands have no thumbstick, so teleport is gesture-driven
+	// and anything needing a stick is unavailable. Documented, not silent — a hand set to Smooth
+	// Move on hand tracking simply cannot move, and saying nothing would read as a broken build.
+	const bool bLeftTracked = IsHandTracking(EFXR_HandSide::Left);
+	const bool bRightTracked = IsHandTracking(EFXR_HandSide::Right);
+	if (bLeftTracked || bRightTracked)
 	{
 		if (!bLoggedHandFallback)
 		{
-			UE_LOG(LogFXR, Log, TEXT("FXR_Locomotion: tracked hands active — using gesture teleport + rotation-on-landing; smooth move disabled (ADR-005 capability rule)."));
 			bLoggedHandFallback = true;
+
+			const bool bStranded = (bLeftTracked && LeftHandMovement == EFXR_HandMovement::SmoothMove)
+				|| (bRightTracked && RightHandMovement == EFXR_HandMovement::SmoothMove);
+			const bool bGesture = (bLeftTracked && LeftHandMovement == EFXR_HandMovement::Teleport)
+				|| (bRightTracked && RightHandMovement == EFXR_HandMovement::Teleport);
+
+			UE_LOG(LogFXR, Log, TEXT("FXR_Locomotion: tracked hands active — %s (ADR-005 capability rule)."),
+				bGesture ? TEXT("gesture teleport + rotation-on-landing") : TEXT("no gesture is bound"));
+
+			UE_CLOG(bStranded, LogFXR, Warning,
+				TEXT("FXR_Locomotion: a hand set to Smooth Move is hand-tracked and has no thumbstick, so it cannot move. Set it to Teleport for gesture locomotion."));
+			UE_CLOG(!bGesture, LogFXR, Warning,
+				TEXT("FXR_Locomotion: no tracked hand is set to Teleport, so there is no locomotion at all on hand tracking."));
 		}
 		ProcessHandTeleportGesture();
 	}
@@ -510,22 +524,24 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide))
+	// Yield to interaction (ADR-005), and to anything merely *reachable*: the pinch that commits a
+	// teleport is the same pinch that grabs, so reaching for an object must never also move you.
+	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide) || HasGrabCandidate(GestureSide))
 	{
 		if (Phase == ETeleportPhase::Aiming)
 		{
-			Phase = ETeleportPhase::Idle; // grabbed something / disabled mid-aim → cancel
+			Phase = ETeleportPhase::Idle; // reached for something / disabled mid-aim → cancel
 		}
 		return;
 	}
 
-	const bool bPalmDown = IsPalmDown(Hand);
+	const bool bPalmAway = IsPalmFacingAway(Hand);
 	const bool bPinch = Hand->GetSelectValue() >= HandPinchCommitThreshold;
 
 	if (Phase == ETeleportPhase::Idle)
 	{
-		// Raise the hand palm-down (without pinching) to begin aiming.
-		if (bPalmDown && !bPinch)
+		// Turn the palm outward (without pinching) to begin aiming.
+		if (bPalmAway && !bPinch)
 		{
 			AimingHand = GestureSide;
 			Phase = ETeleportPhase::Aiming;
@@ -537,9 +553,9 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		{
 			CommitTeleport(); // pinch commits
 		}
-		else if (!bPalmDown)
+		else if (!bPalmAway)
 		{
-			Phase = ETeleportPhase::Idle; // open the hand / turn it up to cancel
+			Phase = ETeleportPhase::Idle; // turn the palm back in to cancel
 		}
 	}
 }
@@ -550,15 +566,50 @@ bool UFXR_Locomotion::IsHandTracking(EFXR_HandSide Side) const
 	return Interactor && Interactor->GetInteractorType() == EFXR_InteractorType::TrackedHand;
 }
 
-bool UFXR_Locomotion::IsPalmDown(const IFXR_Interactor* Hand) const
+bool UFXR_Locomotion::IsPalmFacingAway(const IFXR_Interactor* Hand) const
 {
 	if (!Hand)
 	{
 		return false;
 	}
+
 	const FTransform Palm = Hand->GetPalmTransform();
-	const FVector WorldAxis = Palm.TransformVectorNoScale(PalmDownAxisLocal).GetSafeNormal();
-	return FVector::DotProduct(WorldAxis, FVector::DownVector) >= PalmDownThreshold;
+	const FVector PalmNormal = Palm.TransformVectorNoScale(PalmForwardAxisLocal).GetSafeNormal();
+
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+	if (!HMD)
+	{
+		return false;
+	}
+
+	// Measured against head→hand rather than head-forward, so turning the palm outward still reads
+	// as "away" when the arm is held out to the side. Too close to the head for that to be stable,
+	// and the look direction is the better answer.
+	FVector Outward = Palm.GetLocation() - HMD->GetComponentLocation();
+	if (!Outward.Normalize(10.f))
+	{
+		Outward = HMD->GetForwardVector();
+	}
+
+	return FVector::DotProduct(PalmNormal, Outward) >= PalmAwayThreshold;
+}
+
+bool UFXR_Locomotion::HasGrabCandidate(EFXR_HandSide Side) const
+{
+	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
+	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+	if (!Interactor || !Subsystem)
+	{
+		return false;
+	}
+
+	// A read-only query against the same sphere the driver claims with, so this never depends on
+	// whether the driver has ticked yet this frame.
+	FVector GrabCenter;
+	float GrabRadius = 0.f;
+	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+	return Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side) != nullptr;
 }
 
 void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
