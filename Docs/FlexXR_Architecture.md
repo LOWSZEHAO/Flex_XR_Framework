@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.8 (highlight rendering — state-keyed stencil, overlay styles, far ray)
+**Version:** 0.9 (sockets — snap zones, parked-physics hand-off)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -158,7 +158,13 @@ Poke interactions: buttons, keypads, touchscreens. Fingertip-depth driven, press
 ### FXR_Socket
 Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **ghost preview** appears if the object passes the filter → release in zone (or auto-snap on proximity, per setting) → detaches from hand, attaches to socket. Re-grab pulls it back out.
 - Options: accepted-object tag filter, required orientation alignment (plug must face the right way), lock-in (explicit release action to remove).
-- Events on both sides: `OnHoverStart/End`, `OnSocketed`, `OnRemoved` — each emits `InteractionId`s ("docked extinguisher on wall mount" is a validatable SOP step).
+- Events: `OnHoverStart/End`, `OnSocketed`, `OnRemoved`, and seating emits the socket's `InteractionId` ("docked extinguisher on wall mount" is a validatable SOP step).
+- **The socket's own transform is the seat pose** — place the component where the object's origin should end up and point it the way the object should face. No separate offset to author, and the alignment check reads against the same facing.
+- Filtering is by **actor tag**, not gameplay tags: a mount needs a short list of names, and pulling in the GameplayTags module for that would widen `FXR_Interaction`'s dependencies for no gain.
+- **Nearest accepting socket wins**, so two mounts side by side resolve to the one being reached toward. The pass is driven by the interaction driver alongside the poke pass, so sockets never tick per object.
+- Object-side events (the object learning it was docked, whichever socket took it) are deliberately not on `FXR_Grab` yet: they would grow the most-used component's panel for a case most objects never use. Bind the socket.
+
+
 
 ### FXR_Use *(optional child component)*
 > **Rule of thumb:** using the thing is simple → FXR_Grab's built-in events. The usable part is a **physical mechanism on** the thing, or needs its own training ID → add FXR_Use where the mechanism lives.
@@ -720,6 +726,16 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.9 — Sockets**
+- `FXR_Socket` ships. The socket's own transform is the seat pose, filtering is by actor tag rather than
+  gameplay tags (no new module dependency for a short list of names), and the nearest accepting socket
+  wins so adjacent mounts resolve sensibly. Driven by the interaction driver alongside the poke pass,
+  so sockets never tick per object.
+- Parked-physics hand-off (`NotifyParkedPhysics`): anything that parks an object kinematic — a socket
+  seating it, a distance-grab flight — tells the object what its physics were beforehand. Without it a
+  later grab reads the parked body, concludes it never simulated, and the object can never fall again.
+- Object-side socket events deferred: they would grow `FXR_Grab`'s panel for a case most objects never use.
 
 **v0.8 — Highlight rendering & far ray**
 - The Outline stencil carries the highlight *state* (1 Hover, 2 Guidance, 3 Selected), not the style. One
