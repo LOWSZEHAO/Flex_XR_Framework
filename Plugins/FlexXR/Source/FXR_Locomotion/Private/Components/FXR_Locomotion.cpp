@@ -34,87 +34,7 @@ namespace
 UFXR_Locomotion::UFXR_Locomotion()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-
-	// Start consistent with the default preset so the panel never shows a preset the fields contradict.
-	ApplyPreset(Preset);
 }
-
-void UFXR_Locomotion::ApplyPreset(EFXR_LocomotionPreset InPreset)
-{
-	switch (InPreset)
-	{
-	case EFXR_LocomotionPreset::Comfort:
-		LeftHandMovement = EFXR_HandMovement::None;
-		RightHandMovement = EFXR_HandMovement::Teleport;
-		Transition = EFXR_TeleportTransition::Fade;
-		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
-		VignetteMode = EFXR_VignetteMode::Always;
-		break;
-
-	case EFXR_LocomotionPreset::Standard:
-		LeftHandMovement = EFXR_HandMovement::SmoothMove;
-		RightHandMovement = EFXR_HandMovement::Teleport;
-		Transition = EFXR_TeleportTransition::Fade;
-		SmoothMoveSpeed = 250.f; // ~2.5 m/s
-		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
-		VignetteMode = EFXR_VignetteMode::Dynamic;
-		break;
-
-	case EFXR_LocomotionPreset::Free:
-		LeftHandMovement = EFXR_HandMovement::SmoothMove;
-		RightHandMovement = EFXR_HandMovement::Teleport;
-		Transition = EFXR_TeleportTransition::Dash;
-		SmoothMoveSpeed = 400.f; // ~4 m/s
-		TurnMode = EFXR_TurnMode::Smooth; SmoothTurnRate = 90.f;
-		VignetteMode = EFXR_VignetteMode::Off;
-		break;
-
-	case EFXR_LocomotionPreset::Custom:
-	default:
-		break; // Custom leaves the fields as authored
-	}
-
-	Preset = InPreset;
-}
-
-void UFXR_Locomotion::SetPreset(EFXR_LocomotionPreset InPreset)
-{
-	ApplyPreset(InPreset);
-}
-
-#if WITH_EDITOR
-void UFXR_Locomotion::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	const FName Changed = PropertyChangedEvent.GetPropertyName();
-
-	if (Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, Preset))
-	{
-		if (Preset != EFXR_LocomotionPreset::Custom)
-		{
-			ApplyPreset(Preset);
-		}
-		return;
-	}
-
-	// Editing any preset-controlled feel field flips to Custom (input / visual fields don't).
-	const bool bFeelField =
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, LeftHandMovement) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, RightHandMovement) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, Transition) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SmoothMoveSpeed) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, TurnMode) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SnapAngle) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SmoothTurnRate) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, VignetteMode);
-
-	if (bFeelField)
-	{
-		Preset = EFXR_LocomotionPreset::Custom;
-	}
-}
-#endif
 
 void UFXR_Locomotion::BeginPlay()
 {
@@ -313,42 +233,6 @@ bool UFXR_Locomotion::ResolveMovementHand(EFXR_HandMovement Movement, EFXR_HandS
 	return false;
 }
 
-bool UFXR_Locomotion::CanHandTurn(EFXR_HandSide Side) const
-{
-	// A hand set to Smooth Move spends its X on strafing, so it cannot also turn.
-	return !IsHandBusy(Side) && MovementForHand(Side) != EFXR_HandMovement::SmoothMove;
-}
-
-bool UFXR_Locomotion::ResolveTurnHand(EFXR_HandSide& OutSide) const
-{
-	switch (TurnHand)
-	{
-	case EFXR_LocomotionHand::Left:
-		OutSide = EFXR_HandSide::Left;
-		return CanHandTurn(OutSide);
-
-	case EFXR_LocomotionHand::Right:
-		OutSide = EFXR_HandSide::Right;
-		return CanHandTurn(OutSide);
-
-	case EFXR_LocomotionHand::Both:
-	default:
-		// Either hand may turn, so take whichever can right now; only yield when neither can.
-		if (CanHandTurn(EFXR_HandSide::Right))
-		{
-			OutSide = EFXR_HandSide::Right;
-			return true;
-		}
-		if (CanHandTurn(EFXR_HandSide::Left))
-		{
-			OutSide = EFXR_HandSide::Left;
-			return true;
-		}
-		OutSide = EFXR_HandSide::Right;
-		return false;
-	}
-}
-
 void UFXR_Locomotion::TryBeginTeleportAim(EFXR_HandSide Side)
 {
 	if (!bLocomotionEnabled || !bTeleportEnabled || Phase != ETeleportPhase::Idle)
@@ -407,34 +291,44 @@ void UFXR_Locomotion::ApplyStick(EFXR_HandSide Side, FVector2D Axis)
 
 void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 {
-	if (!bLocomotionEnabled || !bTurnEnabled || TurnMode == EFXR_TurnMode::None)
+	if (!bLocomotionEnabled || !bTurnEnabled)
 	{
 		return;
 	}
 
-	EFXR_HandSide Side;
-	if (!ResolveTurnHand(Side)) // yield: the turning hand is holding something, or is strafing
+	// Each hand turns in its own mode, so both are polled — one may snap while the other strafes.
+	ProcessTurnForHand(EFXR_HandSide::Left, DeltaTime);
+	ProcessTurnForHand(EFXR_HandSide::Right, DeltaTime);
+}
+
+void UFXR_Locomotion::ProcessTurnForHand(EFXR_HandSide Side, float DeltaTime)
+{
+	const EFXR_TurnMode Mode = TurnModeForHand(Side);
+	const int32 Index = static_cast<int32>(Side);
+
+	if (Mode == EFXR_TurnMode::None || IsHandBusy(Side)) // yield: this hand is holding something
 	{
+		bTurnArmed[Index] = true; // re-arm so re-enabling never fires a stale snap
 		return;
 	}
 
-	const float Axis = StickAxis[static_cast<int32>(Side)].X;
+	const float Axis = StickAxis[Index].X;
 	const float AbsAxis = FMath::Abs(Axis);
 
-	// A flick past the snap threshold yaws once and disarms until the stick re-centres.
-	if (TurnMode == EFXR_TurnMode::Snap)
+	// A flick past the snap threshold yaws once and disarms until that stick re-centres.
+	if (Mode == EFXR_TurnMode::Snap)
 	{
 		if (AbsAxis >= TurnSnapThreshold)
 		{
-			if (bTurnArmed)
+			if (bTurnArmed[Index])
 			{
 				ApplyYaw(FMath::Sign(Axis) * SnapAngle);
-				bTurnArmed = false;
+				bTurnArmed[Index] = false;
 			}
 		}
 		else if (AbsAxis < TurnRearmThreshold)
 		{
-			bTurnArmed = true;
+			bTurnArmed[Index] = true;
 		}
 		return;
 	}
@@ -442,44 +336,40 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 	if (AbsAxis > TurnSmoothDeadzone)
 	{
 		ApplyYaw(Axis * SmoothTurnRate * DeltaTime);
-		SmoothTurnFactor = FMath::Min(AbsAxis, 1.f); // continuous turn feeds the comfort vignette
+		// Continuous turn feeds the comfort vignette; two hands turning at once take the stronger.
+		SmoothTurnFactor = FMath::Max(SmoothTurnFactor, FMath::Min(AbsAxis, 1.f));
 	}
 }
 
-void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
+bool UFXR_Locomotion::AccumulateSmoothMove(EFXR_HandSide Side, float DeltaTime, FVector& InOutDelta) const
 {
-	if (!bLocomotionEnabled)
+	if (MovementForHand(Side) != EFXR_HandMovement::SmoothMove || IsHandBusy(Side))
 	{
-		return;
+		return false; // not a moving hand, or it is holding something (ADR-005)
 	}
 
-	EFXR_HandSide MovingSide;
-	if (!ResolveMovementHand(EFXR_HandMovement::SmoothMove, MovingSide)) // no free hand set to move
+	FVector2D Axis = StickAxis[static_cast<int32>(Side)];
+
+	// This hand's X belongs to turning unless it has no turn mode, in which case it strafes.
+	if (TurnModeForHand(Side) != EFXR_TurnMode::None)
 	{
-		return;
+		Axis.X = 0.f;
 	}
 
-	const FVector2D Axis = StickAxis[static_cast<int32>(MovingSide)];
 	if (Axis.IsNearlyZero())
 	{
-		return;
+		return false;
 	}
 
-	AActor* Owner = GetOwner();
-	IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(Owner);
-	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
-	USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
-	if (!Origin)
-	{
-		return;
-	}
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
 
-	// Horizontal frame the stick steers in. Hand-relative uses the moving hand's aim yaw; Head and
+	// Horizontal frame this stick steers in. Hand-relative uses this hand's own aim yaw; Head and
 	// Hip use the HMD yaw (the rig has no hip tracker, so Hip degenerates to Head).
 	float Yaw = 0.f;
 	if (MoveDirectionSource == EFXR_MoveDirectionSource::HandRelative)
 	{
-		if (const IFXR_Interactor* MoveInteractor = GetInteractorForHand(MovingSide))
+		if (const IFXR_Interactor* MoveInteractor = GetInteractorForHand(Side))
 		{
 			Yaw = MoveInteractor->GetAimTransform().Rotator().Yaw;
 		}
@@ -496,10 +386,46 @@ void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 	const FRotator YawRotation(0.f, Yaw, 0.f);
 	const FVector Forward = YawRotation.Vector();
 	const FVector Right = FRotationMatrix(YawRotation).GetScaledAxis(EAxis::Y);
-	const FVector Delta = (Forward * Axis.Y + Right * Axis.X) * SmoothMoveSpeed * DeltaTime;
+	InOutDelta += (Forward * Axis.Y + Right * Axis.X) * SmoothMoveSpeed * DeltaTime;
+	return true;
+}
+
+void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
+{
+	if (!bLocomotionEnabled)
+	{
+		return;
+	}
+
+	// Both hands contribute: setting both to Smooth Move means both sticks move you, rather than
+	// one silently winning. Each steers in its own frame, so the sum is what the player asked for.
+	FVector Delta = FVector::ZeroVector;
+	const bool bLeft = AccumulateSmoothMove(EFXR_HandSide::Left, DeltaTime, Delta);
+	const bool bRight = AccumulateSmoothMove(EFXR_HandSide::Right, DeltaTime, Delta);
+	if (!bLeft && !bRight)
+	{
+		return;
+	}
+
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	if (!Origin)
+	{
+		return;
+	}
+
+	// Two sticks can otherwise stack past the authored speed; the cap keeps SmoothMoveSpeed honest.
+	const float MaxStep = SmoothMoveSpeed * DeltaTime;
+	if (Delta.SizeSquared() > FMath::Square(MaxStep))
+	{
+		Delta = Delta.GetSafeNormal() * MaxStep;
+	}
+
 	Origin->AddWorldOffset(Delta, false, nullptr, ETeleportType::TeleportPhysics);
 
-	SmoothMoveFactor = FMath::Min(static_cast<float>(Axis.Size()), 1.f); // stick magnitude ≈ speed
+	SmoothMoveFactor = (MaxStep > KINDA_SMALL_NUMBER)
+		? FMath::Min(static_cast<float>(Delta.Size()) / MaxStep, 1.f) // fraction of top speed
+		: 0.f;
 }
 
 void UFXR_Locomotion::UpdateVignette(float DeltaTime)

@@ -5,16 +5,6 @@
 #include "CoreMinimal.h"
 #include "FXR_LocomotionTypes.generated.h"
 
-/** Bundled locomotion feel; picking one fills every field, editing any field flips to Custom. */
-UENUM(BlueprintType)
-enum class EFXR_LocomotionPreset : uint8
-{
-	Comfort  UMETA(DisplayName = "Comfort"),
-	Standard UMETA(DisplayName = "Standard"),
-	Free     UMETA(DisplayName = "Free"),
-	Custom   UMETA(DisplayName = "Custom")
-};
-
 /** How the view transitions across a committed teleport. */
 UENUM(BlueprintType)
 enum class EFXR_TeleportTransition : uint8
@@ -52,19 +42,10 @@ enum class EFXR_LandingRotation : uint8
 	FaceArc          UMETA(DisplayName = "Face Arc")
 };
 
-/** Which hand(s) drive a locomotion mode. */
-UENUM(BlueprintType)
-enum class EFXR_LocomotionHand : uint8
-{
-	Left  UMETA(DisplayName = "Left Hand"),
-	Right UMETA(DisplayName = "Right Hand"),
-	Both  UMETA(DisplayName = "Both Hands")
-};
-
 /**
- * What one hand's stick does to move the player. Teleport and smooth move both claim the stick's
- * forward axis, so a hand can only have one of them — choosing per hand rather than per mode makes
- * that clash impossible to express instead of merely warned about.
+ * What one hand's stick forward axis does. Teleport and smooth move both claim it, so a hand can
+ * only have one of them — choosing per hand rather than per mode makes that clash impossible to
+ * express instead of merely warned about.
  */
 UENUM(BlueprintType)
 enum class EFXR_HandMovement : uint8
@@ -74,13 +55,13 @@ enum class EFXR_HandMovement : uint8
 	SmoothMove UMETA(DisplayName = "Smooth Move")
 };
 
-/** Turning style. */
+/** What one hand's stick sideways axis does. None frees it to strafe, if that hand smooth-moves. */
 UENUM(BlueprintType)
 enum class EFXR_TurnMode : uint8
 {
+	None   UMETA(DisplayName = "None"),
 	Snap   UMETA(DisplayName = "Snap"),
-	Smooth UMETA(DisplayName = "Smooth"),
-	None   UMETA(DisplayName = "None")
+	Smooth UMETA(DisplayName = "Smooth")
 };
 
 /** Comfort vignette behaviour. */

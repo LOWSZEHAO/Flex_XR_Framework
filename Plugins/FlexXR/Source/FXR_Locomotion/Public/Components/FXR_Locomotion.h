@@ -26,9 +26,10 @@ struct FInputActionValue;
  * UFXR_Locomotion — the single locomotion component (ADR-005): teleport, smooth move, turn, and
  * comfort, arbitrated internally rather than split into four components.
  *
- * Movement is chosen per hand (Left/Right Hand Movement), not per mode. Teleport and smooth move
- * both claim the stick's forward axis, so a hand can only carry one of them — expressing the
- * assignment this way makes the clash impossible rather than something to validate.
+ * The control layout is described per hand rather than per mode, because a thumbstick has only two
+ * axes to give: forward is that hand's movement (teleport or smooth move — never both), sideways is
+ * its turn, or strafe when it has no turn mode. Saying it this way makes an unplayable layout
+ * impossible to express instead of something to detect and warn about.
  *
  * Room-scale correct (ADR-006): teleport moves the play-space origin so the HMD lands on the
  * target, obtained via the owner's IFXR_LocomotionOwner — never a concrete pawn cast, so it works
@@ -50,10 +51,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-#if WITH_EDITOR
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-#endif
-
 	/** Master switch for all locomotion (games gate directly; SOP hard-lock steps call the same API). */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
 	void SetLocomotionEnabled(bool bEnabled);
@@ -70,10 +67,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
 	bool TeleportToLocation(const FVector& Location, FRotator Rotation);
 
-	/** Apply a locomotion feel preset at runtime (fills the feel fields; Custom leaves them). */
-	UFUNCTION(BlueprintCallable, Category = "FlexXR|Locomotion")
-	void SetPreset(EFXR_LocomotionPreset InPreset);
-
 	/** True while a teleport arc is being aimed. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
 	bool IsAimingTeleport() const { return Phase == ETeleportPhase::Aiming; }
@@ -83,18 +76,27 @@ public:
 	float GetVignetteIntensity() const { return VignetteIntensity; }
 
 protected:
-	/** Feel preset — picking one fills every field below; editing any of them flips this to Custom. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion")
-	EFXR_LocomotionPreset Preset = EFXR_LocomotionPreset::Standard;
+	//~ Hands — the whole control layout. Each hand's stick is described independently: forward drives
+	//~ its movement, sideways its turn. Set one hand to None for a rig where only the other may move
+	//~ (common in guided training); set both the same to give the player either hand.
 
-	//~ Movement — what each hand's stick does. Set both to the same mode to give the player either
-	//~ hand; set one to None for a rig where only one hand may move (common in guided training).
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
-	EFXR_HandMovement LeftHandMovement = EFXR_HandMovement::None;
+	/** What the left stick's forward axis does. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Left Hand"))
+	EFXR_HandMovement LeftHandMovement = EFXR_HandMovement::SmoothMove;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
+	/** How the left stick's sideways axis turns. None leaves it to strafe, if this hand smooth-moves. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Left Turn Mode"))
+	EFXR_TurnMode LeftHandTurn = EFXR_TurnMode::None;
+
+	/** What the right stick's forward axis does. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Right Hand"))
 	EFXR_HandMovement RightHandMovement = EFXR_HandMovement::Teleport;
 
+	/** How the right stick's sideways axis turns. None leaves it to strafe, if this hand smooth-moves. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Right Turn Mode"))
+	EFXR_TurnMode RightHandTurn = EFXR_TurnMode::Snap;
+
+	//~ Movement
 	/** Frame the move stick is relative to (Hip approximates to Head — the rig has no hip tracker). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_MoveDirectionSource MoveDirectionSource = EFXR_MoveDirectionSource::HeadRelative;
@@ -136,24 +138,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0"))
 	float FadeDuration = 0.15f;
 
-	//~ Turning
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning")
-	EFXR_TurnMode TurnMode = EFXR_TurnMode::Snap;
-
+	//~ Turning — the feel of a turn; which hand turns, and how, is set per hand above.
 	/** Degrees per snap. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "TurnMode == EFXR_TurnMode::Snap"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Snap || RightHandTurn == EFXR_TurnMode::Snap"))
 	float SnapAngle = 30.f;
 
 	/** Degrees per second for smooth turning. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "TurnMode == EFXR_TurnMode::Smooth"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Smooth || RightHandTurn == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
-
-	/**
-	 * Which stick's sideways axis turns. Both = whichever hand is free to. A hand set to Smooth
-	 * Move needs its X for strafing, so it never turns regardless of what is chosen here.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (EditCondition = "TurnMode != EFXR_TurnMode::None"))
-	EFXR_LocomotionHand TurnHand = EFXR_LocomotionHand::Right;
 
 	//~ Comfort
 	/** Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant narrowed FOV. */
@@ -237,7 +229,6 @@ protected:
 private:
 	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn };
 
-	void ApplyPreset(EFXR_LocomotionPreset InPreset);
 	void TryBindInput();
 
 	void HandleLeftStick(const FInputActionValue& Value);
@@ -245,27 +236,29 @@ private:
 	void HandleLeftStickCompleted();
 	void HandleRightStickCompleted();
 
-	/** Store one hand's stick and act on its forward axis; turning is polled from it in ProcessTurn. */
+	/** Store one hand's stick and act on its forward axis; the sideways axis is polled in ProcessTurn. */
 	void ApplyStick(EFXR_HandSide Side, FVector2D Axis);
 
-	/** What this hand's stick is set to do. */
+	/** What this hand's stick forward axis does. */
 	EFXR_HandMovement MovementForHand(EFXR_HandSide Side) const
 	{
 		return (Side == EFXR_HandSide::Left) ? LeftHandMovement : RightHandMovement;
 	}
 
+	/** What this hand's stick sideways axis does. None means it is free to strafe. */
+	EFXR_TurnMode TurnModeForHand(EFXR_HandSide Side) const
+	{
+		return (Side == EFXR_HandSide::Left) ? LeftHandTurn : RightHandTurn;
+	}
+
 	/** Begin aiming if this hand may right now (enabled, idle, set to Teleport, not holding anything). */
 	void TryBeginTeleportAim(EFXR_HandSide Side);
 
-	/** True if this hand's stick X is free to turn: not holding anything (ADR-005), not strafing. */
-	bool CanHandTurn(EFXR_HandSide Side) const;
+	/** Turn from one hand's stick X, in that hand's own mode. Called for each hand every frame. */
+	void ProcessTurnForHand(EFXR_HandSide Side, float DeltaTime);
 
-	/**
-	 * The hand a turn should act through. A single assigned hand is used if it can turn; Both takes
-	 * whichever can, so turning keeps working while the other hand is occupied. Returns false when
-	 * neither can — the mode then yields entirely (ADR-005).
-	 */
-	bool ResolveTurnHand(EFXR_HandSide& OutSide) const;
+	/** Add one hand's stick contribution to the smooth-move delta; returns false if it contributes none. */
+	bool AccumulateSmoothMove(EFXR_HandSide Side, float DeltaTime, FVector& InOutDelta) const;
 
 	/**
 	 * A free hand set to this movement mode, if any. Both hands may carry the same mode, in which
@@ -309,7 +302,8 @@ private:
 
 	/** Latest thumbstick per hand, indexed by EFXR_HandSide — the one place input lands. */
 	FVector2D StickAxis[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
-	bool bTurnArmed = true;
+	/** Snap re-arm per hand, indexed by EFXR_HandSide — each stick flicks and re-centres on its own. */
+	bool bTurnArmed[2] = { true, true };
 	/** Which hand owns the teleport arc in flight — resolved when aiming starts, held until it ends. */
 	EFXR_HandSide AimingHand = EFXR_HandSide::Right;
 
