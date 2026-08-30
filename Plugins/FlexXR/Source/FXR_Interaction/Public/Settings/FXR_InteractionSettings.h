@@ -42,13 +42,24 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight")
 	TMap<EFXR_HighlightState, FLinearColor> StateColors;
 
-	/** Emissive multiplier for interactables that do not override it. */
+	/**
+	 * Emissive multiplier for Inner Blink and Sweep, where not overridden. Kept at 1 by default:
+	 * these draw unlit, so a higher value pushes the colour past white and every highlight looks the
+	 * same regardless of the colour picked. The Outline pass has its own, below.
+	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0"))
-	float HighlightIntensity = 2.f;
+	float HighlightIntensity = 1.f;
 
 	/** Pulses per second for Inner Blink and Sweep, where not overridden. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0"))
 	float HighlightPulseRate = 1.5f;
+
+	/**
+	 * Emissive multiplier for the Outline pass. Higher than the overlay default on purpose: the band
+	 * is thin and composited against the scene, so it needs headroom to read as a glow.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (ClampMin = "0.0"))
+	float OutlineIntensity = 3.f;
 
 	/** Outline band width in pixels, held constant across render resolutions. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (ClampMin = "0.5", ClampMax = "16.0"))

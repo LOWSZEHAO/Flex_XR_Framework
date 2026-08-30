@@ -187,7 +187,7 @@ void UFXR_HighlightSubsystem::EnsureOutlineBlendable()
 	OutlineMID->SetVectorParameterValue(TEXT("GuidanceColor"), Settings->GetColorFor(EFXR_HighlightState::Guidance));
 	OutlineMID->SetVectorParameterValue(TEXT("SelectedColor"), Settings->GetColorFor(EFXR_HighlightState::Selected));
 	OutlineMID->SetScalarParameterValue(TEXT("OutlineThickness"), Settings->OutlineThickness);
-	OutlineMID->SetScalarParameterValue(TEXT("OutlineIntensity"), Settings->HighlightIntensity);
+	OutlineMID->SetScalarParameterValue(TEXT("OutlineIntensity"), Settings->OutlineIntensity);
 
 	// Found through the view target rather than requiring a post-process volume or a FlexXR pawn, so
 	// a dropped-in interactable outlines with no level setup and whatever pawn the project ships.
