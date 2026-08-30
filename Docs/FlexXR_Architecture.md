@@ -237,7 +237,7 @@ BP_Door
 Known limitation (deliberately unsolved): a shared point carries **one** pose. If two owners need different poses at the same location, fall back to Case B. No per-owner pose override until a real case demands it.
 
 ### FXR_Highlight *(optional)*
-Every interactable already gets the default highlight automatically (Outline, bright yellow) — this component exists only to customize further:
+Every interactable already gets the default highlight automatically (Outline, neutral white on hover) — this component exists only to customize further:
 
 ```
 ├─ Per-state style overrides   (Hover / Guidance / Selected → any style)
@@ -258,7 +258,7 @@ case, and it sets the pattern for optional presentation components generally.
 
 | Style | Effect | Default state mapping |
 |---|---|---|
-| **Outline** | Silhouette edge glow, bright yellow | Hover — "you can interact with this" *(framework default style)* |
+| **Outline** | Silhouette edge glow; colour comes from the state, not the object (see §9) | Hover — "you can interact with this" *(framework default style)* |
 | **Inner Blink** | Whole-mesh emissive pulse | Guidance — "interact with this NOW" (SOP attention) |
 | **Sweep** | Gradient band travels across the object (direction configurable) | Selected/confirm, scan effects, "correct item" feedback |
 
@@ -582,6 +582,8 @@ No interaction may ever assume a specific input device; capability detection sel
 - **Forward renderer + MSAA** baseline; scalability tiers on one codebase: *PCVR high tier* (Lumen permitted, budgeted) and *Quest tier* (baked lighting, mobile feature set, strict draw-call/shader budgets).
 - **Highlight rendering, two implementations behind one API:**
   - *Outline* — PCVR: custom depth + post-process material (crisp). Quest: auto-swaps to inverted-hull outline mesh (full-screen post-process is a Quest frame-budget killer).
+    **The stencil carries the highlight *state*, not the style** (1 Hover, 2 Guidance, 3 Selected). One full-screen pass serves every outlined object, so it can never read a per-object colour; state is the only axis it can vary along, and encoding it there is what lets hover and guidance differ — and lets a project outline all three states in three colours. A replacement material only has to honour that contract.
+    The pass is attached to the view target's camera component (found via the player camera manager), so outlines need no post-process volume and work with any project's pawn. Requires `r.CustomDepth=3` — at `1` the stencil is not written anywhere readable.
   - *Inner Blink & Sweep* — UE5 per-mesh **Overlay Material** slot (cheap on both tiers); Sweep = moving gradient mask in the overlay shader, direction is a vector parameter.
 - 90 fps discipline as a framework value: per-tier frame budgets documented; Unreal Insights profiling from Phase 2, not as an afterthought.
 - Solver, detection pipeline, and hand pipeline allocation-free per frame; registry queries are sphere-vs-spatial-hash (no physics broadphase churn); hand meshes instanced where possible.
