@@ -14,7 +14,10 @@ public class FXR_Interaction : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"FXR_Core"
+			"FXR_Core",
+			// UFXR_InteractionSettings derives from UDeveloperSettings, whose UCLASS lives here —
+			// header access alone links against nothing.
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
