@@ -524,8 +524,9 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	// Yield to interaction (ADR-005), and to anything merely *reachable*: the pinch that commits a
-	// teleport is the same pinch that grabs, so reaching for an object must never also move you.
+	// Yield to interaction (ADR-005), and to anything merely *reachable*. Pinch is the only verb
+	// hand tracking has, so it means both "grab" and "teleport"; reach decides which. This is the
+	// whole arbitration — nothing else distinguishes the two.
 	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide) || HasGrabCandidate(GestureSide))
 	{
 		if (Phase == ETeleportPhase::Aiming)
@@ -535,28 +536,22 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	const bool bPalmAway = IsPalmFacingAway(Hand);
-	const bool bPinch = Hand->GetSelectValue() >= HandPinchCommitThreshold;
+	// Pinch and hold raises the arc, releasing it teleports — the same shape as pushing and
+	// releasing a thumbstick, so both input paths behave identically once the arc is up. An
+	// invalid target on release simply cancels, which is how a player backs out.
+	const bool bPinch = Hand->GetSelectValue() >= HandPinchThreshold;
 
 	if (Phase == ETeleportPhase::Idle)
 	{
-		// Turn the palm outward (without pinching) to begin aiming.
-		if (bPalmAway && !bPinch)
+		if (bPinch)
 		{
 			AimingHand = GestureSide;
 			Phase = ETeleportPhase::Aiming;
 		}
 	}
-	else if (Phase == ETeleportPhase::Aiming)
+	else if (Phase == ETeleportPhase::Aiming && !bPinch)
 	{
-		if (bPinch)
-		{
-			CommitTeleport(); // pinch commits
-		}
-		else if (!bPalmAway)
-		{
-			Phase = ETeleportPhase::Idle; // turn the palm back in to cancel
-		}
+		CommitTeleport();
 	}
 }
 
@@ -564,35 +559,6 @@ bool UFXR_Locomotion::IsHandTracking(EFXR_HandSide Side) const
 {
 	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
 	return Interactor && Interactor->GetInteractorType() == EFXR_InteractorType::TrackedHand;
-}
-
-bool UFXR_Locomotion::IsPalmFacingAway(const IFXR_Interactor* Hand) const
-{
-	if (!Hand)
-	{
-		return false;
-	}
-
-	const FTransform Palm = Hand->GetPalmTransform();
-	const FVector PalmNormal = Palm.TransformVectorNoScale(PalmForwardAxisLocal).GetSafeNormal();
-
-	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
-	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
-	if (!HMD)
-	{
-		return false;
-	}
-
-	// Measured against head→hand rather than head-forward, so turning the palm outward still reads
-	// as "away" when the arm is held out to the side. Too close to the head for that to be stable,
-	// and the look direction is the better answer.
-	FVector Outward = Palm.GetLocation() - HMD->GetComponentLocation();
-	if (!Outward.Normalize(10.f))
-	{
-		Outward = HMD->GetForwardVector();
-	}
-
-	return FVector::DotProduct(PalmNormal, Outward) >= PalmAwayThreshold;
 }
 
 bool UFXR_Locomotion::HasGrabCandidate(EFXR_HandSide Side) const

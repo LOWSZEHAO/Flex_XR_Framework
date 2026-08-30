@@ -165,21 +165,14 @@ protected:
 	bool bVignetteOnSmoothMove = true;
 
 	//~ Hand Tracking (gesture teleport when the hand is the active source; controllers ignore these)
-	//~ Point-and-pinch, the convention the Quest system UI already teaches: a relaxed hand turned
-	//~ palm-outward raises the arc, a pinch commits it. Palm-away rather than palm-down because a
-	//~ deliberate flat-down pose is tiring and is not what shipped hand-tracking titles ask for.
+	//~ Pinch and hold to aim, release to teleport — the Meta Interaction SDK convention the Quest
+	//~ system UI already teaches, and the same shape as the stick path (hold to aim, let go to go).
+	//~ There is deliberately no palm-orientation gate: the palm normal is perpendicular to the aim
+	//~ direction, so any such gate fights aiming near your feet.
 
-	/** Pinch strength that commits a gesture teleport. */
+	/** Pinch strength that raises the arc. Releasing below it teleports. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float HandPinchCommitThreshold = 0.7f;
-
-	/** Palm-local axis pointing out through the palm. Flip a sign in-headset if aiming reads inverted. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking")
-	FVector PalmForwardAxisLocal = FVector(0.f, 0.f, -1.f);
-
-	/** How far the palm must be turned away from the head (dot with the head→hand direction) to aim. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float PalmAwayThreshold = 0.5f;
+	float HandPinchThreshold = 0.7f;
 
 	//~ Input
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
@@ -286,9 +279,6 @@ private:
 	void ProcessSmoothMove(float DeltaTime);
 	void ProcessHandTeleportGesture();
 	bool IsHandTracking(EFXR_HandSide Side) const;
-
-	/** True when the palm is turned outward, away from the head — the gesture-teleport aim pose. */
-	bool IsPalmFacingAway(const IFXR_Interactor* Hand) const;
 
 	/**
 	 * True when something grabbable is within this hand's grab sphere. Gesture teleport yields to
