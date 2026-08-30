@@ -22,6 +22,7 @@ class UFXR_InteractionDriver;
 class UFXR_TeleportRegistry;
 class UFXR_TeleportAnchor;
 class UFXR_TeleportBlocker;
+class UFXR_ClimbHold;
 class IFXR_Interactor;
 struct FInputActionValue;
 
@@ -155,6 +156,19 @@ protected:
 	/** Degrees per second for smooth turning. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Smooth || RightHandTurn == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
+
+	//~ Climbing — automatic wherever a FXR_ClimbHold exists; there is no switch to turn it on.
+	/**
+	 * Downward acceleration (cm/s²) applied after letting go above the floor. Climbing is the only
+	 * thing in the rig that puts the player in the air, so this is the only place gravity applies —
+	 * walking off a ledge does not fall, by design.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Climbing", meta = (ClampMin = "0.0"))
+	float ClimbFallGravity = 980.f;
+
+	/** Terminal speed (cm/s) of that fall. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Climbing", meta = (ClampMin = "1.0"))
+	float MaxClimbFallSpeed = 1200.f;
 
 	//~ Comfort
 	/** Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant narrowed FOV. */
@@ -303,6 +317,22 @@ private:
 	float GetTransitionDuration() const;
 	void ProcessTurn(float DeltaTime);
 	void ProcessSmoothMove(float DeltaTime);
+
+	/**
+	 * Drag the play space so a hand holding a FXR_ClimbHold stays put in the world — the hand is
+	 * the fixed point and the rig moves, which is what pulling yourself up actually is.
+	 * Returns true while a hold is being climbed, so the stick modes know to stand down.
+	 */
+	bool ProcessClimb(float DeltaTime);
+
+	/** Fall to the floor after letting go mid-climb. */
+	void ProcessClimbFall(float DeltaTime);
+
+	/** The hold this hand is on, or null. */
+	UFXR_ClimbHold* GetClimbHoldFor(EFXR_HandSide Side) const;
+
+	/** Where the given hand grips in world space — the anchor a climb is measured against. */
+	FVector GetClimbHandLocation(EFXR_HandSide Side) const;
 	void ProcessHandTeleportGesture();
 	bool IsHandTracking(EFXR_HandSide Side) const;
 	void UpdateVignette(float DeltaTime);
@@ -339,6 +369,14 @@ private:
 	/** Whether TargetFacingYaw was actually asked for — a centred stick under Thumbstick Choose is not. */
 	bool bApplyLandingFacing = false;
 	float FadeElapsed = 0.f;
+
+	// Climb state: the world-space point each climbing hand is pinned to, and which hand is driving
+	// when both are on. Anchors are re-taken on every fresh grab, so hand-over-hand cannot drift.
+	FVector ClimbAnchor[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	bool bClimbing[2] = { false, false };
+	EFXR_HandSide ClimbDriver = EFXR_HandSide::Right;
+	bool bClimbFalling = false;
+	float ClimbFallSpeed = 0.f;
 
 	// Dash slides the play space instead of cutting, so it needs the endpoints held across frames.
 	FVector DashStartOrigin = FVector::ZeroVector;

@@ -8,6 +8,7 @@
 #include "Detection/FXR_TeleportRegistry.h"
 #include "World/FXR_TeleportAnchor.h"
 #include "World/FXR_TeleportBlocker.h"
+#include "World/FXR_ClimbHold.h"
 #include "Types/FXR_LogChannels.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -132,6 +133,19 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		ProcessHandTeleportGesture();
 	}
 
+	// Climbing outranks the stick modes: a hand on a hold is already moving the player, and both
+	// hands are busy by definition, so smooth move would be fighting the arm that is doing the work.
+	const bool bWasClimbing = bClimbing[0] || bClimbing[1];
+	const bool bClimbingNow = ProcessClimb(DeltaTime);
+
+	// Letting go of the last hold above the floor starts a fall — the one place the rig has gravity.
+	if (bWasClimbing && !bClimbingNow)
+	{
+		bClimbFalling = true;
+		ClimbFallSpeed = 0.f;
+	}
+	ProcessClimbFall(DeltaTime);
+
 	// Turning runs whenever the view isn't mid-transition. On hands the turn stick is absent, so this
 	// is a no-op and turning comes from teleport landing rotation instead.
 	if (Phase == ETeleportPhase::Idle || Phase == ETeleportPhase::Aiming)
@@ -140,7 +154,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	}
 
 	// Smooth move is illegal while aiming a teleport (ADR-005) and not offered on hands (no stick).
-	if (Phase == ETeleportPhase::Idle)
+	if (Phase == ETeleportPhase::Idle && !bClimbingNow)
 	{
 		ProcessSmoothMove(DeltaTime);
 	}
@@ -359,6 +373,115 @@ void UFXR_Locomotion::ApplyStick(EFXR_HandSide Side, FVector2D Axis)
 	{
 		CommitTeleport();
 	}
+}
+
+UFXR_ClimbHold* UFXR_Locomotion::GetClimbHoldFor(EFXR_HandSide Side) const
+{
+	return CachedDriver ? Cast<UFXR_ClimbHold>(CachedDriver->GetHeldInteractable(Side)) : nullptr;
+}
+
+FVector UFXR_Locomotion::GetClimbHandLocation(EFXR_HandSide Side) const
+{
+	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
+	return Interactor ? Interactor->GetGripTransform().GetLocation() : FVector::ZeroVector;
+}
+
+bool UFXR_Locomotion::ProcessClimb(float DeltaTime)
+{
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	if (!Origin)
+	{
+		return false;
+	}
+
+	bool bAnyClimbing = false;
+
+	// Take a fresh anchor the moment a hand grabs. Doing it here rather than in the hold keeps the
+	// anchor in the same frame of reference as the movement that consumes it.
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		const EFXR_HandSide Side = static_cast<EFXR_HandSide>(Index);
+		const bool bHolding = (GetClimbHoldFor(Side) != nullptr) && bLocomotionEnabled;
+
+		if (bHolding && !bClimbing[Index])
+		{
+			ClimbAnchor[Index] = GetClimbHandLocation(Side);
+			ClimbDriver = Side; // the newest grip leads, which is what hand-over-hand means
+		}
+		bClimbing[Index] = bHolding;
+		bAnyClimbing |= bHolding;
+	}
+
+	if (!bAnyClimbing)
+	{
+		return false;
+	}
+
+	// If the driving hand let go, the survivor takes over — and re-anchors, or the rig would snap
+	// by however far that hand has moved since it grabbed.
+	if (!bClimbing[static_cast<int32>(ClimbDriver)])
+	{
+		ClimbDriver = (ClimbDriver == EFXR_HandSide::Left) ? EFXR_HandSide::Right : EFXR_HandSide::Left;
+		ClimbAnchor[static_cast<int32>(ClimbDriver)] = GetClimbHandLocation(ClimbDriver);
+	}
+
+	// The hand is the fixed point: move the rig by whatever it would take to put the hand back on
+	// its anchor. Pulling your hand down therefore lifts you, which is the whole gesture.
+	const FVector Correction = ClimbAnchor[static_cast<int32>(ClimbDriver)] - GetClimbHandLocation(ClimbDriver);
+	if (!Correction.IsNearlyZero())
+	{
+		Origin->AddWorldOffset(Correction, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	// Climbing is self-inflicted motion the player is driving with their own arm, so it reads as
+	// comfortable; the vignette is left to smooth move and dash.
+	bClimbFalling = false;
+	ClimbFallSpeed = 0.f;
+	return true;
+}
+
+void UFXR_Locomotion::ProcessClimbFall(float DeltaTime)
+{
+	if (!bClimbFalling)
+	{
+		return;
+	}
+
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Origin || !HMD || !World)
+	{
+		bClimbFalling = false;
+		return;
+	}
+
+	ClimbFallSpeed = FMath::Min(ClimbFallSpeed + ClimbFallGravity * DeltaTime, MaxClimbFallSpeed);
+	const float Step = ClimbFallSpeed * DeltaTime;
+
+	// Look for floor under the head rather than under the origin: after a climb the two can be far
+	// apart horizontally, and it is the player who has to land somewhere solid.
+	const FVector Probe(HMD->GetComponentLocation().X, HMD->GetComponentLocation().Y, Origin->GetComponentLocation().Z);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(GetOwner());
+	const bool bGround = World->LineTraceSingleByChannel(
+		Hit, Probe + FVector(0.f, 0.f, 10.f), Probe - FVector(0.f, 0.f, Step + 50.f), TeleportTraceChannel, Params);
+
+	if (bGround && (Probe.Z - Hit.Location.Z) <= Step)
+	{
+		Origin->SetWorldLocation(
+			FVector(Origin->GetComponentLocation().X, Origin->GetComponentLocation().Y, Hit.Location.Z),
+			false, nullptr, ETeleportType::TeleportPhysics);
+		bClimbFalling = false;
+		ClimbFallSpeed = 0.f;
+		return;
+	}
+
+	Origin->AddWorldOffset(FVector(0.f, 0.f, -Step), false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UFXR_Locomotion::ProcessTurn(float DeltaTime)
