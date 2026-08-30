@@ -20,6 +20,7 @@
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -30,6 +31,18 @@ namespace
 	constexpr float TurnSnapThreshold = 0.8f;
 	constexpr float TurnRearmThreshold = 0.3f;
 	constexpr float TurnSmoothDeadzone = 0.15f;
+
+	// An arc already up commits on the stick re-centring, not on the forward axis alone: Thumbstick
+	// Choose needs the stick free to swing sideways to pick a facing without that ending the aim.
+	constexpr float TeleportReleaseMagnitude = 0.25f;
+
+	// Below this the stick is not asking for a particular landing facing, so Thumbstick Choose keeps
+	// the current one rather than snapping to whatever noise the stick reports near centre.
+	constexpr float LandingFacingDeadzone = 0.4f;
+
+	// Blink is a hard cut rather than a graded fade, so it runs on its own short constant instead of
+	// FadeDuration — a "blink" the designer can slow down is not a blink.
+	constexpr float BlinkDuration = 0.06f;
 }
 
 UFXR_Locomotion::UFXR_Locomotion()
@@ -57,6 +70,24 @@ void UFXR_Locomotion::BeginPlay()
 	}
 
 	CachedRegistry = UFXR_TeleportRegistry::Get(this);
+
+	// Reticle is opt-in: no mesh assigned means the debug circle stays the only marker, and no
+	// component is created at all.
+	if (ReticleMesh)
+	{
+		if (AActor* Owner = GetOwner())
+		{
+			ReticleComponent = NewObject<UStaticMeshComponent>(Owner, TEXT("FXR_TeleportReticle"));
+			ReticleComponent->SetupAttachment(Owner->GetRootComponent());
+			ReticleComponent->SetStaticMesh(ReticleMesh);
+			ReticleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ReticleComponent->SetGenerateOverlapEvents(false);
+			ReticleComponent->SetCastShadow(false);
+			ReticleComponent->SetAbsolute(true, true, false); // world-placed each frame, not carried by the rig
+			ReticleComponent->SetHiddenInGame(true);
+			ReticleComponent->RegisterComponent();
+		}
+	}
 }
 
 void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -114,11 +145,16 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		ProcessSmoothMove(DeltaTime);
 	}
 
-	// One place to close out aim highlights: every path out of Aiming (commit, yield, disable,
-	// gesture cancel) passes through here, so a bound On Exit can never be missed.
-	if (Phase != ETeleportPhase::Aiming && (HoveredAnchor.IsValid() || HoveredBlocker.IsValid()))
+	// One place to close out the aim's visuals and highlights: every path out of Aiming (commit,
+	// yield, disable, gesture cancel) passes through here, so a bound On Exit can never be missed
+	// and the reticle can never be left standing in the world.
+	if (Phase != ETeleportPhase::Aiming)
 	{
-		UpdateAimHover(nullptr, nullptr);
+		if (HoveredAnchor.IsValid() || HoveredBlocker.IsValid())
+		{
+			UpdateAimHover(nullptr, nullptr);
+		}
+		UpdateReticle(false);
 	}
 
 	switch (Phase)
@@ -129,7 +165,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	case ETeleportPhase::FadingOut:
 		FadeElapsed += DeltaTime;
-		if (FadeElapsed >= FadeDuration * 0.5f)
+		if (FadeElapsed >= GetTransitionDuration() * 0.5f)
 		{
 			ExecuteMove();
 			Phase = ETeleportPhase::FadingIn;
@@ -140,10 +176,14 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	case ETeleportPhase::FadingIn:
 		FadeElapsed += DeltaTime;
-		if (FadeElapsed >= FadeDuration * 0.5f)
+		if (FadeElapsed >= GetTransitionDuration() * 0.5f)
 		{
 			Phase = ETeleportPhase::Idle;
 		}
+		break;
+
+	case ETeleportPhase::Dashing:
+		TickDash(DeltaTime);
 		break;
 
 	default:
@@ -179,9 +219,11 @@ void UFXR_Locomotion::SetTurnEnabled(bool bEnabled)
 bool UFXR_Locomotion::TeleportToLocation(const FVector& Location, FRotator Rotation)
 {
 	// Scripted move: no aim/validation, no transition — used by SOP "MoveTo" steps and game script.
+	// The caller named a rotation, so it is always applied regardless of the Landing Rotation mode.
 	TargetLocation = Location;
 	TargetFacingYaw = Rotation.Yaw;
 	bTargetValid = true;
+	bApplyLandingFacing = true;
 	ExecuteMove();
 	return true;
 }
@@ -299,13 +341,22 @@ void UFXR_Locomotion::ApplyStick(EFXR_HandSide Side, FVector2D Axis)
 		return; // smooth move and turning are polled in tick; only teleport is edge-driven
 	}
 
-	if (Axis.Y >= TeleportActivationThreshold)
+	const bool bAiming = (Phase == ETeleportPhase::Aiming && AimingHand == Side);
+
+	if (!bAiming)
 	{
-		TryBeginTeleportAim(Side);
+		if (Axis.Y >= TeleportActivationThreshold)
+		{
+			TryBeginTeleportAim(Side);
+		}
+		return;
 	}
-	else if (Phase == ETeleportPhase::Aiming && AimingHand == Side)
+
+	// Once the arc is up, only re-centring the stick commits. Falling back below the *forward*
+	// threshold must not, or swinging the stick sideways to choose a landing facing would fire the
+	// teleport the moment it left centre-forward.
+	if (Axis.SizeSquared() < FMath::Square(TeleportReleaseMagnitude))
 	{
-		// Released, or eased back below the threshold without fully centring — both commit.
 		CommitTeleport();
 	}
 }
@@ -604,7 +655,48 @@ void UFXR_Locomotion::UpdateAim()
 	}
 
 	PredictAndValidate(TargetLocation, bTargetValid, TargetFacingYaw);
+
+	// Resolved every aim frame rather than at commit, so a reticle can show where you will end up.
+	switch (LandingRotation)
+	{
+	case EFXR_LandingRotation::FaceArc:
+		bApplyLandingFacing = true; // TargetFacingYaw is already the arc's yaw
+		break;
+
+	case EFXR_LandingRotation::ThumbstickChoose:
+		// Only a deliberately deflected stick asks for a facing; centred means "leave me as I am",
+		// which is also what a tracked hand does, having no stick to report.
+		bApplyLandingFacing = ResolveThumbstickFacing(TargetFacingYaw);
+		break;
+
+	default:
+		bApplyLandingFacing = false;
+		break;
+	}
+
 	DrawAim();
+}
+
+bool UFXR_Locomotion::ResolveThumbstickFacing(float& OutFacingYaw) const
+{
+	const FVector2D Axis = StickAxis[static_cast<int32>(AimingHand)];
+	if (Axis.SizeSquared() < FMath::Square(LandingFacingDeadzone))
+	{
+		return false;
+	}
+
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+	if (!HMD)
+	{
+		return false;
+	}
+
+	// Stick forward means "keep looking the way I am"; rotating it swings the landing facing with
+	// it, measured off the head so the mapping matches what the player sees rather than the world.
+	const float StickYaw = FMath::RadiansToDegrees(FMath::Atan2(Axis.X, Axis.Y));
+	OutFacingYaw = FRotator::NormalizeAxis(HMD->GetComponentRotation().Yaw + StickYaw);
+	return true;
 }
 
 bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw)
@@ -777,8 +869,32 @@ void UFXR_Locomotion::CommitTeleport()
 		Anchor->OnTeleported.Broadcast();
 	}
 
-	const bool bFade = (Transition != EFXR_TeleportTransition::Instant) && (FadeDuration > KINDA_SMALL_NUMBER);
-	if (bFade)
+	const float Duration = GetTransitionDuration();
+
+	if (Transition == EFXR_TeleportTransition::Dash && Duration > KINDA_SMALL_NUMBER)
+	{
+		// Dash keeps the world visible and slides the play space there, so the endpoints are worked
+		// out once, up front — recomputing per frame would chase a target that keeps moving with you.
+		const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+		const USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+		const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
+		if (Origin && HMD)
+		{
+			FVector HMDOffset = HMD->GetComponentLocation() - Origin->GetComponentLocation();
+			HMDOffset.Z = 0.f;
+
+			DashStartOrigin = Origin->GetComponentLocation();
+			DashEndOrigin = TargetLocation - HMDOffset;
+			DashEndOrigin.Z = TargetLocation.Z;
+
+			DashElapsed = 0.f;
+			Phase = ETeleportPhase::Dashing;
+			return;
+		}
+		// No rig interface to slide — fall through and cut instead of doing nothing.
+	}
+
+	if (Duration > KINDA_SMALL_NUMBER)
 	{
 		Phase = ETeleportPhase::FadingOut;
 		FadeElapsed = 0.f;
@@ -787,6 +903,60 @@ void UFXR_Locomotion::CommitTeleport()
 	else
 	{
 		ExecuteMove();
+		Phase = ETeleportPhase::Idle;
+	}
+}
+
+float UFXR_Locomotion::GetTransitionDuration() const
+{
+	switch (Transition)
+	{
+	case EFXR_TeleportTransition::Instant:
+		return 0.f;
+
+	// A blink is a hard cut with just enough black to hide the jump; letting Fade Duration stretch
+	// it would make it a slow fade wearing the wrong name.
+	case EFXR_TeleportTransition::Blink:
+		return BlinkDuration;
+
+	default:
+		return FadeDuration;
+	}
+}
+
+void UFXR_Locomotion::TickDash(float DeltaTime)
+{
+	const float Duration = FMath::Max(GetTransitionDuration(), KINDA_SMALL_NUMBER);
+	DashElapsed += DeltaTime;
+
+	const float Alpha = FMath::Clamp(DashElapsed / Duration, 0.f, 1.f);
+
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	if (!Origin)
+	{
+		Phase = ETeleportPhase::Idle;
+		return;
+	}
+
+	// Eased so the dash starts and ends soft; a linear slide reads as a lurch at both ends.
+	const FVector Position = FMath::Lerp(DashStartOrigin, DashEndOrigin, FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f));
+	Origin->SetWorldLocation(Position, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// A dash is real optical flow, so it earns the comfort vignette that teleport and snap do not.
+	SmoothMoveFactor = 1.f;
+
+	if (Alpha >= 1.f)
+	{
+		// Landing rotation is applied at the end rather than blended: turning mid-slide stacks
+		// rotation on translation, which is the least comfortable thing VR can do to a player.
+		if (bApplyLandingFacing)
+		{
+			if (const USceneComponent* HMD = LocOwner->GetHMDComponent())
+			{
+				ApplyYaw(FRotator::NormalizeAxis(TargetFacingYaw - HMD->GetComponentRotation().Yaw));
+			}
+		}
 		Phase = ETeleportPhase::Idle;
 	}
 }
@@ -819,9 +989,10 @@ void UFXR_Locomotion::ExecuteMove()
 		NewOrigin.Z = TargetLocation.Z;
 		Origin->SetWorldLocation(NewOrigin, false, nullptr, ETeleportType::TeleportPhysics);
 
-		// Landing rotation about the HMD (ADR-006). KeepFacing is a no-op; FaceArc turns the player
-		// to face the arc's aim direction. Thumbstick Choose (aim-time stick) is a later refinement.
-		if (LandingRotation == EFXR_LandingRotation::FaceArc)
+		// Landing rotation about the HMD (ADR-006). FaceArc and Thumbstick Choose both arrive here
+		// already resolved into TargetFacingYaw during aim, and a scripted move sets it outright —
+		// so this only asks whether a facing was requested, not which mode requested it.
+		if (bApplyLandingFacing)
 		{
 			const float HMDYaw = HMD->GetComponentRotation().Yaw;
 			ApplyYaw(FRotator::NormalizeAxis(TargetFacingYaw - HMDYaw));
@@ -845,8 +1016,11 @@ void UFXR_Locomotion::DrawAim() const
 	const UWorld* World = GetWorld();
 	if (!World || ArcPoints.Num() == 0)
 	{
+		UpdateReticle(false);
 		return;
 	}
+
+	UpdateReticle(true);
 
 	const FColor Color = bTargetValid ? FColor::Green : FColor::Red;
 	for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
@@ -854,8 +1028,43 @@ void UFXR_Locomotion::DrawAim() const
 		DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
 	}
 
-	const FVector Reticle = bTargetValid ? TargetLocation : ArcPoints.Last();
-	DrawDebugCircle(World, Reticle + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+	// The debug circle is the fallback marker; an assigned Reticle Mesh replaces it.
+	if (!ReticleComponent)
+	{
+		const FVector Reticle = bTargetValid ? TargetLocation : ArcPoints.Last();
+		DrawDebugCircle(World, Reticle + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+	}
+}
+
+void UFXR_Locomotion::UpdateReticle(bool bVisible) const
+{
+	if (!ReticleComponent)
+	{
+		return;
+	}
+
+	if (!bVisible)
+	{
+		ReticleComponent->SetHiddenInGame(true);
+		return;
+	}
+
+	const FVector Location = bTargetValid ? TargetLocation : ArcPoints.Last();
+
+	// Faces the landing yaw so a directional reticle shows which way you will be looking; that is
+	// the whole point of Face Arc and Thumbstick Choose being visible before you commit.
+	const FRotator Rotation(0.f, bApplyLandingFacing ? TargetFacingYaw : 0.f, 0.f);
+	ReticleComponent->SetWorldLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	if (UMaterialInterface* Material = bTargetValid ? ValidMaterial : InvalidMaterial)
+	{
+		if (ReticleComponent->GetMaterial(0) != Material)
+		{
+			ReticleComponent->SetMaterial(0, Material);
+		}
+	}
+
+	ReticleComponent->SetHiddenInGame(false);
 }
 
 void UFXR_Locomotion::StartCameraFade(float From, float To) const
@@ -870,7 +1079,7 @@ void UFXR_Locomotion::StartCameraFade(float From, float To) const
 		if (PC->PlayerCameraManager)
 		{
 			const bool bHoldWhenFinished = (To > From); // fading to black holds until we fade back
-			PC->PlayerCameraManager->StartCameraFade(From, To, FadeDuration * 0.5f, FColor::Black, false, bHoldWhenFinished);
+			PC->PlayerCameraManager->StartCameraFade(From, To, GetTransitionDuration() * 0.5f, FColor::Black, false, bHoldWhenFinished);
 		}
 	}
 }

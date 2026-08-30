@@ -13,6 +13,7 @@
 class UInputAction;
 class UInputMappingContext;
 class UStaticMesh;
+class UStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UCameraComponent;
@@ -107,6 +108,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0"))
 	float SmoothMoveSpeed = 250.f;
 
+	/**
+	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration; Blink
+	 * is the same but on a fixed short cut you cannot slow down; Dash slides the play space there
+	 * with the world visible (the only one that creates optical flow, so it vignettes); Instant
+	 * cuts with no transition at all.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
 
@@ -136,8 +143,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
 	TEnumAsByte<ECollisionChannel> TeleportTraceChannel = ECC_WorldStatic;
 
-	/** View transition length (s). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0"))
+	/** View transition length (s) — the fade for Fade, the slide for Dash. Blink and Instant ignore it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0", EditCondition = "Transition == EFXR_TeleportTransition::Fade || Transition == EFXR_TeleportTransition::Dash"))
 	float FadeDuration = 0.15f;
 
 	//~ Turning — the feel of a turn; which hand turns, and how, is set per hand above.
@@ -210,13 +217,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	int32 InputPriority = 0;
 
-	//~ Visuals (optional; debug lines are used until meshes are assigned — a later slice).
+	//~ Visuals (all optional; the arc and reticle fall back to debug lines).
+	/**
+	 * Mesh placed at the teleport target while aiming, replacing the debug circle. It is rotated to
+	 * the landing facing, so a directional mesh shows which way you will end up looking. Build it
+	 * lying in the XY plane with +X forward.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UStaticMesh> ReticleMesh;
 
+	/** Material on the reticle when the target is teleportable. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> ValidMaterial;
 
+	/** Material on the reticle when the target is rejected — off-nav, too steep, or blocked. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
@@ -229,7 +243,7 @@ protected:
 	FName VignetteIntensityParameter = TEXT("Intensity");
 
 private:
-	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn };
+	enum class ETeleportPhase : uint8 { Idle, Aiming, FadingOut, FadingIn, Dashing };
 
 	void TryBindInput();
 
@@ -278,6 +292,15 @@ private:
 	void UpdateAimHover(UFXR_TeleportAnchor* Anchor, UFXR_TeleportBlocker* Blocker);
 	void CommitTeleport();
 	void ExecuteMove();
+
+	/** Slide the play space toward the committed target over Fade Duration (the Dash transition). */
+	void TickDash(float DeltaTime);
+
+	/** The landing facing the stick is asking for, if it is deflected far enough to be asking. */
+	bool ResolveThumbstickFacing(float& OutFacingYaw) const;
+
+	/** How long the view transition takes, given the chosen Transition. */
+	float GetTransitionDuration() const;
 	void ProcessTurn(float DeltaTime);
 	void ProcessSmoothMove(float DeltaTime);
 	void ProcessHandTeleportGesture();
@@ -287,6 +310,9 @@ private:
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
 	void DrawAim() const;
+
+	/** Place/hide the reticle mesh for this frame's target. No-op until a Reticle Mesh is assigned. */
+	void UpdateReticle(bool bVisible) const;
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
 	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
@@ -310,7 +336,14 @@ private:
 	FVector TargetLocation = FVector::ZeroVector;
 	bool bTargetValid = false;
 	float TargetFacingYaw = 0.f;
+	/** Whether TargetFacingYaw was actually asked for — a centred stick under Thumbstick Choose is not. */
+	bool bApplyLandingFacing = false;
 	float FadeElapsed = 0.f;
+
+	// Dash slides the play space instead of cutting, so it needs the endpoints held across frames.
+	FVector DashStartOrigin = FVector::ZeroVector;
+	FVector DashEndOrigin = FVector::ZeroVector;
+	float DashElapsed = 0.f;
 
 	/** Latest thumbstick per hand, indexed by EFXR_HandSide — the one place input lands. */
 	FVector2D StickAxis[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
@@ -328,6 +361,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> VignetteMID;
+
+	// Built at BeginPlay only when a Reticle Mesh is assigned, so a project that never sets one pays
+	// nothing. Created with NewObject rather than as a default subobject — a component's default
+	// subobject does not survive Blueprint SCS instancing.
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> ReticleComponent;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.
