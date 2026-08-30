@@ -114,10 +114,10 @@ protected:
 	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
 
 	/**
-	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration; Blink
-	 * is the same but on a fixed short cut you cannot slow down; Dash slides the play space there
-	 * with the world visible (the only one that creates optical flow, so it vignettes); Instant
-	 * cuts with no transition at all.
+	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration — a
+	 * short Fade Duration (~0.06 s) is the "blink" comfort option, which is why there is no
+	 * separate Blink mode. Dash slides the play space there with the world visible, and is the only
+	 * one that creates optical flow, so it is the only one that vignettes. Instant cuts.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
 	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
@@ -171,7 +171,11 @@ protected:
 	float MaxClimbFallSpeed = 1200.f;
 
 	//~ Comfort
-	/** Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant narrowed FOV. */
+	/**
+	 * Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant
+	 * narrowed FOV. This chooses *how much* vignette to ask for — a Vignette Material (or your own
+	 * overlay bound to Get Vignette Intensity) is what actually draws it.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort")
 	EFXR_VignetteMode VignetteMode = EFXR_VignetteMode::Dynamic;
 
@@ -248,7 +252,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
-	/** Post-process material driven each frame with the vignette intensity. If unset, bind Get Vignette Intensity to your own overlay. */
+	/**
+	 * Post-process material driven each frame with the vignette intensity, through the scalar named
+	 * below. **The vignette draws nothing until this is set** — Vignette Mode only computes the
+	 * intensity. Assign a post-process material, or leave this empty and bind Get Vignette Intensity
+	 * to your own overlay.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> VignetteMaterial;
 
