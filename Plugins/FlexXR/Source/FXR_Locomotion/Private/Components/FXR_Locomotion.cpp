@@ -22,6 +22,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/ConstructorHelpers.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -46,6 +48,30 @@ namespace
 UFXR_Locomotion::UFXR_Locomotion()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	// Enabled and automatic by default (design principle 2): comfort and the aim reticle ship with
+	// assets, so both work on a bare component instead of quietly needing content authored first.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultVignette(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultReticle(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultValid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Valid.M_FXR_Reticle_Valid"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultInvalid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Invalid.M_FXR_Reticle_Invalid"));
+
+	if (DefaultVignette.Succeeded())
+	{
+		VignetteMaterial = DefaultVignette.Object;
+	}
+	if (DefaultReticle.Succeeded())
+	{
+		ReticleMesh = DefaultReticle.Object;
+	}
+	if (DefaultValid.Succeeded())
+	{
+		ValidMaterial = DefaultValid.Object;
+	}
+	if (DefaultInvalid.Succeeded())
+	{
+		InvalidMaterial = DefaultInvalid.Object;
+	}
 }
 
 void UFXR_Locomotion::BeginPlay()
@@ -1164,7 +1190,8 @@ void UFXR_Locomotion::UpdateReticle(bool bVisible) const
 		return;
 	}
 
-	const FVector Location = bTargetValid ? TargetLocation : ArcPoints.Last();
+	// Lifted clear of the surface it marks, or a flat reticle z-fights the floor it is lying on.
+	const FVector Location = (bTargetValid ? TargetLocation : ArcPoints.Last()) + FVector(0.f, 0.f, ReticleGroundOffset);
 
 	// Faces the landing yaw so a directional reticle shows which way you will be looking; that is
 	// the whole point of Face Arc and Thumbstick Choose being visible before you commit.

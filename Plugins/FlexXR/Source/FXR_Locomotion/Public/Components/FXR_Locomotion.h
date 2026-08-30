@@ -252,6 +252,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
+	/** How far above the target the reticle sits (cm). Enough to clear the surface, not enough to float. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.0"))
+	float ReticleGroundOffset = 2.f;
+
 	/**
 	 * Post-process material driven each frame with the vignette intensity, through the scalar named
 	 * below. **The vignette draws nothing until this is set** — Vignette Mode only computes the
