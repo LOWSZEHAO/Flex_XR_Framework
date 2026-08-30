@@ -167,10 +167,13 @@ protected:
 	//~ Hand Tracking (gesture teleport when the hand is the active source; controllers ignore these)
 	//~ Pinch and hold to aim, release to teleport — the Meta Interaction SDK convention the Quest
 	//~ system UI already teaches, and the same shape as the stick path (hold to aim, let go to go).
-	//~ There is deliberately no palm-orientation gate: the palm normal is perpendicular to the aim
-	//~ direction, so any such gate fights aiming near your feet.
+	//~
+	//~ It is the *middle-finger* pinch (IFXR_Interactor::GetNavigateValue), because index pinch is
+	//~ grab. Two fingers, two verbs: a failed reach can never teleport you, and standing beside a
+	//~ prop never costs you the ability to travel. There is likewise no palm-orientation gate — the
+	//~ palm normal is perpendicular to the aim direction, so any such gate fights aiming near.
 
-	/** Pinch strength that raises the arc. Releasing below it teleports. */
+	/** Middle-finger pinch strength that raises the arc. Releasing below it teleports. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hand Tracking", meta = (ClampMin = "0.1", ClampMax = "1.0"))
 	float HandPinchThreshold = 0.7f;
 
@@ -279,13 +282,6 @@ private:
 	void ProcessSmoothMove(float DeltaTime);
 	void ProcessHandTeleportGesture();
 	bool IsHandTracking(EFXR_HandSide Side) const;
-
-	/**
-	 * True when something grabbable is within this hand's grab sphere. Gesture teleport yields to
-	 * it because a pinch means both "grab" and "commit" — reaching for an object must not launch
-	 * the player across the room. Controllers need no such rule: grip and stick are separate.
-	 */
-	bool HasGrabCandidate(EFXR_HandSide Side) const;
 	void UpdateVignette(float DeltaTime);
 	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */

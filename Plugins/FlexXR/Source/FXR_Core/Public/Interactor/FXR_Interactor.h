@@ -65,6 +65,16 @@ public:
 	/** Normalized 0..1 use strength — trigger on controllers, index-squeeze on tracked hands. */
 	virtual float GetUseValue() const = 0;
 
+	/**
+	 * Normalized 0..1 intent to move the player, for sources with no thumbstick — the middle-finger
+	 * pinch on tracked hands. Kept separate from Select so grabbing and locomotion are different
+	 * gestures rather than the same one told apart by proximity.
+	 *
+	 * Zero on controllers and desktop sim: those steer through EnhancedInput, and locomotion reads
+	 * them there. Not pure virtual for that reason — an input source opts in.
+	 */
+	virtual float GetNavigateValue() const { return 0.f; }
+
 	/** Fire a haptic pulse on this interactor's device; no-op where unsupported. */
 	virtual void SendHapticFeedback(float Amplitude, float Duration) = 0;
 };

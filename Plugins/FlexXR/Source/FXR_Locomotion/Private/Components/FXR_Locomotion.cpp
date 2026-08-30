@@ -5,7 +5,6 @@
 #include "Interactor/FXR_Interactor.h"
 #include "Interactor/FXR_InteractorComponent.h"
 #include "Driver/FXR_InteractionDriver.h"
-#include "Detection/FXR_InteractionSubsystem.h"
 #include "Detection/FXR_TeleportRegistry.h"
 #include "World/FXR_TeleportAnchor.h"
 #include "World/FXR_TeleportBlocker.h"
@@ -524,14 +523,14 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	// Yield to interaction (ADR-005), and to anything merely *reachable*. Pinch is the only verb
-	// hand tracking has, so it means both "grab" and "teleport"; reach decides which. This is the
-	// whole arbitration — nothing else distinguishes the two.
-	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide) || HasGrabCandidate(GestureSide))
+	// Yield to interaction (ADR-005). Reach is deliberately *not* consulted: the locomotion pinch
+	// is a different finger from the grab pinch, so standing next to a prop no longer has to cost
+	// you the ability to travel.
+	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide))
 	{
 		if (Phase == ETeleportPhase::Aiming)
 		{
-			Phase = ETeleportPhase::Idle; // reached for something / disabled mid-aim → cancel
+			Phase = ETeleportPhase::Idle; // grabbed something / disabled mid-aim → cancel
 		}
 		return;
 	}
@@ -539,7 +538,7 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 	// Pinch and hold raises the arc, releasing it teleports — the same shape as pushing and
 	// releasing a thumbstick, so both input paths behave identically once the arc is up. An
 	// invalid target on release simply cancels, which is how a player backs out.
-	const bool bPinch = Hand->GetSelectValue() >= HandPinchThreshold;
+	const bool bPinch = Hand->GetNavigateValue() >= HandPinchThreshold;
 
 	if (Phase == ETeleportPhase::Idle)
 	{
@@ -559,23 +558,6 @@ bool UFXR_Locomotion::IsHandTracking(EFXR_HandSide Side) const
 {
 	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
 	return Interactor && Interactor->GetInteractorType() == EFXR_InteractorType::TrackedHand;
-}
-
-bool UFXR_Locomotion::HasGrabCandidate(EFXR_HandSide Side) const
-{
-	const IFXR_Interactor* Interactor = GetInteractorForHand(Side);
-	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
-	if (!Interactor || !Subsystem)
-	{
-		return false;
-	}
-
-	// A read-only query against the same sphere the driver claims with, so this never depends on
-	// whether the driver has ticked yet this frame.
-	FVector GrabCenter;
-	float GrabRadius = 0.f;
-	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
-	return Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side) != nullptr;
 }
 
 void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)

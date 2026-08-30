@@ -11,9 +11,10 @@ class IHandTracker;
 /**
  * UFXR_HandInteractor — articulated hand-tracking input source.
  *
- * Samples OpenXR hand joints each tick: the palm keypoint drives the tracked pose, and
- * thumb-tip / index-tip separation drives Select (pinch). Falls back to this component's
- * transform when no valid hand data is present.
+ * Samples OpenXR hand joints each tick: the palm keypoint drives the tracked pose, thumb-tip /
+ * index-tip separation drives Select (grab pinch), and thumb-tip / middle-tip separation drives
+ * Navigate (locomotion pinch) — two fingers so grabbing and moving are never the same gesture.
+ * Falls back to this component's transform when no valid hand data is present.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_CORE_API UFXR_HandInteractor : public UFXR_InteractorComponent
@@ -26,6 +27,7 @@ public:
 	virtual EFXR_InteractorType GetInteractorType() const override { return EFXR_InteractorType::TrackedHand; }
 	virtual float GetSelectValue() const override { return SelectValue; }
 	virtual float GetUseValue() const override { return UseValue; }
+	virtual float GetNavigateValue() const override { return NavigateValue; }
 	virtual void GetPokeTip(FVector& OutLocation, float& OutRadius) const override;
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -33,7 +35,7 @@ public:
 protected:
 	virtual FTransform GetTrackedTransform() const override;
 
-	/** Thumb-tip to index-tip distance (cm) at which Select reads 0; touching reads 1. */
+	/** Thumb-tip to fingertip distance (cm) at which a pinch reads 0; touching reads 1. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor", meta = (ClampMin = "0.5"))
 	float PinchDistanceThreshold = 3.f;
 
@@ -48,4 +50,5 @@ private:
 	bool bHasValidIndexTip = false;
 	float SelectValue = 0.f;
 	float UseValue = 0.f;
+	float NavigateValue = 0.f;
 };
