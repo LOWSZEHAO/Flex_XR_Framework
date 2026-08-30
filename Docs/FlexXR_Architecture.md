@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.6 (per-hand locomotion input — ADR-008; climbing — ADR-009)
+**Version:** 0.7 (presentation config — highlight lives on its own component)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -718,6 +718,24 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.7 — Presentation config**
+- Highlight configuration lives only on the optional `FXR_Highlight`; the shared base panel no longer carries
+  Style/Color/Sweep Direction. Defaults come from project settings, so colour has one home rather than two that
+  can disagree. Sets the pattern for optional presentation components.
+- Scope enum `Parent Only` → `Target Mesh`: the old name described the attach hierarchy, the new one the intent.
+
+**v0.6 — Per-hand locomotion & climbing**
+- §4 `FXR_Locomotion` rewritten: the panel describes each hand, not each mode (ADR-008). Presets removed;
+  `Transition` filed under Teleport beside the Fade Duration it governs; Movement renamed Smooth Move.
+- `Blink` dropped from `EFXR_TeleportTransition` — it was Fade with a hardcoded constant, not a distinct
+  mechanism. A short Fade Duration is the blink comfort option.
+- New `FXR_ClimbHold` (§4) and ADR-009: an ordinary interactable marks the hold, the locomotion arbiter does the
+  moving, the hand is the fixed point, and gravity is scoped to the fall after letting go.
+- New `IFXR_Interactor::GetNavigateValue()` — the middle-finger pinch, so hand-tracking locomotion and grabbing
+  are never the same gesture.
+- Aim visuals ship as plugin content wired to C++ defaults: reticle ring, arc tube, valid/invalid materials,
+  vignette post-process.
 
 **v0.4 — Locomotion**
 - New module `FXR_Locomotion` (§3.5), sibling to FXR_UI, depending on FXR_Interaction.
