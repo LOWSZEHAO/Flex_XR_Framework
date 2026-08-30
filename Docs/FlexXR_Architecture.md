@@ -179,12 +179,12 @@ Justifications: real travel + spring feel; multiple distinct use points per obje
 | On the object | Point + pinch/trigger does |
 |---|---|
 | RayTarget alone | Select/focus: hover highlight, `OnRaySelected` (training: "point to the correct extinguisher"; games: examine/scan) |
-| RayTarget + FXR_Grab | **Distance grab**: object pulls/flicks to the hand, then **FXR_Grab takes over completely** — same grip point, pose blend, everything (gravity-gloves style) |
+| FXR_Grab with **Distance Grab** ticked | **Distance grab**: the object flies to the hand, then **FXR_Grab takes over completely** — same grip point, pose blend, everything (gravity-gloves style). A checkbox on Grab rather than a second component: making a grabbable object grabbable-at-range should not need one. |
 | FXR_UI panels | Pointer events route into UMG automatically (no manual RayTarget needed) |
 
 **Deliberately no laser-Latch:** dragging doors/valves by ray feels cheap and destroys training fidelity (a trainee who laser-opened a valve learned nothing). Ray-select a latch object = fine; ray-drive it = a game-side custom interactable if truly wanted.
 
-**Far Interaction Policy** (`FXR_ProjectSettings`): games may enable distance-grab everywhere; training sims may restrict rays to UI + selection, forcing physical performance of every motion. Same framework, one toggle.
+**No Far Interaction Policy.** An earlier draft put distance grab behind a project-wide toggle. Dropped: the per-object checkbox already says it, and a global setting that silently changes how a specific object behaves between projects is worse than the one tick that made it so. A training sim simply leaves the box unticked, which is also the default — physical performance of every motion is what it gets for free.
 
 ### FXR_GripPoint
 "A sticker on the object: hands go here, shaped like this."
@@ -730,8 +730,12 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 - Outline and overlay carry separate intensities: the overlay draws unlit, so a shared multiplier above 1
   clipped every colour to white and made Highlight Color decorative.
 - `FXR_RayTarget` ships: far-ray focus and selection, traced on the `FXR_Interaction` channel per ADR-002.
-  Far yields to near, arbitrated in the interaction driver because only it sees both. Distance grab and the
-  Far Interaction Policy that gates it are deliberately still to come — the policy has no teeth without it.
+  Far yields to near, arbitrated in the interaction driver because only it sees both.
+- Distance grab is a **checkbox on `FXR_Grab`**, not a second component and not a project policy. The Far
+  Interaction Policy is dropped: the tick already says it, and a global setting that changes how one object
+  behaves between projects is worse than the tick that made it so. Off by default. The flight runs on a fixed
+  duration and is interpolated from elapsed time and the live hand pose, so it stays deterministic for SOP
+  replay — a physics impulse toward the hand would not be (ADR-001).
 
 **v0.7 — Presentation config**
 - Highlight configuration lives only on the optional `FXR_Highlight`; the shared base panel no longer carries
