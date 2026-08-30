@@ -20,14 +20,14 @@ EFXR_HighlightStyle UFXR_Highlight::ResolveStyle(EFXR_HighlightState State) cons
 	return Settings ? Settings->GetStyleFor(State) : EFXR_HighlightStyle::None;
 }
 
-FLinearColor UFXR_Highlight::ResolveColor() const
+FLinearColor UFXR_Highlight::ResolveColor(EFXR_HighlightState State) const
 {
 	if (bOverrideColor)
 	{
 		return Color;
 	}
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
-	return Settings ? Settings->HighlightColor : FLinearColor::Yellow;
+	return Settings ? Settings->GetColorFor(State) : FLinearColor::White;
 }
 
 float UFXR_Highlight::ResolveIntensity() const
