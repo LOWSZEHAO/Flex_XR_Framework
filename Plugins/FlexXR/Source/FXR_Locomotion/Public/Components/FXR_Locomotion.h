@@ -24,8 +24,11 @@ struct FInputActionValue;
 
 /**
  * UFXR_Locomotion — the single locomotion component (ADR-005): teleport, smooth move, turn, and
- * comfort, arbitrated internally rather than split into four components. Teleport and snap/smooth
- * turning are live; smooth move, vignette, and presets are following slices.
+ * comfort, arbitrated internally rather than split into four components.
+ *
+ * Movement is chosen per hand (Left/Right Hand Movement), not per mode. Teleport and smooth move
+ * both claim the stick's forward axis, so a hand can only carry one of them — expressing the
+ * assignment this way makes the clash impossible rather than something to validate.
  *
  * Room-scale correct (ADR-006): teleport moves the play-space origin so the HMD lands on the
  * target, obtained via the owner's IFXR_LocomotionOwner — never a concrete pawn cast, so it works
@@ -83,33 +86,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion")
 	EFXR_LocomotionPreset Preset = EFXR_LocomotionPreset::Standard;
 
-	//~ Movement
+	//~ Movement — what each hand's stick does. Set both to the same mode to give the player either
+	//~ hand; set one to None for a rig where only one hand may move (common in guided training).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
-	bool bAllowTeleport = true;
+	EFXR_HandMovement LeftHandMovement = EFXR_HandMovement::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
-	bool bAllowSmoothMove = false;
+	EFXR_HandMovement RightHandMovement = EFXR_HandMovement::Teleport;
 
 	/** Frame the move stick is relative to (Hip approximates to Head — the rig has no hip tracker). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (EditCondition = "bAllowSmoothMove"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_MoveDirectionSource MoveDirectionSource = EFXR_MoveDirectionSource::HeadRelative;
 
 	/** Smooth-move speed (cm/s) — 250 ≈ 2.5 m/s. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0", EditCondition = "bAllowSmoothMove"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (ClampMin = "1.0"))
 	float SmoothMoveSpeed = 250.f;
-
-	/** Which hand steers smooth movement. Both = either stick, whichever is pushed harder. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement", meta = (EditCondition = "bAllowSmoothMove"))
-	EFXR_LocomotionHand MoveHand = EFXR_LocomotionHand::Left;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Movement")
 	EFXR_TeleportTransition Transition = EFXR_TeleportTransition::Fade;
 
 	//~ Teleport
-	/** Which hand aims teleport. Both = either hand may aim; the free one wins if the other is busy. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (EditCondition = "bAllowTeleport"))
-	EFXR_LocomotionHand TeleportHand = EFXR_LocomotionHand::Right;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
 	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
 
@@ -188,8 +184,9 @@ protected:
 	TObjectPtr<UInputMappingContext> LocomotionContext;
 
 	/**
-	 * One action per mode; bind it to whichever hand's control you like in the mapping context, and
-	 * say which hand owns it with the Hand setting beside each mode. Bind both sticks and set Both.
+	 * One action per mode. Bind both hands' controls to each action in the mapping context — which
+	 * hand actually drives a mode is decided by Left/Right Hand Movement and Turn Hand above, not
+	 * by the bindings, so the same context serves every hand layout.
 	 *
 	 * Teleport: Axis1D (thumbstick Y) or a button. The value is read as a float and thresholded
 	 * here, so pushing the stick forward aims and pulling it back does nothing. Add a Negate
@@ -247,11 +244,17 @@ private:
 	void TryBeginTeleportAim();
 
 	/**
-	 * The hand a mode should act through. A single hand is used if free; Both prefers the hand that
-	 * is not holding anything, so locomotion keeps working while the other hand is occupied.
+	 * The hand a turn should act through. A single hand is used if free; Both prefers the hand that
+	 * is not holding anything, so turning keeps working while the other hand is occupied.
 	 * Returns false when every assigned hand is busy — the mode then yields entirely (ADR-005).
 	 */
 	bool ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const;
+
+	/**
+	 * A free hand set to this movement mode, if any. Both hands may carry the same mode, in which
+	 * case the one not holding an interactable is used.
+	 */
+	bool ResolveMovementHand(EFXR_HandMovement Movement, EFXR_HandSide& OutSide) const;
 	void UpdateAim();
 	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
 	void CommitTeleport();
@@ -275,6 +278,9 @@ private:
 	ETeleportPhase Phase = ETeleportPhase::Idle;
 	bool bLocomotionEnabled = true;
 	bool bTurnEnabled = true;
+	// Runtime gates behind SetTeleportEnabled — separate from the authored hand assignment, so a
+	// gameplay or SOP lock can suspend a mode without forgetting which hand the designer gave it.
+	bool bTeleportEnabled = true;
 	bool bInputBound = false;
 	bool bLoggedMissingOwner = false;
 	bool bLoggedHandFallback = false;

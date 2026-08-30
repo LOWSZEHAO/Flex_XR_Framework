@@ -61,6 +61,19 @@ enum class EFXR_LocomotionHand : uint8
 	Both  UMETA(DisplayName = "Both Hands")
 };
 
+/**
+ * What one hand's stick does to move the player. Teleport and smooth move both claim the stick's
+ * forward axis, so a hand can only have one of them — choosing per hand rather than per mode makes
+ * that clash impossible to express instead of merely warned about.
+ */
+UENUM(BlueprintType)
+enum class EFXR_HandMovement : uint8
+{
+	None       UMETA(DisplayName = "None"),
+	Teleport   UMETA(DisplayName = "Teleport"),
+	SmoothMove UMETA(DisplayName = "Smooth Move")
+};
+
 /** Turning style. */
 UENUM(BlueprintType)
 enum class EFXR_TurnMode : uint8

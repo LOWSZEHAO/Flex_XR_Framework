@@ -44,22 +44,27 @@ void UFXR_Locomotion::ApplyPreset(EFXR_LocomotionPreset InPreset)
 	switch (InPreset)
 	{
 	case EFXR_LocomotionPreset::Comfort:
-		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Fade;
-		bAllowSmoothMove = false;
+		LeftHandMovement = EFXR_HandMovement::None;
+		RightHandMovement = EFXR_HandMovement::Teleport;
+		Transition = EFXR_TeleportTransition::Fade;
 		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
 		VignetteMode = EFXR_VignetteMode::Always;
 		break;
 
 	case EFXR_LocomotionPreset::Standard:
-		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Fade;
-		bAllowSmoothMove = true; SmoothMoveSpeed = 250.f; // ~2.5 m/s
+		LeftHandMovement = EFXR_HandMovement::SmoothMove;
+		RightHandMovement = EFXR_HandMovement::Teleport;
+		Transition = EFXR_TeleportTransition::Fade;
+		SmoothMoveSpeed = 250.f; // ~2.5 m/s
 		TurnMode = EFXR_TurnMode::Snap; SnapAngle = 30.f;
 		VignetteMode = EFXR_VignetteMode::Dynamic;
 		break;
 
 	case EFXR_LocomotionPreset::Free:
-		bAllowTeleport = true;   Transition = EFXR_TeleportTransition::Dash;
-		bAllowSmoothMove = true; SmoothMoveSpeed = 400.f; // ~4 m/s
+		LeftHandMovement = EFXR_HandMovement::SmoothMove;
+		RightHandMovement = EFXR_HandMovement::Teleport;
+		Transition = EFXR_TeleportTransition::Dash;
+		SmoothMoveSpeed = 400.f; // ~4 m/s
 		TurnMode = EFXR_TurnMode::Smooth; SmoothTurnRate = 90.f;
 		VignetteMode = EFXR_VignetteMode::Off;
 		break;
@@ -93,11 +98,11 @@ void UFXR_Locomotion::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 		return;
 	}
 
-	// Editing any preset-controlled feel field flips to Custom (input / visual / hand setup fields don't).
+	// Editing any preset-controlled feel field flips to Custom (input / visual fields don't).
 	const bool bFeelField =
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, bAllowTeleport) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, LeftHandMovement) ||
+		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, RightHandMovement) ||
 		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, Transition) ||
-		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, bAllowSmoothMove) ||
 		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SmoothMoveSpeed) ||
 		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, TurnMode) ||
 		Changed == GET_MEMBER_NAME_CHECKED(UFXR_Locomotion, SnapAngle) ||
@@ -150,8 +155,8 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	// Capability fallback (ADR-005): tracked hands have no thumbstick, so gesture-drive teleport and
 	// drop smooth move. Documented, not silent.
-	const bool bHandTeleport = (TeleportHand != EFXR_LocomotionHand::Right && IsHandTracking(EFXR_HandSide::Left))
-		|| (TeleportHand != EFXR_LocomotionHand::Left && IsHandTracking(EFXR_HandSide::Right));
+	const bool bHandTeleport = (LeftHandMovement == EFXR_HandMovement::Teleport && IsHandTracking(EFXR_HandSide::Left))
+		|| (RightHandMovement == EFXR_HandMovement::Teleport && IsHandTracking(EFXR_HandSide::Right));
 	if (bHandTeleport)
 	{
 		if (!bLoggedHandFallback)
@@ -218,7 +223,7 @@ void UFXR_Locomotion::SetLocomotionEnabled(bool bEnabled)
 
 void UFXR_Locomotion::SetTeleportEnabled(bool bEnabled)
 {
-	bAllowTeleport = bEnabled;
+	bTeleportEnabled = bEnabled;
 	if (!bEnabled && Phase == ETeleportPhase::Aiming)
 	{
 		Phase = ETeleportPhase::Idle;
@@ -293,6 +298,27 @@ void UFXR_Locomotion::TryBindInput()
 	bInputBound = true;
 }
 
+bool UFXR_Locomotion::ResolveMovementHand(EFXR_HandMovement Movement, EFXR_HandSide& OutSide) const
+{
+	const bool bLeft = (LeftHandMovement == Movement);
+	const bool bRight = (RightHandMovement == Movement);
+
+	// Prefer a hand that is free, so the mode survives the other hand picking something up.
+	if (bRight && !IsHandBusy(EFXR_HandSide::Right))
+	{
+		OutSide = EFXR_HandSide::Right;
+		return true;
+	}
+	if (bLeft && !IsHandBusy(EFXR_HandSide::Left))
+	{
+		OutSide = EFXR_HandSide::Left;
+		return true;
+	}
+
+	OutSide = bRight ? EFXR_HandSide::Right : EFXR_HandSide::Left;
+	return false;
+}
+
 bool UFXR_Locomotion::ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR_HandSide& OutSide) const
 {
 	switch (Assignment)
@@ -325,13 +351,13 @@ bool UFXR_Locomotion::ResolveLocomotionHand(EFXR_LocomotionHand Assignment, EFXR
 
 void UFXR_Locomotion::TryBeginTeleportAim()
 {
-	if (!bLocomotionEnabled || !bAllowTeleport || Phase != ETeleportPhase::Idle)
+	if (!bLocomotionEnabled || !bTeleportEnabled || Phase != ETeleportPhase::Idle)
 	{
 		return;
 	}
 
 	EFXR_HandSide Side;
-	if (!ResolveLocomotionHand(TeleportHand, Side)) // yield: that hand is holding an interactable
+	if (!ResolveMovementHand(EFXR_HandMovement::Teleport, Side)) // no free hand set to teleport
 	{
 		return;
 	}
@@ -420,13 +446,13 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 
 void UFXR_Locomotion::ProcessSmoothMove(float DeltaTime)
 {
-	if (!bLocomotionEnabled || !bAllowSmoothMove || CurrentMoveAxis.IsNearlyZero())
+	if (!bLocomotionEnabled || CurrentMoveAxis.IsNearlyZero())
 	{
 		return;
 	}
 
 	EFXR_HandSide MovingSide;
-	if (!ResolveLocomotionHand(MoveHand, MovingSide)) // yield: the moving hand is holding something
+	if (!ResolveMovementHand(EFXR_HandMovement::SmoothMove, MovingSide)) // no free hand set to move
 	{
 		return;
 	}
@@ -529,10 +555,10 @@ void UFXR_Locomotion::ApplyVignetteToMaterial()
 
 void UFXR_Locomotion::ProcessHandTeleportGesture()
 {
-	// While aiming, stay with the hand that started; otherwise take the hand this mode is assigned
-	// to (Both prefers a free hand, exactly as the stick path does).
+	// While aiming, stay with the hand that started; otherwise take a free hand set to Teleport,
+	// exactly as the stick path does.
 	EFXR_HandSide GestureSide = AimingHand;
-	if (Phase != ETeleportPhase::Aiming && !ResolveLocomotionHand(TeleportHand, GestureSide))
+	if (Phase != ETeleportPhase::Aiming && !ResolveMovementHand(EFXR_HandMovement::Teleport, GestureSide))
 	{
 		return;
 	}
@@ -543,7 +569,7 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	if (!bLocomotionEnabled || !bAllowTeleport || IsHandBusy(GestureSide))
+	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide))
 	{
 		if (Phase == ETeleportPhase::Aiming)
 		{
@@ -631,7 +657,7 @@ void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
 void UFXR_Locomotion::UpdateAim()
 {
 	// Yield mid-aim too: dropping into a grab while aiming cancels the arc.
-	if (!bLocomotionEnabled || !bAllowTeleport || IsHandBusy(AimingHand))
+	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(AimingHand))
 	{
 		Phase = ETeleportPhase::Idle;
 		return;
