@@ -55,3 +55,14 @@ enum class EFXR_InteractorPreference : uint8
 	ForceHands       UMETA(DisplayName = "Force Tracked Hands"),
 	ForceDesktop     UMETA(DisplayName = "Force Desktop Sim")
 };
+
+/**
+ * The one custom trace channel FlexXR owns (ADR-002), declared as FXR_Interaction in
+ * DefaultEngine.ini. Reserved for genuinely mesh-accurate work — FXR_RayTarget traces, fingertip
+ * probes, procedural-grip contact. Grab, Latch and Socket detection never trace at all: they run
+ * off the registry, which is why designers configure no collision for grabbing.
+ *
+ * Named here rather than spelled ECC_GameTraceChannel1 at each call site so the mapping has one
+ * home if a project has to renumber it.
+ */
+inline constexpr ECollisionChannel FXR_TraceChannel = ECollisionChannel::ECC_GameTraceChannel1;

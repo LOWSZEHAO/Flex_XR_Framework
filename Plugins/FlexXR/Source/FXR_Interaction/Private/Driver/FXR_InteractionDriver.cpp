@@ -5,6 +5,7 @@
 #include "Detection/FXR_FocusSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_Press.h"
+#include "Interactable/FXR_RayTarget.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -20,6 +21,12 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_Tick);
 
+	// Sampled before DriveHand consumes the edge, so a ray selection can see the same press.
+	const float LeftSelect = ReadSelect(EFXR_HandSide::Left);
+	const float RightSelect = ReadSelect(EFXR_HandSide::Right);
+	const float LeftPrev = LeftPrevSelect;
+	const float RightPrev = RightPrevSelect;
+
 	DriveHand(EFXR_HandSide::Left, LeftHeld, LeftPrevSelect, DeltaTime);
 	DriveHand(EFXR_HandSide::Right, RightHeld, RightPrevSelect, DeltaTime);
 	DrivePokes(EFXR_HandSide::Left);
@@ -27,11 +34,12 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	// After the hands are driven, so a grab claimed this frame publishes as Selected rather than
 	// spending a frame as Hovered first.
-	PublishFocus(EFXR_HandSide::Left, LeftHeld);
-	PublishFocus(EFXR_HandSide::Right, RightHeld);
+	PublishFocus(EFXR_HandSide::Left, LeftHeld, LeftAimed, LeftSelect, LeftPrev);
+	PublishFocus(EFXR_HandSide::Right, RightHeld, RightAimed, RightSelect, RightPrev);
 }
 
-void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held)
+void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held,
+	TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect)
 {
 	UFXR_FocusSubsystem* Focus = UFXR_FocusSubsystem::Get(this);
 	if (!Focus)
@@ -44,26 +52,35 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 
 	// A hand that owns something is not shopping for the next thing: holding a valve must not keep
 	// the crate behind it lit. Hover resolves only for a free hand.
-	if (HeldNow)
+	UFXR_InteractableBase* Near = nullptr;
+	if (!HeldNow)
 	{
-		Focus->SetHovered(Side, nullptr);
-		return;
+		IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+		UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+		if (Interactor && Subsystem)
+		{
+			// The same query the grab claim uses, run every frame instead of only on the rising edge —
+			// which is what makes the object that lights up provably the object you would take.
+			FVector GrabCenter;
+			float GrabRadius = 0.f;
+			Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+			Near = Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side);
+		}
 	}
 
-	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
-	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
-	if (!Interactor || !Subsystem)
-	{
-		Focus->SetHovered(Side, nullptr);
-		return;
-	}
+	// Far yields to near. A hand already able to touch something must not also be pointing past it,
+	// or reaching for a valve would arm a selection on the wall behind it.
+	UFXR_RayTarget* RayNow = (HeldNow || Near) ? nullptr : TraceRayTarget(Side);
+	UpdateAimed(Side, Aimed, RayNow);
 
-	// The same query the grab claim uses, run every frame instead of only on the rising edge —
-	// which is what makes the object that lights up provably the object you would take.
-	FVector GrabCenter;
-	float GrabRadius = 0.f;
-	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
-	Focus->SetHovered(Side, Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side));
+	Focus->SetHovered(Side, Near ? Near : Cast<UFXR_InteractableBase>(RayNow));
+
+	// Same rising edge a grab would claim on, so pointing and pressing reads identically to reaching
+	// and squeezing.
+	if (RayNow && Select >= GrabThreshold && PrevSelect < GrabThreshold)
+	{
+		RayNow->NotifyRaySelected(Side);
+	}
 }
 
 void UFXR_InteractionDriver::DrivePokes(EFXR_HandSide Side)
@@ -183,4 +200,74 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 			}
 		}
 	}
+}
+
+UFXR_RayTarget* UFXR_InteractionDriver::TraceRayTarget(EFXR_HandSide Side) const
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_TraceRay);
+
+	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	const UWorld* World = GetWorld();
+	if (!Interactor || !World)
+	{
+		return nullptr;
+	}
+
+	FVector Origin;
+	FVector Direction;
+	Interactor->GetFarRay(Origin, Direction);
+	if (Direction.IsNearlyZero())
+	{
+		return nullptr;
+	}
+
+	// The one custom channel (ADR-002). It blocks by default, so ordinary world geometry occludes
+	// the ray and no per-object collision setup is needed to make a target hittable.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FXR_RayTarget), /*bTraceComplex=*/false, GetOwner());
+	FHitResult Hit;
+	if (!World->LineTraceSingleByChannel(Hit, Origin, Origin + Direction.GetSafeNormal() * RayLength, FXR_TraceChannel, Params))
+	{
+		return nullptr;
+	}
+
+	const AActor* HitActor = Hit.GetActor();
+	UFXR_RayTarget* Target = HitActor ? HitActor->FindComponentByClass<UFXR_RayTarget>() : nullptr;
+	if (!Target || !Target->IsInteractionEnabled())
+	{
+		return nullptr;
+	}
+
+	// Its own shorter reach, so a small panel can be pointed at across a room only if it says so.
+	return (Hit.Distance <= Target->MaxRayDistance) ? Target : nullptr;
+}
+
+void UFXR_InteractionDriver::UpdateAimed(EFXR_HandSide Side, TWeakObjectPtr<UFXR_RayTarget>& Aimed, UFXR_RayTarget* Now)
+{
+	UFXR_RayTarget* Was = Aimed.Get();
+	if (Was == Now)
+	{
+		return;
+	}
+
+	// Exit before enter, so a listener that shares state between two targets sees a clean handover.
+	if (Was)
+	{
+		Was->NotifyRayExit(Side);
+	}
+	if (Now)
+	{
+		Now->NotifyRayEnter(Side);
+	}
+	Aimed = Now;
+}
+
+UFXR_RayTarget* UFXR_InteractionDriver::GetAimedRayTarget(EFXR_HandSide Side) const
+{
+	return (Side == EFXR_HandSide::Left) ? LeftAimed.Get() : RightAimed.Get();
+}
+
+float UFXR_InteractionDriver::ReadSelect(EFXR_HandSide Side) const
+{
+	const IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	return Interactor ? Interactor->GetSelectValue() : 0.f;
 }
