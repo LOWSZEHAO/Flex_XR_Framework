@@ -22,6 +22,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SplineMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
 #include "DrawDebugHelpers.h"
@@ -53,6 +54,7 @@ UFXR_Locomotion::UFXR_Locomotion()
 	// assets, so both work on a bare component instead of quietly needing content authored first.
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultVignette(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultReticle(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultArc(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultValid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Valid.M_FXR_Reticle_Valid"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultInvalid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Invalid.M_FXR_Reticle_Invalid"));
 
@@ -63,6 +65,10 @@ UFXR_Locomotion::UFXR_Locomotion()
 	if (DefaultReticle.Succeeded())
 	{
 		ReticleMesh = DefaultReticle.Object;
+	}
+	if (DefaultArc.Succeeded())
+	{
+		ArcMesh = DefaultArc.Object;
 	}
 	if (DefaultValid.Succeeded())
 	{
@@ -192,6 +198,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			UpdateAimHover(nullptr, nullptr);
 		}
 		UpdateReticle(false);
+		UpdateArcMesh(false);
 	}
 
 	switch (Phase)
@@ -1163,22 +1170,88 @@ void UFXR_Locomotion::DrawAim()
 	if (!World || ArcPoints.Num() == 0)
 	{
 		UpdateReticle(false);
+		UpdateArcMesh(false);
 		return;
 	}
 
 	UpdateReticle(true);
+	UpdateArcMesh(true);
 
 	const FColor Color = bTargetValid ? FColor::Green : FColor::Red;
 
-	for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
+	// Debug lines are the fallback, so an assigned Arc Mesh replaces them rather than doubling up.
+	if (!ArcMesh)
 	{
-		DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
+		for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
+		{
+			DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
+		}
 	}
 
 	// The debug circle is the fallback marker; an assigned Reticle Mesh replaces it.
 	if (!ReticleComponent)
 	{
 		DrawDebugCircle(World, ReticleLocation + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+	}
+}
+
+void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
+{
+	const int32 SpanCount = (bVisible && ArcMesh) ? FMath::Max(ArcPoints.Num() - 1, 0) : 0;
+
+	AActor* Owner = GetOwner();
+	while (Owner && ArcSegments.Num() < SpanCount)
+	{
+		USplineMeshComponent* Segment = NewObject<USplineMeshComponent>(Owner);
+		Segment->SetupAttachment(Owner->GetRootComponent());
+		Segment->SetMobility(EComponentMobility::Movable);
+		Segment->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Segment->SetGenerateOverlapEvents(false);
+		Segment->SetCastShadow(false);
+		Segment->SetAbsolute(true, true, true); // spans are world points, not carried by the rig
+		Segment->SetStaticMesh(ArcMesh);
+		Segment->SetForwardAxis(ESplineMeshAxis::X, false);
+		Segment->SetHiddenInGame(true);
+		Segment->RegisterComponent();
+		ArcSegments.Add(Segment);
+	}
+
+	UMaterialInterface* Material = GetArcMaterial();
+
+	for (int32 Index = 0; Index < ArcSegments.Num(); ++Index)
+	{
+		USplineMeshComponent* Segment = ArcSegments[Index];
+		if (!Segment)
+		{
+			continue;
+		}
+
+		if (Index >= SpanCount)
+		{
+			Segment->SetHiddenInGame(true);
+			continue;
+		}
+
+		// Straight spans: the arc is already a dense polyline, so a tangent equal to the span reads
+		// as a smooth curve without solving real spline tangents per frame.
+		const FVector Start = ArcPoints[Index];
+		const FVector Span = ArcPoints[Index + 1] - Start;
+
+		// Spline params are component-local. Parking every component at the origin and feeding world
+		// points draws the geometry in the right place but leaves each component's *bounds* at the
+		// origin, and the renderer culls by bounds — so the whole arc silently vanishes. Move the
+		// component to the span's start and keep the params local instead.
+		Segment->SetWorldLocation(Start, false, nullptr, ETeleportType::TeleportPhysics);
+		Segment->SetStartAndEnd(FVector::ZeroVector, Span, Span, Span, false);
+		Segment->SetStartScale(FVector2D(ArcWidth, ArcWidth), false);
+		Segment->SetEndScale(FVector2D(ArcWidth, ArcWidth), false);
+		Segment->UpdateMesh();
+
+		if (Material && Segment->GetMaterial(0) != Material)
+		{
+			Segment->SetMaterial(0, Material);
+		}
+		Segment->SetHiddenInGame(false);
 	}
 }
 

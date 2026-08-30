@@ -14,6 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UStaticMesh;
 class UStaticMeshComponent;
+class USplineMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UCameraComponent;
@@ -253,6 +254,25 @@ protected:
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
 	/**
+	 * Mesh swept along the aim arc, one span per arc segment. Author it along +X, one metre long,
+	 * starting at the origin. Leave unset and the arc stays debug lines.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UStaticMesh> ArcMesh;
+
+	/** Arc thickness (cm radius). Thin reads as a beam; thick reads as a tube. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.05"))
+	float ArcWidth = 1.5f;
+
+	/** Arc material when the target is valid. Falls back to Valid Material, so the arc and reticle match unless you split them. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> ArcValidMaterial;
+
+	/** Arc material when the target is rejected. Falls back to Invalid Material. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> ArcInvalidMaterial;
+
+	/**
 	 * Nudge along the surface normal (cm). The reticle already sits on the traced surface rather
 	 * than on the NavMesh — which bakes above the floor — so this is only for art tweaks, and may
 	 * go negative to sink a thick marker in.
@@ -364,8 +384,18 @@ private:
 
 	/** Place/hide the reticle mesh for this frame's target. No-op until a Reticle Mesh is assigned. */
 	void UpdateReticle(bool bVisible) const;
-	/** The material the aim visuals wear right now — valid or invalid, shared by arc and reticle. */
+	/** The reticle's material for this frame's validity. */
 	UMaterialInterface* GetAimMaterial() const { return bTargetValid ? ValidMaterial : InvalidMaterial; }
+
+	/** The arc's material for this frame's validity, falling back to the reticle's when unset. */
+	UMaterialInterface* GetArcMaterial() const
+	{
+		UMaterialInterface* Override = bTargetValid ? ArcValidMaterial : ArcInvalidMaterial;
+		return Override ? Override : GetAimMaterial();
+	}
+
+	/** Sweep the arc mesh along this frame's arc points. No-op until an Arc Mesh is assigned. */
+	void UpdateArcMesh(bool bVisible);
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
 	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
@@ -428,6 +458,10 @@ private:
 	// subobject does not survive Blueprint SCS instancing.
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> ReticleComponent;
+
+	// Grown on demand to the arc's span count and reused; the surplus is hidden, not destroyed.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USplineMeshComponent>> ArcSegments;
 
 	/**
 	 * Where the reticle is drawn — the *traced surface*, which is not the same point as
