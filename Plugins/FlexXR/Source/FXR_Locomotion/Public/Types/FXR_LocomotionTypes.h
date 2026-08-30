@@ -10,7 +10,6 @@ UENUM(BlueprintType)
 enum class EFXR_TeleportTransition : uint8
 {
 	Fade    UMETA(DisplayName = "Fade"),
-	Blink   UMETA(DisplayName = "Blink"),
 	Dash    UMETA(DisplayName = "Dash"),
 	Instant UMETA(DisplayName = "Instant")
 };

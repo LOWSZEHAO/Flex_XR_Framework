@@ -41,9 +41,6 @@ namespace
 	// the current one rather than snapping to whatever noise the stick reports near centre.
 	constexpr float LandingFacingDeadzone = 0.4f;
 
-	// Blink is a hard cut rather than a graded fade, so it runs on its own short constant instead of
-	// FadeDuration — a "blink" the designer can slow down is not a blink.
-	constexpr float BlinkDuration = 0.06f;
 }
 
 UFXR_Locomotion::UFXR_Locomotion()
@@ -1036,11 +1033,6 @@ float UFXR_Locomotion::GetTransitionDuration() const
 	{
 	case EFXR_TeleportTransition::Instant:
 		return 0.f;
-
-	// A blink is a hard cut with just enough black to hide the jump; letting Fade Duration stretch
-	// it would make it a slow fade wearing the wrong name.
-	case EFXR_TeleportTransition::Blink:
-		return BlinkDuration;
 
 	default:
 		return FadeDuration;
