@@ -556,3 +556,11 @@ void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
 		OnBegin(Interactor);
 	}
 }
+
+void UFXR_Grab::NotifyParkedPhysics(bool bWasSimulating)
+{
+	// Same guard the distance-grab flight uses: whoever parked the body knows what it was doing
+	// before, and OnBegin must trust that rather than reading the parked state.
+	bRestorePhysics = bWasSimulating;
+	bPhysicsCaptured = true;
+}

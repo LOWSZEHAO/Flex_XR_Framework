@@ -69,6 +69,13 @@ public:
 	 */
 	void BeginDistanceGrab(IFXR_Interactor* Interactor);
 
+	/**
+	 * Tell this object what its physics state was before something else parked it kinematic — a socket
+	 * seating it. Without this a later grab reads the parked body, concludes it never simulated, and
+	 * the object can never fall again after release.
+	 */
+	void NotifyParkedPhysics(bool bWasSimulating);
+
 	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
 	float GetUseValue() const { return CurrentUseValue; }

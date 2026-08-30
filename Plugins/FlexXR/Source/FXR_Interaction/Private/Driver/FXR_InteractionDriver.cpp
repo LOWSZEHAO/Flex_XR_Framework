@@ -7,6 +7,7 @@
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_Press.h"
 #include "Interactable/FXR_RayTarget.h"
+#include "Interactable/FXR_Socket.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -36,6 +37,8 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 	DriveHand(EFXR_HandSide::Right, RightHeld, RightPrevSelect, DeltaTime);
 	DrivePokes(EFXR_HandSide::Left);
 	DrivePokes(EFXR_HandSide::Right);
+	DriveSockets(EFXR_HandSide::Left, LeftPreviewSocket);
+	DriveSockets(EFXR_HandSide::Right, RightPreviewSocket);
 
 	// After the hands are driven, so a grab claimed this frame publishes as Selected rather than
 	// spending a frame as Hovered first.
@@ -164,10 +167,23 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 		}
 		else if (Select < ReleaseThreshold)
 		{
+			// A socket that was previewing this object claims it instead of the floor. Read before
+			// the release, because ending the hold is what clears the preview.
+			TWeakObjectPtr<UFXR_Socket>& PreviewSocket = (Side == EFXR_HandSide::Left) ? LeftPreviewSocket : RightPreviewSocket;
+			UFXR_Socket* Receiver = PreviewSocket.Get();
+
 			// Role-aware: a two-hand hold detaches just this hand (or promotes the survivor);
 			// single-hand ends the interaction. The interactable decides — the driver has no roles.
 			Current->ReleaseHand(Interactor, EFXR_EndReason::Released);
 			Held = nullptr;
+
+			// Only once the object is actually free: a hand still on it (the other half of a
+			// two-hand carry) means it was not really let go.
+			if (Receiver && !Current->IsHeld())
+			{
+				Receiver->Seat(Cast<UFXR_Grab>(Current));
+			}
+			PreviewSocket = nullptr;
 		}
 		else
 		{
@@ -336,4 +352,67 @@ float UFXR_InteractionDriver::ReadSelect(EFXR_HandSide Side) const
 {
 	const IFXR_Interactor* Interactor = GetActiveInteractor(Side);
 	return Interactor ? Interactor->GetSelectValue() : 0.f;
+}
+
+void UFXR_InteractionDriver::DriveSockets(EFXR_HandSide Side, TWeakObjectPtr<UFXR_Socket>& PreviewSocket)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_InteractionDriver_Sockets);
+
+	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+	if (!Subsystem)
+	{
+		return;
+	}
+
+	UFXR_Grab* Carried = Cast<UFXR_Grab>(GetHeldInteractable(Side));
+
+	// Nearest accepting socket wins, so two mounts side by side resolve to the one you are actually
+	// reaching toward rather than whichever happens to be first in the registry.
+	UFXR_Socket* Best = nullptr;
+	float BestDistanceSq = MAX_flt;
+
+	// Linear pass over the registry (first-pass detection, design 5.4), matching the poke pass.
+	for (const TObjectPtr<UFXR_InteractableBase>& Interactable : Subsystem->GetRegistered())
+	{
+		UFXR_Socket* Socket = Cast<UFXR_Socket>(Interactable.Get());
+		if (!Socket)
+		{
+			continue;
+		}
+
+		// Done here rather than on a socket tick: this pass already walks every socket each frame,
+		// and it keeps a socket free of per-object ticking.
+		if (Side == EFXR_HandSide::Left)
+		{
+			Socket->RefreshOccupancy();
+		}
+
+		float DistanceSq = 0.f;
+		if (Carried && Socket->CanAccept(Carried, DistanceSq) && DistanceSq < BestDistanceSq)
+		{
+			Best = Socket;
+			BestDistanceSq = DistanceSq;
+		}
+	}
+
+	if (PreviewSocket.Get() != Best)
+	{
+		if (UFXR_Socket* Previous = PreviewSocket.Get())
+		{
+			Previous->EndPreview();
+		}
+		if (Best)
+		{
+			Best->BeginPreview(Carried);
+		}
+		PreviewSocket = Best;
+	}
+
+	// A magnetic socket takes it out of the hand the moment it qualifies, rather than waiting to be
+	// let go over it.
+	if (Best && Best->IsAutoSnap())
+	{
+		Best->Seat(Carried);
+		PreviewSocket = nullptr;
+	}
 }
