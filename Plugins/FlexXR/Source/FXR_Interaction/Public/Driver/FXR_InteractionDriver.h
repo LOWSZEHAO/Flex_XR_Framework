@@ -12,6 +12,7 @@ class IFXR_Interactor;
 class UFXR_Grab;
 class UFXR_InteractableBase;
 class UFXR_RayTarget;
+class UFXR_Socket;
 
 /**
  * UFXR_InteractionDriver — the per-rig service that turns interactor input into grabs.
@@ -60,6 +61,12 @@ private:
 	void DrivePokes(EFXR_HandSide Side);
 
 	/**
+	 * Find the nearest socket willing to take what this hand is carrying, and preview it. Run after
+	 * the hands, so the release path can consult last frame's preview and seat instead of dropping.
+	 */
+	void DriveSockets(EFXR_HandSide Side, TWeakObjectPtr<UFXR_Socket>& PreviewSocket);
+
+	/**
 	 * Publish this hand's hover/selected into the focus subsystem, for highlight and UI to read,
 	 * and resolve its far ray. Select and PrevSelect are sampled before DriveHand consumes the
 	 * edge, so a ray selection sees the same press a grab would have.
@@ -94,6 +101,11 @@ private:
 	// What each hand's ray rests on, kept so enter/exit fire on change rather than every frame.
 	TWeakObjectPtr<UFXR_RayTarget> LeftAimed;
 	TWeakObjectPtr<UFXR_RayTarget> RightAimed;
+
+	// The socket each hand's carried object is hovering, so releasing hands it over rather than
+	// dropping it on the floor.
+	TWeakObjectPtr<UFXR_Socket> LeftPreviewSocket;
+	TWeakObjectPtr<UFXR_Socket> RightPreviewSocket;
 
 	// This frame's far-ray hits. Cached because three consumers want them and a line trace per
 	// consumer per hand adds up on a Quest frame budget.
