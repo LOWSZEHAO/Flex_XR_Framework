@@ -70,6 +70,9 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
+	/** The primitive this interactable moves/affects — the highlight subsystem's Target Mesh scope. */
+	UPrimitiveComponent* GetDrivenComponent() const { return ResolveDrivenComponent(); }
+
 	/** Whether any debug draw / viewport gizmo is enabled. */
 	bool IsDrawDebugEnabled() const { return DebugDraw != EFXR_DebugDraw::Off; }
 
