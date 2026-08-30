@@ -25,7 +25,7 @@ public:
 
 	virtual EFXR_InteractorType GetInteractorType() const override { return EFXR_InteractorType::TrackedHand; }
 	virtual float GetSelectValue() const override { return SelectValue; }
-	virtual float GetUseValue() const override { return UseValue; }
+	virtual float GetTriggerValue() const override { return TriggerValue; }
 	virtual void GetPokeTip(FVector& OutLocation, float& OutRadius) const override;
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -47,5 +47,5 @@ private:
 	bool bHasValidHand = false;
 	bool bHasValidIndexTip = false;
 	float SelectValue = 0.f;
-	float UseValue = 0.f;
+	float TriggerValue = 0.f;
 };

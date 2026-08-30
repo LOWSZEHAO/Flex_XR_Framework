@@ -85,7 +85,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_DesktopSimInteractor> DesktopSim;
 
-	/** EnhancedInput mapping + per-hand Select/Use actions. Author a data asset to enable controller input. */
+	/** EnhancedInput mapping + per-hand Select/Trigger actions. Author a data asset to enable controller input. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	TObjectPtr<UFXR_InputConfig> InputConfig;
 
