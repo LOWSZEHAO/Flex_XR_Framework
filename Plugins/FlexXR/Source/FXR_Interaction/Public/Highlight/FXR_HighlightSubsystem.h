@@ -9,9 +9,25 @@
 #include "Types/FXR_HighlightTypes.h"
 #include "FXR_HighlightSubsystem.generated.h"
 
+class UFXR_Highlight;
 class UFXR_InteractableBase;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UMeshComponent;
 class UPrimitiveComponent;
+
+/** What one mesh had before FlexXR took its overlay slot, so releasing it puts things back. */
+USTRUCT()
+struct FFXR_OverlayRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> Original = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> Instance = nullptr;
+};
 
 /**
  * UFXR_HighlightSubsystem — turns semantic states into drawn highlights (design 5.6).
@@ -69,11 +85,22 @@ private:
 	 */
 	void EnsureOutlineBlendable();
 
+	/** Drive one mesh's overlay slot for the Inner Blink and Sweep styles. */
+	void ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, const UFXR_Highlight* Config);
+
+	/** Hand the overlay slot back, restoring whatever the mesh carried before. */
+	void ClearOverlay(UMeshComponent* Mesh);
+
 	// Held so the outline colours and thickness can be pushed without rebuilding the blendable.
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> OutlineMID;
 
 	bool bOutlineBlendableAdded = false;
+
+	// Only meshes FlexXR currently drives. A project may have its own overlay material on a mesh for
+	// unrelated reasons, so the slot is borrowed and given back rather than blanked.
+	UPROPERTY(Transient)
+	TMap<TWeakObjectPtr<UMeshComponent>, FFXR_OverlayRecord> Overlays;
 
 	// Guidance is authored state, so it is stored rather than derived. Hover and Selected are not
 	// stored at all — the focus subsystem already owns them and a second copy could drift.

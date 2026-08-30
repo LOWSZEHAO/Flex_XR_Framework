@@ -5,6 +5,7 @@
 #include "Detection/FXR_FocusSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Settings/FXR_InteractionSettings.h"
+#include "Components/MeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Engine.h"
@@ -220,6 +221,7 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 	// Style picks the mechanism, not the colour: Outline is one full-screen pass keyed off the
 	// stencil, while Inner Blink and Sweep draw per mesh through the overlay material slot.
 	const bool bOutline = (Style == EFXR_HighlightStyle::Outline);
+	const bool bOverlay = (Style == EFXR_HighlightStyle::InnerBlink || Style == EFXR_HighlightStyle::Sweep);
 	const int32 Stencil = bOutline ? StencilFor(State) : 0;
 
 	if (bOutline)
@@ -238,6 +240,19 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 		}
 		Target->SetRenderCustomDepth(Stencil != 0);
 		Target->SetCustomDepthStencilValue(Stencil);
+
+		// Only meshes have an overlay slot; other primitives still take the stencil above.
+		if (UMeshComponent* Mesh = Cast<UMeshComponent>(Target))
+		{
+			if (bOverlay)
+			{
+				ApplyOverlay(Mesh, Style, State, Config);
+			}
+			else
+			{
+				ClearOverlay(Mesh);
+			}
+		}
 	}
 
 	// Track only what is lit, so the "clear everything" path never walks the whole registry.
@@ -249,4 +264,61 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 	{
 		Lit.Remove(Interactable);
 	}
+}
+
+void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, const UFXR_Highlight* Config)
+{
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+	if (!Mesh || !Settings)
+	{
+		return;
+	}
+
+	FFXR_OverlayRecord& Record = Overlays.FindOrAdd(Mesh);
+	if (!Record.Instance)
+	{
+		UMaterialInterface* Source = Settings->OverlayMaterial.LoadSynchronous();
+		if (!Source)
+		{
+			return; // cleared on purpose disables Inner Blink and Sweep
+		}
+
+		// Remember what was there first: clearing later restores it rather than blanking a mesh whose
+		// overlay the project set for its own reasons.
+		Record.Original = Mesh->GetOverlayMaterial();
+		Record.Instance = UMaterialInstanceDynamic::Create(Source, this);
+		if (!Record.Instance)
+		{
+			Overlays.Remove(Mesh);
+			return;
+		}
+		Mesh->SetOverlayMaterial(Record.Instance);
+	}
+
+	// Pushed every refresh, not just on creation, so a state change recolours without rebuilding.
+	const FLinearColor Color = Config ? Config->ResolveColor(State) : Settings->GetColorFor(State);
+	const float Intensity = Config ? Config->ResolveIntensity() : Settings->HighlightIntensity;
+	const float PulseRate = Config ? Config->ResolvePulseRate() : Settings->HighlightPulseRate;
+	const FVector Sweep = Config ? Config->GetSweepDirection() : FVector::UpVector;
+
+	Record.Instance->SetVectorParameterValue(TEXT("HighlightColor"), Color);
+	Record.Instance->SetScalarParameterValue(TEXT("HighlightIntensity"), Intensity);
+	Record.Instance->SetScalarParameterValue(TEXT("PulseRate"), PulseRate);
+	Record.Instance->SetScalarParameterValue(TEXT("SweepAmount"), Style == EFXR_HighlightStyle::Sweep ? 1.f : 0.f);
+	Record.Instance->SetVectorParameterValue(TEXT("SweepDirection"), FLinearColor(Sweep.X, Sweep.Y, Sweep.Z, 0.f));
+}
+
+void UFXR_HighlightSubsystem::ClearOverlay(UMeshComponent* Mesh)
+{
+	if (!Mesh)
+	{
+		return;
+	}
+
+	FFXR_OverlayRecord Record;
+	if (!Overlays.RemoveAndCopyValue(Mesh, Record))
+	{
+		return; // never ours — leave it alone
+	}
+	Mesh->SetOverlayMaterial(Record.Original);
 }

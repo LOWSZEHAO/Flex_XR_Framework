@@ -62,6 +62,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
 	TSoftObjectPtr<UMaterialInterface> OutlineMaterial;
 
+	/**
+	 * Drawn per mesh through the overlay slot for the Inner Blink and Sweep styles. Cleared to
+	 * disable both, or repointed at a project's own material.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Overlay", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
+	TSoftObjectPtr<UMaterialInterface> OverlayMaterial;
+
 	/** The style for a state, falling back to None when the map has no entry. */
 	EFXR_HighlightStyle GetStyleFor(EFXR_HighlightState State) const;
 
