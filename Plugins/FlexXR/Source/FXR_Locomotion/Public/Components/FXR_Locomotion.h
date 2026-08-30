@@ -14,7 +14,6 @@ class UInputAction;
 class UInputMappingContext;
 class UStaticMesh;
 class UStaticMeshComponent;
-class USplineMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UCameraComponent;
@@ -461,7 +460,7 @@ private:
 
 	// Grown on demand to the arc's span count and reused; the surplus is hidden, not destroyed.
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<USplineMeshComponent>> ArcSegments;
+	TArray<TObjectPtr<UStaticMeshComponent>> ArcSegments;
 
 	/**
 	 * Where the reticle is drawn — the *traced surface*, which is not the same point as

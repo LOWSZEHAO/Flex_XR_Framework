@@ -22,7 +22,6 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/SplineMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
 #include "DrawDebugHelpers.h"
@@ -43,6 +42,9 @@ namespace
 	// Below this the stick is not asking for a particular landing facing, so Thumbstick Choose keeps
 	// the current one rather than snapping to whatever noise the stick reports near centre.
 	constexpr float LandingFacingDeadzone = 0.4f;
+
+	// The shipped arc mesh spans this far along +X, so a span stretches it by Length/ArcMeshLength.
+	constexpr float ArcMeshLength = 100.f;
 
 }
 
@@ -1202,7 +1204,7 @@ void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 	AActor* Owner = GetOwner();
 	while (Owner && ArcSegments.Num() < SpanCount)
 	{
-		USplineMeshComponent* Segment = NewObject<USplineMeshComponent>(Owner);
+		UStaticMeshComponent* Segment = NewObject<UStaticMeshComponent>(Owner);
 		Segment->SetupAttachment(Owner->GetRootComponent());
 		Segment->SetMobility(EComponentMobility::Movable);
 		Segment->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -1210,7 +1212,6 @@ void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 		Segment->SetCastShadow(false);
 		Segment->SetAbsolute(true, true, true); // spans are world points, not carried by the rig
 		Segment->SetStaticMesh(ArcMesh);
-		Segment->SetForwardAxis(ESplineMeshAxis::X, false);
 		Segment->SetHiddenInGame(true);
 		Segment->RegisterComponent();
 		ArcSegments.Add(Segment);
@@ -1220,7 +1221,7 @@ void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 
 	for (int32 Index = 0; Index < ArcSegments.Num(); ++Index)
 	{
-		USplineMeshComponent* Segment = ArcSegments[Index];
+		UStaticMeshComponent* Segment = ArcSegments[Index];
 		if (!Segment)
 		{
 			continue;
@@ -1232,20 +1233,21 @@ void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 			continue;
 		}
 
-		// Straight spans: the arc is already a dense polyline, so a tangent equal to the span reads
-		// as a smooth curve without solving real spline tangents per frame.
 		const FVector Start = ArcPoints[Index];
 		const FVector Span = ArcPoints[Index + 1] - Start;
+		const float Length = Span.Size();
+		if (Length <= KINDA_SMALL_NUMBER)
+		{
+			Segment->SetHiddenInGame(true);
+			continue;
+		}
 
-		// Spline params are component-local. Parking every component at the origin and feeding world
-		// points draws the geometry in the right place but leaves each component's *bounds* at the
-		// origin, and the renderer culls by bounds — so the whole arc silently vanishes. Move the
-		// component to the span's start and keep the params local instead.
-		Segment->SetWorldLocation(Start, false, nullptr, ETeleportType::TeleportPhysics);
-		Segment->SetStartAndEnd(FVector::ZeroVector, Span, Span, Span, false);
-		Segment->SetStartScale(FVector2D(ArcWidth, ArcWidth), false);
-		Segment->SetEndScale(FVector2D(ArcWidth, ArcWidth), false);
-		Segment->UpdateMesh();
+		// Plain transformed meshes rather than spline meshes: the arc is already a dense polyline,
+		// so every span is straight, and a rotation plus a stretch along X is exact. Spline meshes
+		// buy curvature this does not need, at the cost of local-space and bounds rules that are
+		// easy to get subtly wrong.
+		Segment->SetWorldLocationAndRotation(Start, Span.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
+		Segment->SetWorldScale3D(FVector(Length / ArcMeshLength, ArcWidth, ArcWidth));
 
 		if (Material && Segment->GetMaterial(0) != Material)
 		{
