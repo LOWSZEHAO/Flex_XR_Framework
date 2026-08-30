@@ -273,7 +273,7 @@ void UFXR_Locomotion::TryBindInput()
 
 	if (TeleportAction)
 	{
-		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Started, this, &UFXR_Locomotion::HandleTeleportStarted);
+		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Triggered, this, &UFXR_Locomotion::HandleTeleportAxis);
 		EnhancedInput->BindAction(TeleportAction, ETriggerEvent::Completed, this, &UFXR_Locomotion::HandleTeleportCompleted);
 	}
 
@@ -292,7 +292,7 @@ void UFXR_Locomotion::TryBindInput()
 	bInputBound = true;
 }
 
-void UFXR_Locomotion::HandleTeleportStarted()
+void UFXR_Locomotion::TryBeginTeleportAim()
 {
 	if (!bLocomotionEnabled || !bAllowTeleport || Phase != ETeleportPhase::Idle)
 	{
@@ -305,8 +305,27 @@ void UFXR_Locomotion::HandleTeleportStarted()
 	Phase = ETeleportPhase::Aiming;
 }
 
+void UFXR_Locomotion::HandleTeleportAxis(const FInputActionValue& Value)
+{
+	// Read as a float so one binding serves both a thumbstick and a button (a button reads 1.0).
+	// Thresholding here rather than in the mapping keeps it directional: Enhanced Input actuates a
+	// digital action on magnitude, which would let pulling the stick *back* teleport as well.
+	const float Push = Value.Get<float>();
+
+	if (Push >= TeleportActivationThreshold)
+	{
+		TryBeginTeleportAim();
+	}
+	else if (Phase == ETeleportPhase::Aiming)
+	{
+		// Eased back below the threshold without fully centring — that is still a commit.
+		CommitTeleport();
+	}
+}
+
 void UFXR_Locomotion::HandleTeleportCompleted()
 {
+	// Stick centred (or button released) — the action stops triggering, so commit from here.
 	if (Phase == ETeleportPhase::Aiming)
 	{
 		CommitTeleport();

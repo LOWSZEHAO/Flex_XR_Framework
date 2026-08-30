@@ -187,9 +187,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputMappingContext> LocomotionContext;
 
-	/** Hold to aim the teleport arc, release to commit. */
+	/**
+	 * Hold to aim the teleport arc, release to commit. Axis1D (thumbstick Y) or a button both work:
+	 * the value is read as a float and thresholded here, so pushing the stick forward aims and
+	 * pulling it back does nothing. Add a Negate modifier if your stick reads forward as negative.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputAction> TeleportAction;
+
+	/** Stick push at or above which the arc appears (a button reads 1.0, so any value under 1 works). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float TeleportActivationThreshold = 0.6f;
 
 	/** Axis1D (thumbstick X) — sign turns left/right; snap on a flick, smooth while held. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
@@ -225,8 +233,10 @@ private:
 
 	void ApplyPreset(EFXR_LocomotionPreset InPreset);
 	void TryBindInput();
-	void HandleTeleportStarted();
+	void HandleTeleportAxis(const FInputActionValue& Value);
 	void HandleTeleportCompleted();
+	/** Begin aiming if this hand is allowed to right now (enabled, idle, not holding anything). */
+	void TryBeginTeleportAim();
 	void HandleTurn(const FInputActionValue& Value);
 	void HandleTurnCompleted();
 	void HandleMove(const FInputActionValue& Value);
