@@ -11,11 +11,6 @@ UFXR_TeleportBlocker::UFXR_TeleportBlocker()
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 	bTickInEditor = true;
-
-	// Blocking is decided against BoxExtent, never by stopping the arc on the marker.
-	SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SetGenerateOverlapEvents(false);
-	CanCharacterStepUpOn = ECB_No;
 }
 
 void UFXR_TeleportBlocker::OnRegister()

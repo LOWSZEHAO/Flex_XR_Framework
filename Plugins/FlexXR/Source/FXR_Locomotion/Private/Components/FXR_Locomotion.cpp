@@ -116,7 +116,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	}
 
 	// One place to close out aim highlights: every path out of Aiming (commit, yield, disable,
-	// gesture cancel) passes through here, so a bound OnAimExit can never be missed.
+	// gesture cancel) passes through here, so a bound On Exit can never be missed.
 	if (Phase != ETeleportPhase::Aiming && (HoveredAnchor.IsValid() || HoveredBlocker.IsValid()))
 	{
 		UpdateAimHover(nullptr, nullptr);
@@ -792,12 +792,12 @@ void UFXR_Locomotion::UpdateAimHover(UFXR_TeleportAnchor* Anchor, UFXR_TeleportB
 	{
 		if (UFXR_TeleportAnchor* Previous = HoveredAnchor.Get())
 		{
-			Previous->OnAimExit.Broadcast();
+			Previous->OnExit.Broadcast();
 		}
 		HoveredAnchor = Anchor;
 		if (Anchor)
 		{
-			Anchor->OnAimEnter.Broadcast();
+			Anchor->OnAim.Broadcast();
 		}
 	}
 
@@ -805,12 +805,12 @@ void UFXR_Locomotion::UpdateAimHover(UFXR_TeleportAnchor* Anchor, UFXR_TeleportB
 	{
 		if (UFXR_TeleportBlocker* Previous = HoveredBlocker.Get())
 		{
-			Previous->OnAimExit.Broadcast();
+			Previous->OnExit.Broadcast();
 		}
 		HoveredBlocker = Blocker;
 		if (Blocker)
 		{
-			Blocker->OnAimEnter.Broadcast();
+			Blocker->OnAim.Broadcast();
 		}
 	}
 }
@@ -826,7 +826,7 @@ void UFXR_Locomotion::CommitTeleport()
 	// Announced at commit rather than after the fade, so a landing sound starts with the fade out.
 	if (UFXR_TeleportAnchor* Anchor = HoveredAnchor.Get())
 	{
-		Anchor->OnTeleportedTo.Broadcast();
+		Anchor->OnTeleported.Broadcast();
 	}
 
 	const bool bFade = (Transition != EFXR_TeleportTransition::Instant) && (FadeDuration > KINDA_SMALL_NUMBER);

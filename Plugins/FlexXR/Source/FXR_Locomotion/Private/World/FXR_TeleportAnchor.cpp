@@ -11,11 +11,6 @@ UFXR_TeleportAnchor::UFXR_TeleportAnchor()
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 	bTickInEditor = true;
-
-	// A landing pad, not geometry: the teleport arc must reach the floor under the marker.
-	SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SetGenerateOverlapEvents(false);
-	CanCharacterStepUpOn = ECB_No;
 }
 
 void UFXR_TeleportAnchor::OnRegister()

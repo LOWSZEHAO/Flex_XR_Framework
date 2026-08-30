@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/StaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "FXR_TeleportAnchor.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_TeleportAnchorEvent);
@@ -16,13 +16,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_TeleportAnchorEvent);
  * snaps to the anchor; optionally it also forces the landing facing. Self-registers into the
  * teleport registry (ADR-002 pattern), so the locomotion component never scans the level per aim.
  *
- * It is a static mesh component so the marker is the anchor rather than a child of it: assign a
- * Static Mesh for the visual and swap Materials from On Aim Enter / Exit to highlight it. Leaving
- * the mesh unset renders nothing and costs nothing. Collision is off — the teleport arc has to
- * reach the floor underneath, not stop on the marker.
+ * For a visual, add a Static Mesh Component under it in the Blueprint and drive that from On Aim /
+ * On Exit. The anchor stays a bare scene component deliberately: inheriting a primitive would add
+ * twenty-one collision, physics and input events to the Events list for the sake of one mesh slot.
+ * Give any such child mesh no collision — the teleport arc has to reach the floor underneath it.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
-class FXR_LOCOMOTION_API UFXR_TeleportAnchor : public UStaticMeshComponent
+class FXR_LOCOMOTION_API UFXR_TeleportAnchor : public USceneComponent
 {
 	GENERATED_BODY()
 
@@ -43,15 +43,15 @@ public:
 
 	/** The teleport aim settled on this anchor. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|TeleportAnchor")
-	FFXR_TeleportAnchorEvent OnAimEnter;
+	FFXR_TeleportAnchorEvent OnAim;
 
-	/** The aim left this anchor, or aiming stopped without committing. */
+	/** The aim left this anchor, or aiming stopped. Always paired with an earlier On Aim. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|TeleportAnchor")
-	FFXR_TeleportAnchorEvent OnAimExit;
+	FFXR_TeleportAnchorEvent OnExit;
 
 	/** The player committed a teleport onto this anchor. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|TeleportAnchor")
-	FFXR_TeleportAnchorEvent OnTeleportedTo;
+	FFXR_TeleportAnchorEvent OnTeleported;
 
 protected:
 	/** Aim within this radius (cm) of the anchor snaps the teleport target to it. */
