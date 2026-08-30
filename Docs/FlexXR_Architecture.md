@@ -116,7 +116,7 @@ Training
 2. **Explicit:** multi-mesh actors → dropdown lists the actor's primitives, pick one. The editor validation panel flags ambiguity at author time.
 3. Pivot/mechanism transforms are **cached in actor space at initialization** — so a latch component that is a child of the mesh it rotates never orbits its own pivot (circular-parenting trap, pre-solved).
 
-**Highlight resolution order:** FXR_Highlight component (if present) → the interactable's own dropdown → project settings.
+**Highlight resolution order:** FXR_Highlight component (if present) → project settings. There is no per-interactable dropdown; see FXR_Highlight below for why.
 
 ---
 
