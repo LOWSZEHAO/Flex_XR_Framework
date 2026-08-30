@@ -30,8 +30,11 @@ public:
 	/** Nearest anchor whose snap radius contains Location, or null. */
 	UFXR_TeleportAnchor* FindAnchorNear(const FVector& Location) const;
 
+	/** The first registered blocker containing Location, or null — named so its events can fire. */
+	UFXR_TeleportBlocker* FindBlockerAt(const FVector& Location) const;
+
 	/** True if Location is inside any registered blocker. */
-	bool IsBlocked(const FVector& Location) const;
+	bool IsBlocked(const FVector& Location) const { return FindBlockerAt(Location) != nullptr; }
 
 	/** Resolve the subsystem from any world context object (may return null). */
 	static UFXR_TeleportRegistry* Get(const UObject* WorldContextObject);

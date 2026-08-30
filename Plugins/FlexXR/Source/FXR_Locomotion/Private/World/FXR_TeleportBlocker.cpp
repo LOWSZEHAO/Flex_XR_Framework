@@ -6,8 +6,23 @@
 
 UFXR_TeleportBlocker::UFXR_TeleportBlocker()
 {
+	// Tick exists only for the optional debug draw, and runs in the editor too — a blocked volume
+	// is invisible by nature, so it has to be visible while placing it.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	bTickInEditor = true;
+
+	// Blocking is decided against BoxExtent, never by stopping the arc on the marker.
+	SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetGenerateOverlapEvents(false);
+	CanCharacterStepUpOn = ECB_No;
+}
+
+void UFXR_TeleportBlocker::OnRegister()
+{
+	Super::OnRegister();
+
+	RefreshTickState();
 }
 
 void UFXR_TeleportBlocker::BeginPlay()
@@ -18,7 +33,7 @@ void UFXR_TeleportBlocker::BeginPlay()
 	{
 		Registry->RegisterBlocker(this);
 	}
-	SetComponentTickEnabled(bDrawDebug);
+	RefreshTickState();
 }
 
 void UFXR_TeleportBlocker::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -30,17 +45,33 @@ void UFXR_TeleportBlocker::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+#if WITH_EDITOR
+void UFXR_TeleportBlocker::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	RefreshTickState();
+}
+#endif
+
+void UFXR_TeleportBlocker::RefreshTickState()
+{
+	SetComponentTickEnabled(bDrawDebug);
+}
+
 void UFXR_TeleportBlocker::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bDrawDebug)
+	if (!bDrawDebug)
 	{
-		if (const UWorld* World = GetWorld())
-		{
-			const FTransform Transform = GetComponentTransform();
-			DrawDebugBox(World, Transform.GetLocation(), BoxExtent, Transform.GetRotation(), FColor::Red, false, -1.f, 0, 1.f);
-		}
+		return;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		const FTransform Transform = GetComponentTransform();
+		DrawDebugBox(World, Transform.GetLocation(), BoxExtent, Transform.GetRotation(), FColor::Red, false, -1.f, 0, 1.f);
 	}
 }
 

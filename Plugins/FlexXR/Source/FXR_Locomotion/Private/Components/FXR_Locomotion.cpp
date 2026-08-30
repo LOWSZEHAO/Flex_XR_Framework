@@ -7,6 +7,7 @@
 #include "Driver/FXR_InteractionDriver.h"
 #include "Detection/FXR_TeleportRegistry.h"
 #include "World/FXR_TeleportAnchor.h"
+#include "World/FXR_TeleportBlocker.h"
 #include "Types/FXR_LogChannels.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -98,6 +99,13 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	if (Phase == ETeleportPhase::Idle)
 	{
 		ProcessSmoothMove(DeltaTime);
+	}
+
+	// One place to close out aim highlights: every path out of Aiming (commit, yield, disable,
+	// gesture cancel) passes through here, so a bound OnAimExit can never be missed.
+	if (Phase != ETeleportPhase::Aiming && (HoveredAnchor.IsValid() || HoveredBlocker.IsValid()))
+	{
+		UpdateAimHover(nullptr, nullptr);
 	}
 
 	switch (Phase)
@@ -604,11 +612,13 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 {
 	OutValid = false;
 	ArcPoints.Reset();
+	UFXR_TeleportAnchor* HitAnchor = nullptr;
 
 	IFXR_Interactor* Aim = GetAimInteractor();
 	UWorld* World = GetWorld();
 	if (!Aim || !World)
 	{
+		UpdateAimHover(nullptr, nullptr);
 		return false;
 	}
 
@@ -657,6 +667,7 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 
 	if (!bHit)
 	{
+		UpdateAimHover(nullptr, nullptr);
 		return false;
 	}
 
@@ -694,10 +705,11 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 	case EFXR_TeleportValidation::AnchorsOnly:
 		if (CachedRegistry)
 		{
-			if (const UFXR_TeleportAnchor* Anchor = CachedRegistry->FindAnchorNear(HitLocation))
+			if (UFXR_TeleportAnchor* Anchor = CachedRegistry->FindAnchorNear(HitLocation))
 			{
 				OutTarget = Anchor->GetComponentLocation();
 				OutValid = true;
+				HitAnchor = Anchor;
 				if (Anchor->ShouldOverrideFacing())
 				{
 					OutFacingYaw = Anchor->GetComponentRotation().Yaw;
@@ -708,12 +720,48 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 	}
 
 	// A blocker rejects any otherwise-valid target, in every validation mode.
-	if (OutValid && CachedRegistry && CachedRegistry->IsBlocked(OutTarget))
+	UFXR_TeleportBlocker* HitBlocker = nullptr;
+	if (OutValid && CachedRegistry)
 	{
-		OutValid = false;
+		HitBlocker = CachedRegistry->FindBlockerAt(OutTarget);
+		if (HitBlocker)
+		{
+			OutValid = false;
+			HitAnchor = nullptr; // blocked: the anchor is not the thing to highlight
+		}
 	}
 
+	UpdateAimHover(HitAnchor, HitBlocker);
 	return OutValid;
+}
+
+void UFXR_Locomotion::UpdateAimHover(UFXR_TeleportAnchor* Anchor, UFXR_TeleportBlocker* Blocker)
+{
+	if (HoveredAnchor.Get() != Anchor)
+	{
+		if (UFXR_TeleportAnchor* Previous = HoveredAnchor.Get())
+		{
+			Previous->OnAimExit.Broadcast();
+		}
+		HoveredAnchor = Anchor;
+		if (Anchor)
+		{
+			Anchor->OnAimEnter.Broadcast();
+		}
+	}
+
+	if (HoveredBlocker.Get() != Blocker)
+	{
+		if (UFXR_TeleportBlocker* Previous = HoveredBlocker.Get())
+		{
+			Previous->OnAimExit.Broadcast();
+		}
+		HoveredBlocker = Blocker;
+		if (Blocker)
+		{
+			Blocker->OnAimEnter.Broadcast();
+		}
+	}
 }
 
 void UFXR_Locomotion::CommitTeleport()
@@ -722,6 +770,12 @@ void UFXR_Locomotion::CommitTeleport()
 	{
 		Phase = ETeleportPhase::Idle; // aimed at an invalid spot — cancel
 		return;
+	}
+
+	// Announced at commit rather than after the fade, so a landing sound starts with the fade out.
+	if (UFXR_TeleportAnchor* Anchor = HoveredAnchor.Get())
+	{
+		Anchor->OnTeleportedTo.Broadcast();
 	}
 
 	const bool bFade = (Transition != EFXR_TeleportTransition::Instant) && (FadeDuration > KINDA_SMALL_NUMBER);

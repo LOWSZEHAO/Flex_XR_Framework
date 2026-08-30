@@ -19,6 +19,8 @@ class UCameraComponent;
 class UFXR_InteractorComponent;
 class UFXR_InteractionDriver;
 class UFXR_TeleportRegistry;
+class UFXR_TeleportAnchor;
+class UFXR_TeleportBlocker;
 class IFXR_Interactor;
 struct FInputActionValue;
 
@@ -267,6 +269,13 @@ private:
 	bool ResolveMovementHand(EFXR_HandMovement Movement, EFXR_HandSide& OutSide) const;
 	void UpdateAim();
 	bool PredictAndValidate(FVector& OutTarget, bool& OutValid, float& OutFacingYaw);
+
+	/**
+	 * Drive the aim-enter/exit events on the anchor and blocker under the reticle. Called every aim
+	 * frame with what the aim resolved to, and with nulls when aiming ends, so a highlight bound in
+	 * Blueprint always gets its closing event.
+	 */
+	void UpdateAimHover(UFXR_TeleportAnchor* Anchor, UFXR_TeleportBlocker* Blocker);
 	void CommitTeleport();
 	void ExecuteMove();
 	void ProcessTurn(float DeltaTime);
@@ -294,6 +303,10 @@ private:
 	bool bInputBound = false;
 	bool bLoggedMissingOwner = false;
 	bool bLoggedHandFallback = false;
+
+	// What the reticle is currently over, so enter/exit fire once on change rather than every frame.
+	TWeakObjectPtr<UFXR_TeleportAnchor> HoveredAnchor;
+	TWeakObjectPtr<UFXR_TeleportBlocker> HoveredBlocker;
 
 	FVector TargetLocation = FVector::ZeroVector;
 	bool bTargetValid = false;

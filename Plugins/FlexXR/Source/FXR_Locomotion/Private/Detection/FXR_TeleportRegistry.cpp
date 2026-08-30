@@ -54,16 +54,16 @@ UFXR_TeleportAnchor* UFXR_TeleportRegistry::FindAnchorNear(const FVector& Locati
 	return Best;
 }
 
-bool UFXR_TeleportRegistry::IsBlocked(const FVector& Location) const
+UFXR_TeleportBlocker* UFXR_TeleportRegistry::FindBlockerAt(const FVector& Location) const
 {
 	for (const TObjectPtr<UFXR_TeleportBlocker>& Blocker : Blockers)
 	{
 		if (Blocker && Blocker->IsInside(Location))
 		{
-			return true;
+			return Blocker;
 		}
 	}
-	return false;
+	return nullptr;
 }
 
 UFXR_TeleportRegistry* UFXR_TeleportRegistry::Get(const UObject* WorldContextObject)

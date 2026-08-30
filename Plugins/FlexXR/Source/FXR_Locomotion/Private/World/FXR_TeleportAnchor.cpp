@@ -6,9 +6,23 @@
 
 UFXR_TeleportAnchor::UFXR_TeleportAnchor()
 {
-	// Tick exists only for the optional debug draw; disabled unless bDrawDebug is set.
+	// Tick exists only for the optional debug draw; disabled unless bDrawDebug is set. It runs in
+	// the editor too, so the snap radius is visible while placing anchors, not only in play.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	bTickInEditor = true;
+
+	// A landing pad, not geometry: the teleport arc must reach the floor under the marker.
+	SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetGenerateOverlapEvents(false);
+	CanCharacterStepUpOn = ECB_No;
+}
+
+void UFXR_TeleportAnchor::OnRegister()
+{
+	Super::OnRegister();
+
+	RefreshTickState();
 }
 
 void UFXR_TeleportAnchor::BeginPlay()
@@ -19,7 +33,7 @@ void UFXR_TeleportAnchor::BeginPlay()
 	{
 		Registry->RegisterAnchor(this);
 	}
-	SetComponentTickEnabled(bDrawDebug);
+	RefreshTickState();
 }
 
 void UFXR_TeleportAnchor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -31,20 +45,40 @@ void UFXR_TeleportAnchor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+#if WITH_EDITOR
+void UFXR_TeleportAnchor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Take effect on the tick the box is ticked, rather than at the next BeginPlay.
+	RefreshTickState();
+}
+#endif
+
+void UFXR_TeleportAnchor::RefreshTickState()
+{
+	SetComponentTickEnabled(bDrawDebug);
+}
+
 void UFXR_TeleportAnchor::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (bDrawDebug)
+	if (!bDrawDebug)
 	{
-		if (const UWorld* World = GetWorld())
-		{
-			const FTransform Transform = GetComponentTransform();
-			DrawDebugCircle(World, Transform.GetLocation() + FVector(0.f, 0.f, 2.f), SnapRadius, 24, FColor::Cyan, false, -1.f, 0, 1.f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
-			if (bOverrideFacing)
-			{
-				DrawDebugDirectionalArrow(World, Transform.GetLocation(), Transform.GetLocation() + Transform.GetUnitAxis(EAxis::X) * SnapRadius, 12.f, FColor::Cyan, false, -1.f, 0, 1.f);
-			}
-		}
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FTransform Transform = GetComponentTransform();
+	DrawDebugCircle(World, Transform.GetLocation() + FVector(0.f, 0.f, 2.f), SnapRadius, 24, FColor::Cyan, false, -1.f, 0, 1.f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+	if (bOverrideFacing)
+	{
+		DrawDebugDirectionalArrow(World, Transform.GetLocation(), Transform.GetLocation() + Transform.GetUnitAxis(EAxis::X) * SnapRadius, 12.f, FColor::Cyan, false, -1.f, 0, 1.f);
 	}
 }
