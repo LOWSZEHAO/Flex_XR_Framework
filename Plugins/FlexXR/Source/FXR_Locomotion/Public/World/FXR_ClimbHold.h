@@ -19,6 +19,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_ClimbHoldEvent);
  *
  * Both hands may hold it at once, and hand-over-hand across separate holds works because each
  * grab re-anchors against wherever that hand now is.
+ *
+ * Its Debug Draw reach sphere shows in the level viewport as well as in play, matching the teleport
+ * anchor and blocker: a hold is placed by reaching for it, so its reach has to be visible while you
+ * position it. The Phase 2 interactables use selection-gated viewport visualizers instead.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_LOCOMOTION_API UFXR_ClimbHold : public UFXR_InteractableBase
@@ -27,6 +31,12 @@ class FXR_LOCOMOTION_API UFXR_ClimbHold : public UFXR_InteractableBase
 
 public:
 	UFXR_ClimbHold();
+
+	virtual void OnRegister() override;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
 	//~ Two hands are the point of a climb, so a second one always may join.
 	virtual bool CanBeginSecondary(IFXR_Interactor* Interactor) const override { return true; }
@@ -48,5 +58,8 @@ public:
 	FFXR_ClimbHoldEvent OnReleased;
 
 private:
+	/** The base draws the reach sphere on tick; this decides whether that tick runs at all. */
+	void RefreshTickState();
+
 	int32 HandCount = 0;
 };

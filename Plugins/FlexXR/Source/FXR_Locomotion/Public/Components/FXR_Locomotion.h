@@ -253,6 +253,37 @@ protected:
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
 	/**
+	 * Mesh swept along the aim arc, one span per arc segment. Author it along +X, one metre long,
+	 * starting at the origin. Leave unset and the arc stays debug lines.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UStaticMesh> ArcMesh;
+
+	/** Arc thickness (cm radius). Thin reads as a beam; thick reads as a tube. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.05"))
+	float ArcWidth = 1.5f;
+
+	/** Arc material when the target is valid. Falls back to Valid Material, so the arc and reticle match unless you split them. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> ArcValidMaterial;
+
+	/** Arc material when the target is rejected. Falls back to Invalid Material. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
+	TObjectPtr<UMaterialInterface> ArcInvalidMaterial;
+
+	/**
+	 * Nudge along the surface normal (cm). The reticle already sits on the traced surface rather
+	 * than on the NavMesh — which bakes above the floor — so this is only for art tweaks, and may
+	 * go negative to sink a thick marker in.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "-50.0", ClampMax = "50.0"))
+	float ReticleGroundOffset = 1.f;
+
+	/** Uniform scale on the reticle mesh. The ring is authored at 20 cm radius — roughly a footprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.01"))
+	float ReticleScale = 1.f;
+
+	/**
 	 * Post-process material driven each frame with the vignette intensity, through the scalar named
 	 * below. **The vignette draws nothing until this is set** — Vignette Mode only computes the
 	 * intensity. Assign a post-process material, or leave this empty and bind Get Vignette Intensity
@@ -348,10 +379,22 @@ private:
 	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
-	void DrawAim() const;
+	void DrawAim();
 
 	/** Place/hide the reticle mesh for this frame's target. No-op until a Reticle Mesh is assigned. */
 	void UpdateReticle(bool bVisible) const;
+	/** The reticle's material for this frame's validity. */
+	UMaterialInterface* GetAimMaterial() const { return bTargetValid ? ValidMaterial : InvalidMaterial; }
+
+	/** The arc's material for this frame's validity, falling back to the reticle's when unset. */
+	UMaterialInterface* GetArcMaterial() const
+	{
+		UMaterialInterface* Override = bTargetValid ? ArcValidMaterial : ArcInvalidMaterial;
+		return Override ? Override : GetAimMaterial();
+	}
+
+	/** Sweep the arc mesh along this frame's arc points. No-op until an Arc Mesh is assigned. */
+	void UpdateArcMesh(bool bVisible);
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
 	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
@@ -414,6 +457,17 @@ private:
 	// subobject does not survive Blueprint SCS instancing.
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> ReticleComponent;
+
+	// Grown on demand to the arc's span count and reused; the surplus is hidden, not destroyed.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> ArcSegments;
+
+	/**
+	 * Where the reticle is drawn — the *traced surface*, which is not the same point as
+	 * TargetLocation. NavMesh projection lands on the nav surface, and that is baked above the
+	 * floor, so a reticle placed on it hovers.
+	 */
+	FVector ReticleLocation = FVector::ZeroVector;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.
