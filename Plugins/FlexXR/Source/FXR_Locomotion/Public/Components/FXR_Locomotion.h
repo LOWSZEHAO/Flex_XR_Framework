@@ -252,9 +252,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TObjectPtr<UMaterialInterface> InvalidMaterial;
 
-	/** How far above the target the reticle sits (cm). Enough to clear the surface, not enough to float. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.0"))
-	float ReticleGroundOffset = 2.f;
+	/**
+	 * Nudge along the surface normal (cm). The reticle already sits on the traced surface rather
+	 * than on the NavMesh — which bakes above the floor — so this is only for art tweaks, and may
+	 * go negative to sink a thick marker in.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "-50.0", ClampMax = "50.0"))
+	float ReticleGroundOffset = 1.f;
+
+	/** Uniform scale on the reticle mesh. The ring is authored at 20 cm radius — roughly a footprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.01"))
+	float ReticleScale = 1.f;
 
 	/**
 	 * Post-process material driven each frame with the vignette intensity, through the scalar named
@@ -352,10 +360,12 @@ private:
 	void ApplyVignetteToMaterial();
 	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
-	void DrawAim() const;
+	void DrawAim();
 
 	/** Place/hide the reticle mesh for this frame's target. No-op until a Reticle Mesh is assigned. */
 	void UpdateReticle(bool bVisible) const;
+	/** The material the aim visuals wear right now — valid or invalid, shared by arc and reticle. */
+	UMaterialInterface* GetAimMaterial() const { return bTargetValid ? ValidMaterial : InvalidMaterial; }
 	void StartCameraFade(float From, float To) const;
 	bool IsHandBusy(EFXR_HandSide Side) const;
 	IFXR_Interactor* GetInteractorForHand(EFXR_HandSide Side) const;
@@ -418,6 +428,13 @@ private:
 	// subobject does not survive Blueprint SCS instancing.
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> ReticleComponent;
+
+	/**
+	 * Where the reticle is drawn — the *traced surface*, which is not the same point as
+	 * TargetLocation. NavMesh projection lands on the nav surface, and that is baked above the
+	 * floor, so a reticle placed on it hovers.
+	 */
+	FVector ReticleLocation = FVector::ZeroVector;
 
 	// Persistent scratch so aiming allocates nothing per frame (design 5.8): PathData's capacity is
 	// reused across frames, and the drawn polyline reuses ArcPoints.

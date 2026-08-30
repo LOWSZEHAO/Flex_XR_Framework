@@ -968,6 +968,11 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 		}
 	}
 
+	// The reticle marks the *surface*, not the destination. NavMesh projection moves the target onto
+	// the nav surface, which is baked above the floor, so drawing the ring there leaves it hovering
+	// however high this level's nav settings put it. An anchor is its own visual spot.
+	ReticleLocation = HitAnchor ? OutTarget : HitLocation;
+
 	UpdateAimHover(HitAnchor, HitBlocker);
 	return OutValid;
 }
@@ -1152,7 +1157,7 @@ void UFXR_Locomotion::ExecuteMove()
 	bTargetValid = false;
 }
 
-void UFXR_Locomotion::DrawAim() const
+void UFXR_Locomotion::DrawAim()
 {
 	const UWorld* World = GetWorld();
 	if (!World || ArcPoints.Num() == 0)
@@ -1164,6 +1169,7 @@ void UFXR_Locomotion::DrawAim() const
 	UpdateReticle(true);
 
 	const FColor Color = bTargetValid ? FColor::Green : FColor::Red;
+
 	for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
 	{
 		DrawDebugLine(World, ArcPoints[Index - 1], ArcPoints[Index], Color, false, -1.f, 0, 1.5f);
@@ -1172,8 +1178,7 @@ void UFXR_Locomotion::DrawAim() const
 	// The debug circle is the fallback marker; an assigned Reticle Mesh replaces it.
 	if (!ReticleComponent)
 	{
-		const FVector Reticle = bTargetValid ? TargetLocation : ArcPoints.Last();
-		DrawDebugCircle(World, Reticle + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
+		DrawDebugCircle(World, ReticleLocation + FVector(0.f, 0.f, 2.f), 20.f, 24, Color, false, -1.f, 0, 1.5f, FVector(1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), false);
 	}
 }
 
@@ -1190,15 +1195,16 @@ void UFXR_Locomotion::UpdateReticle(bool bVisible) const
 		return;
 	}
 
-	// Lifted clear of the surface it marks, or a flat reticle z-fights the floor it is lying on.
-	const FVector Location = (bTargetValid ? TargetLocation : ArcPoints.Last()) + FVector(0.f, 0.f, ReticleGroundOffset);
+	// Nudged clear of the surface it marks, or a flat reticle z-fights the floor it lies on.
+	const FVector Location = ReticleLocation + FVector(0.f, 0.f, ReticleGroundOffset);
 
 	// Faces the landing yaw so a directional reticle shows which way you will be looking; that is
 	// the whole point of Face Arc and Thumbstick Choose being visible before you commit.
 	const FRotator Rotation(0.f, bApplyLandingFacing ? TargetFacingYaw : 0.f, 0.f);
 	ReticleComponent->SetWorldLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	ReticleComponent->SetWorldScale3D(FVector(ReticleScale));
 
-	if (UMaterialInterface* Material = bTargetValid ? ValidMaterial : InvalidMaterial)
+	if (UMaterialInterface* Material = GetAimMaterial())
 	{
 		if (ReticleComponent->GetMaterial(0) != Material)
 		{
