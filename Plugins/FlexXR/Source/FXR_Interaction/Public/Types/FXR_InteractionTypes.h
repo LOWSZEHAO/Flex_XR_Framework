@@ -25,6 +25,19 @@ enum class EFXR_AlreadyHeldPolicy : uint8
 	ForceRelease    UMETA(DisplayName = "Force Release")
 };
 
+/** When a hand draws its far-interaction pointer beam. */
+UENUM(BlueprintType)
+enum class EFXR_RayVisibility : uint8
+{
+	// No beam. Far interaction still works — the hover highlight says what a press would take.
+	Never    UMETA(DisplayName = "Never"),
+	// Only while the hand is aimed at something that will answer. The beam becomes a statement
+	// rather than a fixture, and it never points at nothing.
+	OnTarget UMETA(DisplayName = "On Target"),
+	// Whenever the hand is free. Reads as a menu pointer; useful for far UI-heavy scenes.
+	Always   UMETA(DisplayName = "Always")
+};
+
 /** How much authoring debug an interactable draws (viewport gizmo and runtime). */
 UENUM(BlueprintType)
 enum class EFXR_DebugDraw : uint8

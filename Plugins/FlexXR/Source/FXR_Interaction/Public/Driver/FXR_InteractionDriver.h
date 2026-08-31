@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "Engine/HitResult.h"
 #include "Types/FXR_CoreTypes.h"
+#include "Types/FXR_InteractionTypes.h"
 #include "FXR_InteractionDriver.generated.h"
 
 class IFXR_Interactor;
@@ -56,34 +57,35 @@ protected:
 	float ReleaseThreshold = 0.35f;
 
 	/**
-	 * Draw a pointer beam for far interaction. It appears while a hand is free and not already
-	 * reaching for something, so it says "far interaction is what this hand is doing right now"
-	 * rather than being permanently on.
+	 * When this rig draws its pointer beam. On Target by default: the hover highlight already says
+	 * what a press would take, so a beam that is permanently lit adds noise rather than information,
+	 * and it reads as a menu cursor in a scene that is not a menu. Aiming still works, because
+	 * acquisition is coarse — you point the hand, the beam arrives, and it refines from there.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction")
-	bool bShowRay = true;
+	EFXR_RayVisibility RayVisibility = EFXR_RayVisibility::OnTarget;
 
 	/**
 	 * Beam diameter in centimetres. A real measurement rather than a multiplier on whatever mesh is
 	 * assigned: the scale is derived from the mesh's own bounds, so 1.5 cm is 1.5 cm whether the tube
 	 * was authored at radius 1 or radius 10.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.1", ClampMax = "20.0", Units = "cm", EditCondition = "bShowRay"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.1", ClampMax = "20.0", Units = "cm", EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	float RayWidth = 1.5f;
 
 	/** How long the beam takes to fade in or out, matching the highlight so nothing pops. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s", EditCondition = "bShowRay"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s", EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	float RayFadeTime = 0.12f;
 
 	//~ Ship with the plugin, so a bare driver draws. Soft references: a hard default roots the asset
 	//~ through this CDO, which makes it unrebuildable from tooling.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	TSoftObjectPtr<UStaticMesh> RayMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	TSoftObjectPtr<UStaticMesh> RayCursorMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	TSoftObjectPtr<UMaterialInterface> RayMaterial;
 
 	/** How far this rig casts its far ray. Each FXR_RayTarget may shorten its own reach below this. */
