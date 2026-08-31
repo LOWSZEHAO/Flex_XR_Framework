@@ -476,10 +476,14 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 {
 	FRayVisual& Visual = RayVisuals[Side == EFXR_HandSide::Left ? 0 : 1];
 
-	// Shown while a hand is free and not already reaching for something. A beam that is always on
-	// says nothing; one that appears when far interaction becomes this hand's job does.
+	// Shown while the hand is free and, by default, only while it is aimed at something that will
+	// answer. A beam that is always on says nothing; one that arrives as the hand finds a target
+	// says exactly what the press will do — and it can never point at nothing, because it is drawn
+	// from the same answer the logic just used.
 	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
-	const bool bWanted = bShowRay && Interactor && !bBusyNear;
+	const bool bHasReason = (RayVisibility == EFXR_RayVisibility::Always) ||
+		(RayVisibility == EFXR_RayVisibility::OnTarget && FarTarget != nullptr);
+	const bool bWanted = bHasReason && Interactor && !bBusyNear;
 
 	const float Step = (RayFadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / RayFadeTime) : 1.f;
 	Visual.Alpha = FMath::FInterpConstantTo(Visual.Alpha, bWanted ? 1.f : 0.f, 1.f, Step);
