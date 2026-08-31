@@ -49,7 +49,7 @@ public:
 	void SetHandSide(EFXR_HandSide Side) { HandSide = Side; }
 
 	/** Whether the query-shape gizmo (grab sphere + poke tip) is drawn — an authoring aid for offset tuning. */
-	bool IsDrawDebugEnabled() const { return bDrawDebug; }
+	bool IsEditorGizmoEnabled() const { return bShowEditorGizmo; }
 
 protected:
 	/** Transform the poses derive from — this component's transform by default; hand tracking overrides it. */
@@ -83,9 +83,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor", meta = (ClampMin = "0.1"))
 	float PokeRadius = 1.f;
 
-	/** Draw this interactor's query shapes in the viewport when selected: grab sphere + poke tip (tune the offsets against the hand mesh). */
+	/**
+	 * Draw this interactor's query shapes — grab sphere and poke tip — in the editor viewport while
+	 * the component is selected, for tuning the offsets against the hand mesh.
+	 *
+	 * Editor-only, and named for it. The shapes drawn *during play* come from Draw Debug on
+	 * AFXR_Pawn instead. Two settings that both read as "debug", only one of which does anything in
+	 * play, is a trap worth not setting.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor|Debug")
-	bool bDrawDebug = false;
+	bool bShowEditorGizmo = false;
 
 	bool bInteractorActive = true;
 };

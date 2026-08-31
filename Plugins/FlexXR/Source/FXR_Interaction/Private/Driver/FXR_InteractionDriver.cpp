@@ -555,10 +555,16 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 
 	if (UStaticMeshComponent* Beam = Visual.Beam.Get())
 	{
-		// The arc-segment mesh is a 100 cm tube along +X, so scaling X by hundredths of the length
-		// stretches it to reach.
+		// Both scales come from the mesh's own bounds rather than assuming how it was authored. The
+		// tube runs along +X, so X stretches it to reach and Y/Z set a real centimetre thickness —
+		// guessing a multiplier is how the beam ended up a few millimetres wide and invisible.
+		const FVector MeshExtent = BeamMesh->GetBounds().BoxExtent;
+		const float MeshLength = FMath::Max(MeshExtent.X * 2.f, KINDA_SMALL_NUMBER);
+		const float MeshRadius = FMath::Max(MeshExtent.Y, KINDA_SMALL_NUMBER);
+		const float Thickness = (RayWidth * 0.5f) / MeshRadius;
+
 		Beam->SetWorldLocationAndRotation(Origin, Direction.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
-		Beam->SetWorldScale3D(FVector(Length / 100.f, RayWidth, RayWidth));
+		Beam->SetWorldScale3D(FVector(Length / MeshLength, Thickness, Thickness));
 		Beam->SetVisibility(true);
 	}
 

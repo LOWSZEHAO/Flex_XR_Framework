@@ -65,12 +65,12 @@ protected:
 	bool bShowRay = true;
 
 	/**
-	 * Beam thickness, as a multiplier on the shipped tube. Kept below the teleport arc's 1.5, since a
-	 * pointer should read as thinner than a locomotion arc — but not far below it: at 0.35 the beam was
-	 * a few millimetres across and effectively invisible at range.
+	 * Beam diameter in centimetres. A real measurement rather than a multiplier on whatever mesh is
+	 * assigned: the scale is derived from the mesh's own bounds, so 1.5 cm is 1.5 cm whether the tube
+	 * was authored at radius 1 or radius 10.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.05", ClampMax = "5.0", EditCondition = "bShowRay"))
-	float RayWidth = 1.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.1", ClampMax = "20.0", Units = "cm", EditCondition = "bShowRay"))
+	float RayWidth = 1.5f;
 
 	/** How long the beam takes to fade in or out, matching the highlight so nothing pops. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s", EditCondition = "bShowRay"))

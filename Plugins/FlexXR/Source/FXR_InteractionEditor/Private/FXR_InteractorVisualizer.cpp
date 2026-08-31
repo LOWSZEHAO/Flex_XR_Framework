@@ -7,7 +7,7 @@
 void FFXR_InteractorVisualizer::DrawVisualization(const UActorComponent* Component, const FSceneView* View, FPrimitiveDrawInterface* PDI)
 {
 	const UFXR_InteractorComponent* Interactor = Cast<UFXR_InteractorComponent>(Component);
-	if (!Interactor || !Interactor->IsDrawDebugEnabled())
+	if (!Interactor || !Interactor->IsEditorGizmoEnabled())
 	{
 		return;
 	}
