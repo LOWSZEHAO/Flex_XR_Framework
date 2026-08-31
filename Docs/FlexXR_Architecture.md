@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.12 (far-ray pointer — where it starts, when it shows, what it is made of)
+**Version:** 0.13 (the Outline style gets its second implementation)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -330,6 +330,23 @@ case, and it sets the pattern for optional presentation components generally.
 | **Sweep** | Gradient band travels across the object (direction configurable) | Selected/confirm, scan effects, "correct item" feedback |
 
 State→style mapping lives in project settings; FXR_Training only ever says "highlight the pin, Guidance state" — never hardcoding visuals.
+
+**Outline has two implementations, and `Highlight Tier` picks between them.** This is exactly what naming a
+style for what it *says* buys: the same silhouette, two entirely different costs, and no gameplay or training
+code that has to know which one ran.
+
+| Tier | How | Cost | Trade |
+|---|---|---|---|
+| **Post Process** | Custom depth + stencil, one full-screen pass | Constant, paid per pixel whether or not anything is highlighted | Exact edges, constant *pixel* width at any distance. Needs `r.CustomDepth=3` |
+| **Mesh Hull** | The mesh drawn again through its overlay slot, pushed along its vertex normals, front faces masked away by `TwoSidedSign` | One draw call per highlighted mesh | No post-process chain, no custom depth. Width is world-space, so a distant object's outline thins the way the object does |
+
+`Auto` *(default)* resolves on **feature level, not platform** — so the editor's mobile preview reports the
+Quest path and it can be looked at without a Quest. On the hull tier no blendable is ever installed and
+nothing is written to the stencil: a mobile project pays for neither, which is most of the point.
+
+The hull's fade is its **thickness**, because a masked material has no opacity to fade. At zero the shell
+sits exactly on the surface and the mesh's own front faces hide it, so it disappears cleanly instead of
+flashing a black silhouette the way a faded emissive would.
 
 ### FXR_Locomotion *(pawn component)*
 
@@ -787,6 +804,22 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.13 — Highlight tiers**
+- The Outline style gains its **Mesh Hull** implementation, which §4 has promised since v0.2. The mesh is
+  drawn again through its overlay slot, pushed along its vertex normals, with front faces masked away by
+  `TwoSidedSign` so only the shell survives — a draw call per highlighted mesh instead of a full-screen
+  pass. On a tiler post-processing forces a resolve and costs every pixel whether or not anything is
+  highlighted, which is the wrong shape entirely.
+- `Highlight Tier` (Auto / Post Process / Mesh Hull) resolves on **feature level rather than platform**, so
+  the editor's mobile preview reports the Quest path and the tier can be compared without a Quest. On the
+  hull tier no blendable is installed and nothing is written to the stencil.
+- The hull's fade is its thickness, since a masked material has no opacity to fade. At zero the shell sits on
+  the surface and the mesh's own front faces hide it — a faded emissive would have flashed a black
+  silhouette instead.
+- Overlay instances now remember their parent material. Hull, Inner Blink and Sweep share one overlay slot
+  per mesh, so a mesh remapping from Outline to Guidance would otherwise have kept pushing hull parameters at
+  a material that never heard of them.
 
 **v0.12 — Far-ray pointer**
 - New §4 *Far-ray pointer*: the beam belongs to the interaction driver, not to `FXR_RayTarget` and not to the
