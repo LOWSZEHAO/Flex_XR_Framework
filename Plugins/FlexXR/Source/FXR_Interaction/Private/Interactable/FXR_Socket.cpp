@@ -4,12 +4,16 @@
 #include "Interactable/FXR_Grab.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/Actor.h"
 #include "UObject/ConstructorHelpers.h"
 
 UFXR_Socket::UFXR_Socket()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// Able to tick, but not ticking: it wakes only while the seat animation or the ghost fade is
+	// running, so a level full of idle sockets costs nothing.
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	// Nothing here is a grab surface, so the base's activation radius plays no part; Socket Radius
 	// is this component's reach instead.
@@ -133,16 +137,24 @@ void UFXR_Socket::Seat(UFXR_Grab* Object)
 	{
 		Driven->SetSimulatePhysics(false);
 	}
-	// The socket's own transform is the seat pose, so a designer places the component where the
-	// object should end up rather than authoring an offset.
-	Driven->SetWorldTransform(GetComponentTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+	// Eased into place rather than teleported: the seat pose is where it lands, not how it gets there.
+	SeatStart = Driven->GetComponentTransform();
+	SeatTarget = GetSeatTransform(Driven);
+	SeatElapsed = 0.f;
+	bSeating = SeatDuration > KINDA_SMALL_NUMBER;
+	if (!bSeating)
+	{
+		Driven->SetWorldTransform(SeatTarget, false, nullptr, ETeleportType::TeleportPhysics);
+	}
 
 	// Hand the pre-seat physics state over, or a later grab reads the parked body and the object can
 	// never fall again once released.
 	Object->NotifyParkedPhysics(bSocketedPhysics);
 
 	Socketed = Object;
+	Seating = Object;
 	EndPreview();
+	RefreshTickState();
 
 	// Lock In takes the object out of reach entirely; Eject is the only way back.
 	if (bLockIn)
@@ -219,20 +231,110 @@ void UFXR_Socket::ShowGhost(const UFXR_Grab* Object)
 	}
 
 	Ghost->SetStaticMesh(Source->GetStaticMesh());
-	for (int32 Slot = 0; Slot < Ghost->GetNumMaterials(); ++Slot)
+
+	// One instance so the fade can be driven per frame without touching the shared material.
+	if (!GhostMID)
 	{
-		Ghost->SetMaterial(Slot, GhostMaterial);
+		GhostMID = UMaterialInstanceDynamic::Create(GhostMaterial, this);
 	}
-	// Drawn at the seat pose, scaled like the object, so the preview is literally where it lands.
-	Ghost->SetWorldTransform(GetComponentTransform());
-	Ghost->SetWorldScale3D(Source->GetComponentScale());
-	Ghost->SetVisibility(true);
+	if (GhostMID)
+	{
+		for (int32 Slot = 0; Slot < Ghost->GetNumMaterials(); ++Slot)
+		{
+			Ghost->SetMaterial(Slot, GhostMID);
+		}
+	}
+
+	// Drawn at the seat pose the object will actually take, scale included, so the preview is
+	// literally where it lands rather than an approximation of it.
+	Ghost->SetWorldTransform(GetSeatTransform(Source));
+
+	GhostTarget = 1.f;
+	ApplyGhostAlpha();
+	RefreshTickState();
 }
 
 void UFXR_Socket::HideGhost()
 {
-	if (Ghost)
+	// Faded out rather than switched off; the tick hides it once it reaches zero.
+	GhostTarget = 0.f;
+	RefreshTickState();
+}
+
+FTransform UFXR_Socket::GetSeatTransform(const UPrimitiveComponent* Driven) const
+{
+	FTransform Seat = GetComponentTransform();
+
+	// Position and facing come from the socket; scale stays the object's own. Taking the socket's
+	// scale would resize whatever it receives, so an object deliberately scaled in the level would
+	// snap back to its default size the moment it docked.
+	if (Driven)
 	{
-		Ghost->SetVisibility(false);
+		Seat.SetScale3D(Driven->GetComponentScale());
 	}
+	return Seat;
+}
+
+void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (bSeating)
+	{
+		UFXR_Grab* Object = Seating.Get();
+		UPrimitiveComponent* Driven = Object ? Object->GetDrivenComponent() : nullptr;
+		if (!Driven || Object->IsHeld())
+		{
+			// Grabbed straight back out of the seat animation — stop driving it.
+			bSeating = false;
+		}
+		else
+		{
+			SeatElapsed += DeltaTime;
+			const float Alpha = FMath::Clamp(SeatElapsed / FMath::Max(SeatDuration, KINDA_SMALL_NUMBER), 0.f, 1.f);
+
+			// Eased so it settles into the mount instead of arriving at full speed.
+			FTransform Current;
+			Current.Blend(SeatStart, SeatTarget, FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f));
+			Driven->SetWorldTransform(Current, false, nullptr, ETeleportType::TeleportPhysics);
+
+			if (Alpha >= 1.f)
+			{
+				bSeating = false;
+				Seating = nullptr;
+			}
+		}
+	}
+
+	// Ghost fades rather than blinking on: a preview that pops reads as a rendering fault.
+	if (!FMath::IsNearlyEqual(GhostAlpha, GhostTarget))
+	{
+		const float Step = DeltaTime / FMath::Max(GhostFadeTime, KINDA_SMALL_NUMBER);
+		GhostAlpha = FMath::FInterpConstantTo(GhostAlpha, GhostTarget, 1.f, Step);
+		ApplyGhostAlpha();
+	}
+
+	RefreshTickState();
+}
+
+void UFXR_Socket::RefreshTickState()
+{
+	// Ticks only while something is actually moving — a socket sitting idle costs nothing.
+	const bool bBusy = bSeating || !FMath::IsNearlyEqual(GhostAlpha, GhostTarget);
+	SetComponentTickEnabled(bBusy);
+}
+
+void UFXR_Socket::ApplyGhostAlpha()
+{
+	if (!Ghost)
+	{
+		return;
+	}
+
+	if (GhostMID)
+	{
+		GhostMID->SetScalarParameterValue(TEXT("GhostOpacity"), FMath::SmoothStep(0.f, 1.f, GhostAlpha));
+	}
+	// Hidden outright at zero so a fully faded ghost costs no draw call.
+	Ghost->SetVisibility(GhostAlpha > KINDA_SMALL_NUMBER);
 }

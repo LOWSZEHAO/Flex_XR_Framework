@@ -50,6 +50,14 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0"))
 	float HighlightIntensity = 1.f;
 
+	/**
+	 * How long a highlight takes to fade in or out. Nothing pops: an outline that appears at full
+	 * strength on one frame and vanishes the next reads as a flicker, and in a headset the hand is
+	 * never quite still on the edge of a hover.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s"))
+	float HighlightFadeTime = 0.15f;
+
 	/** Pulses per second for Inner Blink and Sweep, where not overridden. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0"))
 	float HighlightPulseRate = 1.5f;
