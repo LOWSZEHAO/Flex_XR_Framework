@@ -7,6 +7,7 @@
 #include "FXR_Grab.generated.h"
 
 class UPrimitiveComponent;
+class USceneComponent;
 class UFXR_GripPoint;
 class UFXR_HandPose;
 
@@ -76,6 +77,23 @@ public:
 	 */
 	void NotifyParkedPhysics(bool bWasSimulating);
 
+	/**
+	 * Park every simulating body this object's hold would carry, and hand them all back. Public
+	 * because a socket parks the same set for a different reason, and it must be the same set —
+	 * otherwise a loose part stays simulating and falls off whatever it was docked to.
+	 */
+	void ParkPhysics();
+	void RestorePhysics();
+
+	/** World transform of whatever this hold moves — the actor, or just the driven mesh. */
+	FTransform GetHeldTransform() const;
+
+	/** Move it. Used by the hold itself and by anything that places the object, such as a socket. */
+	void SetHeldTransform(const FTransform& NewTransform);
+
+	/** Whether this component travels with the hold, which is what a preview has to mirror. */
+	bool MovesComponent(const USceneComponent* Component) const;
+
 	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
 	float GetUseValue() const { return CurrentUseValue; }
@@ -96,6 +114,13 @@ protected:
 	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
 	float ThrowVelocityScale = 1.f;
+
+	/**
+	 * What a hold moves. Whole Actor by default, because picking something up takes all of it: a mesh
+	 * that happens to sit beside the grabbed one rather than beneath it is still part of the object.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab")
+	EFXR_GrabScope GrabScope = EFXR_GrabScope::WholeActor;
 
 	/**
 	 * Let this object be pulled to the hand from across the room. Off by default: being able to yank
@@ -167,6 +192,23 @@ private:
 	// Physics state is captured when the flight starts, so the later OnBegin does not read the
 	// already-disabled body and forget to restore simulation on release.
 	bool bPhysicsCaptured = false;
+
+	/** A body this hold parked, and where it sits relative to the held frame. */
+	struct FParkedBody
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Body;
+		FTransform RelativeToHeld = FTransform::Identity;
+	};
+
+	// Bodies this hold switched off, so release restores exactly what it parked and nothing else.
+	TArray<FParkedBody> ParkedBodies;
+
+	/**
+	 * Place every parked body against the held frame. A component that has simulated stops following
+	 * its parent by attachment even once it is kinematic again, so moving the actor alone leaves it
+	 * behind — it has to be driven explicitly, which the solver does for everything else anyway.
+	 */
+	void PlaceParkedBodies(const FTransform& HeldFrame);
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 

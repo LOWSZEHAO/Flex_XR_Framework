@@ -29,16 +29,16 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 			bRestorePhysics = Driven->IsSimulatingPhysics();
 			bPhysicsCaptured = true;
 		}
-		if (bRestorePhysics)
-		{
-			Driven->SetSimulatePhysics(false);
-		}
+		// Everything the hold moves is parked, not just the driven mesh: a sibling body left
+		// simulating would fight the hold and tear the object apart.
+		ParkPhysics();
+
 		UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
 		PrimaryGripPoint = GripPoint;
 		ActiveHandPose = GripPoint ? GripPoint->GetHandPose() : nullptr;
 
 		// HeldOffset relates the object to the grip: Driven == HeldOffset * Grip, followed each update.
-		SnapProceduralOffset = Driven->GetComponentTransform().GetRelativeTransform(Interactor->GetGripTransform());
+		SnapProceduralOffset = GetHeldTransform().GetRelativeTransform(Interactor->GetGripTransform());
 		const EFXR_GripSnapMode SnapMode = GripPoint ? GripPoint->GetSnapMode() : EFXR_GripSnapMode::None;
 
 		if (GripPoint && SnapMode != EFXR_GripSnapMode::None)
@@ -46,7 +46,7 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 			// Offset that aligns the grip point to the hand's grip pose. On a rail the alignment
 			// point slides to wherever the hand took hold, so a long object is not yanked to centre.
 			const FTransform GripPose = GripPoint->GetGripTransformFor(Interactor->GetGripTransform().GetLocation());
-			SnapTargetOffset = GripPose.GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
+			SnapTargetOffset = GripPose.GetRelativeTransform(GetHeldTransform()).Inverse();
 
 			if (SnapMode == EFXR_GripSnapMode::Smooth)
 			{
@@ -59,7 +59,7 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 			{
 				HeldOffset = SnapTargetOffset;
 				SnapAlpha = 1.f;
-				Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+				SetHeldTransform(HeldOffset * Interactor->GetGripTransform());
 			}
 		}
 		else
@@ -69,8 +69,8 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 			SnapAlpha = 1.f;
 		}
 
-		LastLocation = Driven->GetComponentLocation();
-		LastRotation = Driven->GetComponentQuat();
+		LastLocation = GetHeldTransform().GetLocation();
+		LastRotation = GetHeldTransform().GetRotation();
 		TrackedLinearVelocity = FVector::ZeroVector;
 		TrackedAngularVelocity = FVector::ZeroVector;
 	}
@@ -121,7 +121,7 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 			Aimed = Eased;
 		}
 
-		Driven->SetWorldTransform(Aimed, false, nullptr, ETeleportType::TeleportPhysics);
+		SetHeldTransform(Aimed);
 	}
 	else
 	{
@@ -138,7 +138,7 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 			bPrimaryAttached = true;
 		}
 
-		Driven->SetWorldTransform(HeldOffset * Interactor->GetGripTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+		SetHeldTransform(HeldOffset * Interactor->GetGripTransform());
 	}
 
 	// Use (trigger) edges + analog value while held — the "hold grip, pull trigger" case (guns, flashlights).
@@ -157,8 +157,8 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 	// Track hand velocity from the driven motion so release can hand it off (ADR-001 release step).
 	if (DeltaTime > SMALL_NUMBER)
 	{
-		const FVector NewLocation = Driven->GetComponentLocation();
-		const FQuat NewRotation = Driven->GetComponentQuat();
+		const FVector NewLocation = GetHeldTransform().GetLocation();
+		const FQuat NewRotation = GetHeldTransform().GetRotation();
 
 		// While the framework is settling the object — a grip snap, the two-hand join, or the return
 		// to a promoted hand — the object moves on its own. That is not a throw, and handing that
@@ -192,6 +192,10 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 
 void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 {
+	// Every body this hold parked comes back, so a multi-part object falls as a whole rather than
+	// leaving its loose pieces frozen in mid-air.
+	RestorePhysics();
+
 	if (UPrimitiveComponent* Driven = HeldComponent.Get())
 	{
 		if (bRestorePhysics)
@@ -271,7 +275,7 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 	TwoHandJoinOffset = FTransform::Identity;
 	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
 	{
-		TwoHandJoinOffset = Driven->GetComponentTransform().GetRelativeTransform(MakeTwoHandTransform());
+		TwoHandJoinOffset = GetHeldTransform().GetRelativeTransform(MakeTwoHandTransform());
 	}
 }
 
@@ -334,7 +338,7 @@ void UFXR_Grab::UpdateGripLocals()
 		return;
 	}
 
-	const FTransform DrivenTransform = Driven->GetComponentTransform();
+	const FTransform DrivenTransform = GetHeldTransform();
 
 	// A rail lets the attach point follow the hand along the shaft; a point grip resolves to the
 	// same spot every frame. Without a grip point at all, the hand simply holds where it grabbed.
@@ -450,7 +454,7 @@ void UFXR_Grab::ReanchorToPrimary()
 	const FTransform PrimaryGrip = PrimaryInteractor->GetGripTransform();
 
 	// Where the object sits right now relative to the surviving hand — the start of the return.
-	SnapProceduralOffset = Driven->GetComponentTransform().GetRelativeTransform(PrimaryGrip);
+	SnapProceduralOffset = GetHeldTransform().GetRelativeTransform(PrimaryGrip);
 
 	const UFXR_GripPoint* GripPoint = PrimaryGripPoint.Get();
 	const EFXR_GripSnapMode SnapMode = GripPoint ? GripPoint->GetSnapMode() : EFXR_GripSnapMode::None;
@@ -466,7 +470,7 @@ void UFXR_Grab::ReanchorToPrimary()
 	// Re-snap to the surviving hand. Without this the hand inherits whatever offset the other hand
 	// had carried the object to, leaving it hanging in space once that hand lets go.
 	const FTransform GripPose = GripPoint->GetGripTransformFor(PrimaryGrip.GetLocation());
-	SnapTargetOffset = GripPose.GetRelativeTransform(Driven->GetComponentTransform()).Inverse();
+	SnapTargetOffset = GripPose.GetRelativeTransform(GetHeldTransform()).Inverse();
 
 	if (SnapMode == EFXR_GripSnapMode::Smooth)
 	{
@@ -496,14 +500,11 @@ void UFXR_Grab::BeginDistanceGrab(IFXR_Interactor* Interactor)
 	// this on arrival rather than re-reading an already-kinematic body.
 	bRestorePhysics = Driven->IsSimulatingPhysics();
 	bPhysicsCaptured = true;
-	if (bRestorePhysics)
-	{
-		Driven->SetSimulatePhysics(false);
-	}
+	ParkPhysics();
 
 	bFlying = true;
 	FlightElapsed = 0.f;
-	FlightStart = Driven->GetComponentTransform();
+	FlightStart = GetHeldTransform();
 
 	// Held from the moment the hand commits, so nothing else can claim the object mid-flight and the
 	// driver keeps updating it. The Began event waits for arrival, when it is genuinely in hand.
@@ -523,7 +524,7 @@ FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) con
 	// handover to the ordinary hold is invisible rather than a snap at the end.
 	if (UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor))
 	{
-		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(Driven->GetComponentTransform());
+		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(GetHeldTransform());
 		return PointRelative.Inverse() * Grip;
 	}
 	return Grip;
@@ -546,7 +547,7 @@ void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
 	const float Eased = FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f);
 	FTransform Current;
 	Current.Blend(FlightStart, ComputeDistanceGrabTarget(Interactor), Eased);
-	Driven->SetWorldTransform(Current, false, nullptr, ETeleportType::TeleportPhysics);
+	SetHeldTransform(Current);
 
 	if (Alpha >= 1.f)
 	{
@@ -563,4 +564,116 @@ void UFXR_Grab::NotifyParkedPhysics(bool bWasSimulating)
 	// before, and OnBegin must trust that rather than reading the parked state.
 	bRestorePhysics = bWasSimulating;
 	bPhysicsCaptured = true;
+}
+
+FTransform UFXR_Grab::GetHeldTransform() const
+{
+	// Whole Actor is the frame everything else is expressed in: grip offsets, the two-hand solve, the
+	// distance-grab flight and a socket's seat pose all read and write through here, so they stay
+	// consistent whichever scope is set.
+	if (GrabScope == EFXR_GrabScope::WholeActor)
+	{
+		if (const AActor* Owner = GetOwner())
+		{
+			return Owner->GetActorTransform();
+		}
+	}
+
+	const UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
+	return Driven ? Driven->GetComponentTransform() : GetComponentTransform();
+}
+
+void UFXR_Grab::SetHeldTransform(const FTransform& NewTransform)
+{
+	if (GrabScope == EFXR_GrabScope::WholeActor)
+	{
+		if (AActor* Owner = GetOwner())
+		{
+			Owner->SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+			// A component that has simulated stops following its parent by attachment even once it is
+			// kinematic again, so moving the actor leaves it behind. Parked bodies are driven from the
+			// same frame instead — which is what the solver does for everything else anyway.
+			PlaceParkedBodies(NewTransform);
+			return;
+		}
+	}
+
+	if (UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent())
+	{
+		Driven->SetWorldTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
+{
+	if (!Component)
+	{
+		return false;
+	}
+
+	if (GrabScope == EFXR_GrabScope::WholeActor)
+	{
+		return Component->GetOwner() == GetOwner();
+	}
+
+	// Driven Mesh takes whatever hangs beneath it too — a handle parented to the door travels with
+	// the door, which is the whole point of parenting it there.
+	const USceneComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
+	return Driven && (Component == Driven || Component->IsAttachedTo(Driven));
+}
+
+void UFXR_Grab::ParkPhysics()
+{
+	ParkedBodies.Reset();
+
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	const FTransform HeldFrame = GetHeldTransform();
+
+	TArray<UPrimitiveComponent*> Primitives;
+	Owner->GetComponents<UPrimitiveComponent>(Primitives);
+	for (UPrimitiveComponent* Primitive : Primitives)
+	{
+		// Only what actually simulates, and only what this hold moves: parking a body the hold does
+		// not carry would freeze part of the level for no reason.
+		if (Primitive && Primitive->IsSimulatingPhysics() && MovesComponent(Primitive))
+		{
+			// Offset captured before parking, so the body can be driven against the held frame from
+			// here on rather than relying on attachment, which it no longer follows.
+			ParkedBodies.Add({ Primitive, Primitive->GetComponentTransform().GetRelativeTransform(HeldFrame) });
+			Primitive->SetSimulatePhysics(false);
+		}
+	}
+}
+
+void UFXR_Grab::RestorePhysics()
+{
+	for (const FParkedBody& Parked : ParkedBodies)
+	{
+		if (UPrimitiveComponent* Primitive = Parked.Body.Get())
+		{
+			// Re-placed after simulation resumes, so the body carries on from where the hold left it
+			// rather than snapping back to wherever it was picked up.
+			const FTransform Placed = Primitive->GetComponentTransform();
+			Primitive->SetSimulatePhysics(true);
+			Primitive->SetWorldTransform(Placed, false, nullptr, ETeleportType::TeleportPhysics);
+		}
+	}
+	ParkedBodies.Reset();
+}
+
+void UFXR_Grab::PlaceParkedBodies(const FTransform& HeldFrame)
+{
+	for (const FParkedBody& Parked : ParkedBodies)
+	{
+		if (UPrimitiveComponent* Body = Parked.Body.Get())
+		{
+			Body->SetWorldTransform(Parked.RelativeToHeld * HeldFrame, false, nullptr, ETeleportType::TeleportPhysics);
+		}
+	}
 }

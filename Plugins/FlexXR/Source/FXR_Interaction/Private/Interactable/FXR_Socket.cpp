@@ -140,18 +140,18 @@ void UFXR_Socket::Seat(UFXR_Grab* Object)
 	}
 
 	bSocketedPhysics = Driven->IsSimulatingPhysics();
-	if (bSocketedPhysics)
-	{
-		Driven->SetSimulatePhysics(false);
-	}
+
+	// The same set the hold would park, not just the driven mesh: park less and a loose part keeps
+	// simulating and falls off whatever it was docked to.
+	Object->ParkPhysics();
 	// Eased into place rather than teleported: the seat pose is where it lands, not how it gets there.
-	SeatStart = Driven->GetComponentTransform();
-	SeatTarget = GetSeatTransform(Driven);
+	SeatStart = Object->GetHeldTransform();
+	SeatTarget = GetSeatTransform(Object);
 	SeatElapsed = 0.f;
 	bSeating = SeatDuration > KINDA_SMALL_NUMBER;
 	if (!bSeating)
 	{
-		Driven->SetWorldTransform(SeatTarget, false, nullptr, ETeleportType::TeleportPhysics);
+		Object->SetHeldTransform(SeatTarget);
 	}
 
 	// Hand the pre-seat physics state over, or a later grab reads the parked body and the object can
@@ -210,21 +210,15 @@ void UFXR_Socket::Eject()
 		Object->SetInteractionEnabled(true);
 	}
 
-	// Nobody is holding it, so this socket puts physics back itself.
-	if (UPrimitiveComponent* Driven = Object->GetDrivenComponent())
-	{
-		if (bSocketedPhysics)
-		{
-			Driven->SetSimulatePhysics(true);
-		}
-	}
+	// Nobody is holding it, so this socket hands back exactly what it parked.
+	Object->RestorePhysics();
 
 	BroadcastInteractionEvent(EFXR_InteractionPhase::Ended, nullptr);
 	OnRemoved.Broadcast(Object);
 }
 
 
-FTransform UFXR_Socket::GetSeatTransform(const UPrimitiveComponent* Driven) const
+FTransform UFXR_Socket::GetSeatTransform(const UFXR_Grab* Object) const
 {
 	FTransform Seat = GetComponentTransform();
 
@@ -232,7 +226,7 @@ FTransform UFXR_Socket::GetSeatTransform(const UPrimitiveComponent* Driven) cons
 	// scale would resize whatever it receives, so an object deliberately scaled in the level would
 	// snap back to its default size the moment it docked. With no object — an Always-mode ghost —
 	// unit scale, for the same reason: a scaled socket must not resize what it advertises.
-	Seat.SetScale3D(Driven ? Driven->GetComponentScale() : FVector::OneVector);
+	Seat.SetScale3D(Object ? Object->GetHeldTransform().GetScale3D() : FVector::OneVector);
 	return Seat;
 }
 
@@ -257,7 +251,7 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 			// Eased so it settles into the mount instead of arriving at full speed.
 			FTransform Current;
 			Current.Blend(SeatStart, SeatTarget, FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f));
-			Driven->SetWorldTransform(Current, false, nullptr, ETeleportType::TeleportPhysics);
+			Object->SetHeldTransform(Current);
 
 			if (Alpha >= 1.f)
 			{
@@ -385,24 +379,27 @@ bool UFXR_Socket::ShouldGhost(const UStaticMeshComponent* Mesh) const
 	return true;
 }
 
-void UFXR_Socket::GatherFromActor(const AActor* Actor, TArray<FGhostPart>& OutParts) const
+void UFXR_Socket::GatherFromActor(const UFXR_Grab* Object, TArray<FGhostPart>& OutParts) const
 {
+	const AActor* Actor = Object ? Object->GetOwner() : nullptr;
 	if (!Actor)
 	{
 		return;
 	}
 
-	const FTransform ActorToWorld = Actor->GetActorTransform();
+	// Relative to what the hold actually moves, so the preview sits exactly where the object lands.
+	const FTransform HeldFrame = Object->GetHeldTransform();
 
 	TArray<UStaticMeshComponent*> Meshes;
 	Actor->GetComponents<UStaticMeshComponent>(Meshes);
 	for (const UStaticMeshComponent* Mesh : Meshes)
 	{
-		if (!ShouldGhost(Mesh))
+		// Only what travels with the hold: a preview showing parts that will stay behind is a lie.
+		if (!ShouldGhost(Mesh) || !Object->MovesComponent(Mesh))
 		{
 			continue;
 		}
-		OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetComponentTransform().GetRelativeTransform(ActorToWorld) });
+		OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetComponentTransform().GetRelativeTransform(HeldFrame) });
 	}
 }
 
@@ -487,7 +484,7 @@ void UFXR_Socket::GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPa
 	// placed — including anything its construction script built, which a class read cannot see.
 	if (Approaching && Approaching->GetOwner())
 	{
-		GatherFromActor(Approaching->GetOwner(), OutParts);
+		GatherFromActor(Approaching, OutParts);
 		if (OutParts.Num() > 0)
 		{
 			return;
@@ -556,7 +553,7 @@ void UFXR_Socket::RefreshGhost()
 
 	// The seat pose the object will actually take, with each piece placed relative to it exactly as
 	// it sits on the real thing.
-	const FTransform Seat = GetSeatTransform(Approaching ? Approaching->GetDrivenComponent() : nullptr);
+	const FTransform Seat = GetSeatTransform(Approaching);
 
 	for (int32 Index = 0; Index < Parts.Num(); ++Index)
 	{

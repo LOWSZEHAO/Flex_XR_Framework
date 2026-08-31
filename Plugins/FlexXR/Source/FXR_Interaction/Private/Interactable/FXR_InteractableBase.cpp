@@ -221,11 +221,41 @@ UPrimitiveComponent* UFXR_InteractableBase::ResolveDrivenComponent() const
 	{
 		return AttachPrimitive;
 	}
-	if (const AActor* OwnerActor = GetOwner())
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
 	{
-		return Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
+		return nullptr;
 	}
-	return nullptr;
+
+	if (UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent()))
+	{
+		return RootPrimitive;
+	}
+
+	// Neither the attach parent nor the root is a primitive — the ordinary case of a component
+	// dropped straight under a bare DefaultSceneRoot. Fall back to the actor's own body rather than
+	// resolving to nothing, which would silently make the interactable do nothing at all. A
+	// simulating primitive wins, since that is the object's physical body and what a throw acts on.
+	TArray<UPrimitiveComponent*> Primitives;
+	OwnerActor->GetComponents<UPrimitiveComponent>(Primitives);
+
+	UPrimitiveComponent* Fallback = nullptr;
+	for (UPrimitiveComponent* Primitive : Primitives)
+	{
+		if (!Primitive)
+		{
+			continue;
+		}
+		if (Primitive->IsSimulatingPhysics())
+		{
+			return Primitive;
+		}
+		if (!Fallback)
+		{
+			Fallback = Primitive;
+		}
+	}
+	return Fallback;
 }
 
 void UFXR_InteractableBase::BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor)

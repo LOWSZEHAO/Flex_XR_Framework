@@ -174,7 +174,7 @@ protected:
 
 private:
 	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
-	FTransform GetSeatTransform(const UPrimitiveComponent* Driven) const;
+	FTransform GetSeatTransform(const UFXR_Grab* Object) const;
 
 	/** Tick only while something is moving — an idle socket costs nothing. */
 	void RefreshTickState();
@@ -194,7 +194,7 @@ private:
 	void GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPart>& OutParts) const;
 
 	/** Pieces of a live actor — exact, including anything a construction script built. */
-	void GatherFromActor(const AActor* Actor, TArray<FGhostPart>& OutParts) const;
+	void GatherFromActor(const UFXR_Grab* Object, TArray<FGhostPart>& OutParts) const;
 
 	/** Pieces of a class, read from its component templates rather than by spawning one. */
 	void GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) const;
