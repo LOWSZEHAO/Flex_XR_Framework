@@ -58,6 +58,27 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s"))
 	float HighlightFadeTime = 0.15f;
 
+	/**
+	 * Interactables begin to glow as a hand approaches and reach full strength at grab range.
+	 *
+	 * The alternative — every interactable lit all the time — reads as a tutorial level rather than a
+	 * product, and in a training sim it quietly removes the competency being tested: a trainee who
+	 * never has to *find* the extinguisher has not been assessed on finding it.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity")
+	bool bProximityHighlight = true;
+
+	/** How far beyond grab reach the approach ramp begins. */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bProximityHighlight"))
+	float ProximityRange = 35.f;
+
+	/**
+	 * Strongest an approach glow gets before the hand is actually in reach. Held below 1 on purpose:
+	 * the step up to full strength is what tells the player they can now take it.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bProximityHighlight"))
+	float ProximityMaxAlpha = 0.45f;
+
 	/** Pulses per second for Inner Blink and Sweep, where not overridden. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0"))
 	float HighlightPulseRate = 1.5f;

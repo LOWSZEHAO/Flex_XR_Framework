@@ -11,6 +11,7 @@
 class IFXR_Interactor;
 class UFXR_Grab;
 class UFXR_InteractableBase;
+class UFXR_InteractionSubsystem;
 class UFXR_RayTarget;
 class UFXR_Socket;
 
@@ -65,6 +66,14 @@ private:
 	 * the hands, so the release path can consult last frame's preview and seat instead of dropping.
 	 */
 	void DriveSockets(EFXR_HandSide Side, TWeakObjectPtr<UFXR_Socket>& PreviewSocket);
+
+	/**
+	 * Ramp the approach glow for this hand: nothing while holding or already in reach, otherwise the
+	 * same detection query widened, faded by distance. Reuses the query rather than inventing a second
+	 * one, so what glows on approach is exactly what the hand would take if it kept going.
+	 */
+	void DriveProximity(EFXR_HandSide Side, bool bHolding, UFXR_InteractableBase* Near,
+		IFXR_Interactor* Interactor, UFXR_InteractionSubsystem* Subsystem);
 
 	/**
 	 * Publish this hand's hover/selected into the focus subsystem, for highlight and UI to read,
