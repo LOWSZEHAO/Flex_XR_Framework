@@ -410,35 +410,30 @@ def build_ghost():
 # M_FXR_Ray — the far-interaction pointer beam, drawn on the arc-segment tube.
 # ---------------------------------------------------------------------------------------------
 def build_ray():
-    # Additive rather than translucent. Standard translucency rendered nothing at all here even with a
-    # provably clean graph, while the same mesh with an opaque material filled the screen — a beam
-    # starts at the hand, so the camera sits inside its geometry, which is exactly where translucent
-    # sorting is least reliable. Additive is also simply what a glowing beam wants: opacity 0 means
-    # invisible, so the fade still works.
+    # Opaque, not translucent and not additive. Both of those compiled cleanly, reported no errors and
+    # rendered nothing at all on this mesh, while a plain unlit opaque material on the very same
+    # component drew immediately — and pushing emissive to 60 did not bring the additive version back,
+    # so it was never exposure. A pointer reads as a solid emissive tube in every shipping VR title
+    # anyway, so this drops the fragile path rather than keeping a fade the renderer will not draw.
+    # The fade lives in the geometry instead: the driver thins the beam to nothing.
     mat, full = new_material('M_FXR_Ray',
-                             blend=unreal.BlendMode.BLEND_ADDITIVE,
+                             blend=unreal.BlendMode.BLEND_OPAQUE,
                              shading=unreal.MaterialShadingModel.MSM_UNLIT,
                              two_sided=True)
 
     colour = vector(mat, 'RayColor', 0.45, 0.8, 1.0, -900, -300)
     rgb = mask(mat, colour, '', -650, -300, True, 'ray colour mask')
-    intensity = scalar(mat, 'RayIntensity', 2.0, -900, -140)
+    # 1.0, not 2. Unlit emissive above 1 clips after tonemapping, and the beam came out white
+    # instead of cyan — the same trap the highlight overlay hit. Intensity here is for pushing a
+    # beam through a bright scene deliberately, not a default.
+    intensity = scalar(mat, 'RayIntensity', 1.0, -900, -140)
 
     emissive = node(mat, unreal.MaterialExpressionMultiply, -420, -260)
     link(rgb, '', emissive, 'A', 'rgb->emissive')
     link(intensity, '', emissive, 'B', 'intensity->emissive')
 
-    # Opacity is the driver-fed fade and nothing else. A fresnel version of this compiled cleanly and
-    # rendered completely invisible, while the same mesh with a plain unlit material filled the
-    # screen — so the beam is now the simplest graph that can express it. A pointer wants to read as
-    # a solid emissive tube anyway; the silhouette shaping that suits the socket ghost buys nothing
-    # on something this thin, and it was the one node here that could silently evaluate to zero.
-    opacity = scalar(mat, 'RayOpacity', 0.9, -900, 200)
-
     if not mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR):
         fails.append('ray->EmissiveColor')
-    if not mel.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY):
-        fails.append('ray->Opacity')
     finish(mat, full)
 
 

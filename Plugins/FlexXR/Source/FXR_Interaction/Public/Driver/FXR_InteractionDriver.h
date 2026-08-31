@@ -12,7 +12,6 @@ class IFXR_Interactor;
 class UFXR_Grab;
 class UFXR_InteractableBase;
 class UFXR_InteractionSubsystem;
-class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -159,7 +158,6 @@ private:
 	{
 		TWeakObjectPtr<UStaticMeshComponent> Beam;
 		TWeakObjectPtr<UStaticMeshComponent> Cursor;
-		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
 		float Alpha = 0.f;
 	};
 	FRayVisual RayVisuals[2];

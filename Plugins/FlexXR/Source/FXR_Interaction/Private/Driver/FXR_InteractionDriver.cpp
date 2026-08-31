@@ -14,7 +14,6 @@
 #include "Rig/FXR_Pawn.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -522,11 +521,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		Beam->RegisterComponent();
 		Visual.Beam = Beam;
 
-		Visual.Material = UMaterialInstanceDynamic::Create(Material, this);
-		if (Visual.Material.IsValid())
-		{
-			Beam->SetMaterial(0, Visual.Material.Get());
-		}
+		Beam->SetMaterial(0, Material);
 	}
 
 	if (UStaticMesh* CursorMesh = RayCursorMesh.LoadSynchronous())
@@ -541,10 +536,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 			Cursor->SetCastShadow(false);
 			Cursor->SetStaticMesh(CursorMesh);
 			Cursor->RegisterComponent();
-			if (Visual.Material.IsValid())
-			{
-				Cursor->SetMaterial(0, Visual.Material.Get());
-			}
+			Cursor->SetMaterial(0, Material);
 			Visual.Cursor = Cursor;
 		}
 	}
@@ -562,19 +554,24 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 
 	if (UStaticMeshComponent* Beam = Visual.Beam.Get())
 	{
-		// Both scales come from the mesh's own bounds rather than assuming how it was authored. The
-		// tube runs along +X, so X stretches it to reach and Y/Z set a real centimetre thickness —
-		// guessing a multiplier is how the beam ended up a few millimetres wide and invisible.
+		// Both scales come from the mesh own bounds rather than assuming how it was authored. The
+		// tube runs along +X, so X stretches it to reach and Y/Z set a real centimetre thickness, which
+		// is what lets Ray Width be honestly documented as centimetres.
 		const FVector MeshExtent = BeamMesh->GetBounds().BoxExtent;
 		const float MeshLength = FMath::Max(MeshExtent.X * 2.f, KINDA_SMALL_NUMBER);
 		const float MeshRadius = FMath::Max(MeshExtent.Y, KINDA_SMALL_NUMBER);
-		const float Thickness = (RayWidth * 0.5f) / MeshRadius;
+		// The fade is geometric: an opaque beam cannot fade its opacity, so it thins to nothing
+		// instead. On a tube this narrow that reads as the beam retracting rather than dissolving,
+		// which is the better motion anyway — nothing pops on or off.
+		const float Eased = FMath::SmoothStep(0.f, 1.f, Visual.Alpha);
+		const float Thickness = (RayWidth * 0.5f * Eased) / MeshRadius;
 
 		Beam->SetWorldLocationAndRotation(Origin, Direction.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
 		Beam->SetWorldScale3D(FVector(Length / MeshLength, Thickness, Thickness));
 		Beam->SetVisibility(true);
 	}
 
+	const float CursorEased = FMath::SmoothStep(0.f, 1.f, Visual.Alpha);
 	if (UStaticMeshComponent* Cursor = Visual.Cursor.Get())
 	{
 		// Only on something worth pointing at: the beam says where you are aiming, the cursor says
@@ -583,13 +580,10 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		Cursor->SetVisibility(bOnTarget);
 		if (bOnTarget)
 		{
+			Cursor->SetWorldScale3D(FVector(CursorEased));
 			Cursor->SetWorldLocation(Origin + Direction * Length, false, nullptr, ETeleportType::TeleportPhysics);
 			Cursor->SetWorldRotation((-Direction).Rotation());
 		}
 	}
 
-	if (Visual.Material.IsValid())
-	{
-		Visual.Material->SetScalarParameterValue(TEXT("RayOpacity"), FMath::SmoothStep(0.f, 1.f, Visual.Alpha));
-	}
 }
