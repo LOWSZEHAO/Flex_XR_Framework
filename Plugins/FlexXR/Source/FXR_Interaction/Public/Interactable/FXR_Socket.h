@@ -126,16 +126,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview")
 	bool bShowGhost = true;
 
-	/** Material the ghost draws with. Defaults to the one shipped with the plugin. */
+	/**
+	 * Material the ghost draws with. Defaults to the one shipped with the plugin.
+	 *
+	 * Soft rather than hard, matching the outline and overlay materials in project settings. A hard
+	 * default roots the asset through this CDO, which makes it impossible to rebuild from a script and
+	 * takes the editor down with an IsRooted assertion if anything tries. It also stops every project
+	 * loading a preview material it may never show.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "bShowGhost"))
-	TObjectPtr<UMaterialInterface> GhostMaterial;
+	TSoftObjectPtr<UMaterialInterface> GhostMaterial;
 
 	/** How long the ghost takes to fade in or out. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s", EditCondition = "bShowGhost"))
 	float GhostFadeTime = 0.15f;
 
 private:
-	/** Build (or update) the translucent stand-in shown at the seat pose. */
 	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
 	FTransform GetSeatTransform(const UPrimitiveComponent* Driven) const;
 
