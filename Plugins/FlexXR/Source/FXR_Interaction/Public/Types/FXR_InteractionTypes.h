@@ -132,3 +132,21 @@ enum class EFXR_SocketGhostMode : uint8
 	 */
 	Always     UMETA(DisplayName = "Always")
 };
+
+/** What a grab actually moves. */
+UENUM(BlueprintType)
+enum class EFXR_GrabScope : uint8
+{
+	/**
+	 * The whole actor. Picking something up takes all of it — an extinguisher comes with its pin,
+	 * handle and hose whether or not they happen to be attached beneath the grabbed mesh.
+	 */
+	WholeActor  UMETA(DisplayName = "Whole Actor"),
+
+	/**
+	 * Only the driven mesh and whatever is attached beneath it. For a grabbable part of a larger
+	 * actor — the detachable door on its frame — where moving the whole actor would take the frame
+	 * along with it.
+	 */
+	DrivenMesh  UMETA(DisplayName = "Driven Mesh")
+};
