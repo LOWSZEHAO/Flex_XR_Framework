@@ -6,8 +6,10 @@
 #include "FXR_LatchVisualizer.h"
 #include "FXR_PressVisualizer.h"
 #include "FXR_InteractorVisualizer.h"
+#include "FXR_RayOriginVisualizer.h"
 #include "FXR_PressDetails.h"
 #include "Interactor/FXR_InteractorComponent.h"
+#include "Interactor/FXR_RayOrigin.h"
 #include "PropertyEditorModule.h"
 #include "Modules/ModuleManager.h"
 #include "Interactable/FXR_GripPoint.h"
@@ -65,6 +67,13 @@ void FFXR_InteractionEditorModule::StartupModule()
 		GUnrealEd->RegisterComponentVisualizer(UFXR_InteractorComponent::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();
 	}
+	{
+		// The per-hand ray origin draws its own beam, so it stays visible while it is the thing being
+		// dragged — selecting a component hides every other component's visualizer.
+		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_RayOriginVisualizer>();
+		GUnrealEd->RegisterComponentVisualizer(UFXR_RayOrigin::StaticClass()->GetFName(), Visualizer);
+		Visualizer->OnRegister();
+	}
 }
 
 void FFXR_InteractionEditorModule::ShutdownModule()
@@ -84,6 +93,7 @@ void FFXR_InteractionEditorModule::ShutdownModule()
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Latch::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_Press::StaticClass()->GetFName());
 	GUnrealEd->UnregisterComponentVisualizer(UFXR_InteractorComponent::StaticClass()->GetFName());
+	GUnrealEd->UnregisterComponentVisualizer(UFXR_RayOrigin::StaticClass()->GetFName());
 }
 
 #undef LOCTEXT_NAMESPACE
