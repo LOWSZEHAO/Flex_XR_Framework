@@ -9,13 +9,20 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
 
 UFXR_Socket::UFXR_Socket()
 {
-	// Able to tick, but not ticking: it wakes only while the seat animation or the ghost fade is
-	// running, so a level full of idle sockets costs nothing.
+	// Starts ticking and then switches itself off on the first tick if there is nothing to do, rather
+	// than starting disabled. Registering with the tick disabled leaves it that way — enabling it
+	// afterwards does not stick — which is what kept the editor debug from ever drawing.
 	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
+
+	// A socket is placed by eye, so its reach and facing have to be visible while authoring rather
+	// than only once the game is running.
+	bTickInEditor = true;
 
 	// Nothing here is a grab surface, so the base's activation radius plays no part; Socket Radius
 	// is this component's reach instead.
@@ -223,11 +230,9 @@ FTransform UFXR_Socket::GetSeatTransform(const UPrimitiveComponent* Driven) cons
 
 	// Position and facing come from the socket; scale stays the object's own. Taking the socket's
 	// scale would resize whatever it receives, so an object deliberately scaled in the level would
-	// snap back to its default size the moment it docked.
-	if (Driven)
-	{
-		Seat.SetScale3D(Driven->GetComponentScale());
-	}
+	// snap back to its default size the moment it docked. With no object — an Always-mode ghost —
+	// unit scale, for the same reason: a scaled socket must not resize what it advertises.
+	Seat.SetScale3D(Driven ? Driven->GetComponentScale() : FVector::OneVector);
 	return Seat;
 }
 
@@ -284,17 +289,22 @@ void UFXR_Socket::RefreshTickState()
 
 void UFXR_Socket::ApplyGhostAlpha()
 {
-	if (!Ghost)
-	{
-		return;
-	}
-
+	// One instance drives every piece, so the whole preview fades as a single object rather than
+	// each mesh arriving on its own.
 	if (GhostMID)
 	{
 		GhostMID->SetScalarParameterValue(TEXT("GhostOpacity"), FMath::SmoothStep(0.f, 1.f, GhostAlpha));
 	}
-	// Hidden outright at zero so a fully faded ghost costs no draw call.
-	Ghost->SetVisibility(GhostAlpha > KINDA_SMALL_NUMBER);
+
+	// Hidden outright at zero so a fully faded ghost costs no draw calls.
+	const bool bGhostVisible = GhostAlpha > KINDA_SMALL_NUMBER;
+	for (UStaticMeshComponent* Part : GhostParts)
+	{
+		if (Part)
+		{
+			Part->SetVisibility(bGhostVisible);
+		}
+	}
 }
 
 void UFXR_Socket::BeginPlay()
@@ -350,6 +360,164 @@ void UFXR_Socket::DrawInteractionDebug() const
 	}
 }
 
+
+bool UFXR_Socket::ShouldGhost(const UStaticMeshComponent* Mesh) const
+{
+	if (!Mesh || !Mesh->GetStaticMesh())
+	{
+		return false;
+	}
+
+	// Already hidden on the real object, so it has no business appearing on the preview. This covers
+	// most of what would otherwise need tagging: collision proxies, spawners, editor-only markers.
+	if (!Mesh->IsVisible())
+	{
+		return false;
+	}
+
+	for (const FName& Tag : GhostIgnoreTags)
+	{
+		if (Mesh->ComponentHasTag(Tag))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void UFXR_Socket::GatherFromActor(const AActor* Actor, TArray<FGhostPart>& OutParts) const
+{
+	if (!Actor)
+	{
+		return;
+	}
+
+	const FTransform ActorToWorld = Actor->GetActorTransform();
+
+	TArray<UStaticMeshComponent*> Meshes;
+	Actor->GetComponents<UStaticMeshComponent>(Meshes);
+	for (const UStaticMeshComponent* Mesh : Meshes)
+	{
+		if (!ShouldGhost(Mesh))
+		{
+			continue;
+		}
+		OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetComponentTransform().GetRelativeTransform(ActorToWorld) });
+	}
+}
+
+void UFXR_Socket::GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) const
+{
+	const AActor* CDO = Class ? Cast<AActor>(Class->GetDefaultObject()) : nullptr;
+	if (!CDO)
+	{
+		return;
+	}
+
+	// Read from the class rather than spawning one: a real extinguisher would run its construction
+	// script, register interactables and start simulating, all to draw a translucent shape.
+	const FTransform RootToActor = CDO->GetRootComponent()
+		? CDO->GetRootComponent()->GetRelativeTransform()
+		: FTransform::Identity;
+
+	TArray<UStaticMeshComponent*> Native;
+	CDO->GetComponents<UStaticMeshComponent>(Native);
+	for (const UStaticMeshComponent* Mesh : Native)
+	{
+		if (ShouldGhost(Mesh))
+		{
+			OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetRelativeTransform() });
+		}
+	}
+
+	// Blueprint-added components never exist on the CDO — they live in the construction script, and
+	// for most props that is where every mesh actually is. Walked from the roots so each one's
+	// transform accumulates down its attachment chain.
+	for (UClass* Current = Class; Current; Current = Current->GetSuperClass())
+	{
+		const UBlueprintGeneratedClass* Generated = Cast<UBlueprintGeneratedClass>(Current);
+		const USimpleConstructionScript* Script = Generated ? Generated->SimpleConstructionScript : nullptr;
+		if (!Script)
+		{
+			continue;
+		}
+
+		TArray<TPair<const USCS_Node*, FTransform>> Pending;
+		for (const USCS_Node* Root : Script->GetRootNodes())
+		{
+			Pending.Add({ Root, FTransform::Identity });
+		}
+
+		while (Pending.Num() > 0)
+		{
+			const TPair<const USCS_Node*, FTransform> Entry = Pending.Pop();
+			const USCS_Node* Node = Entry.Key;
+			if (!Node)
+			{
+				continue;
+			}
+
+			FTransform NodeToActor = Entry.Value;
+			if (const USceneComponent* Scene = Cast<USceneComponent>(Node->ComponentTemplate))
+			{
+				NodeToActor = Scene->GetRelativeTransform() * Entry.Value;
+			}
+
+			if (const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Node->ComponentTemplate))
+			{
+				if (ShouldGhost(Mesh))
+				{
+					OutParts.Add({ Mesh->GetStaticMesh(), NodeToActor });
+				}
+			}
+
+			for (const USCS_Node* Child : Node->GetChildNodes())
+			{
+				Pending.Add({ Child, NodeToActor });
+			}
+		}
+	}
+}
+
+void UFXR_Socket::GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPart>& OutParts) const
+{
+	OutParts.Reset();
+
+	// The carried object itself when there is one, so the preview is literally the thing being
+	// placed — including anything its construction script built, which a class read cannot see.
+	if (Approaching && Approaching->GetOwner())
+	{
+		GatherFromActor(Approaching->GetOwner(), OutParts);
+		if (OutParts.Num() > 0)
+		{
+			return;
+		}
+	}
+
+	GatherFromClass(GhostActor.LoadSynchronous(), OutParts);
+}
+
+void UFXR_Socket::ResizeGhostPool(int32 Count)
+{
+	while (GhostParts.Num() > Count)
+	{
+		if (UStaticMeshComponent* Spare = GhostParts.Pop())
+		{
+			Spare->DestroyComponent();
+		}
+	}
+
+	while (GhostParts.Num() < Count)
+	{
+		UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
+		Part->SetupAttachment(this);
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Part->SetCastShadow(false);
+		Part->RegisterComponent();
+		GhostParts.Add(Part);
+	}
+}
+
 void UFXR_Socket::RefreshGhost()
 {
 	// Editor worlds get the debug shapes but no ghost: spawning transient components outside play is
@@ -363,64 +531,46 @@ void UFXR_Socket::RefreshGhost()
 			? (IsInteractionEnabled() && !Socketed.IsValid())
 			: Approaching != nullptr);
 
-	if (!bWanted)
+	TArray<FGhostPart> Parts;
+	UMaterialInterface* GhostSource = bWanted ? GhostMaterial.LoadSynchronous() : nullptr;
+	if (bWanted && GhostSource)
 	{
+		GatherGhostParts(Approaching, Parts);
+	}
+
+	if (Parts.Num() == 0)
+	{
+		// Faded out rather than torn down, so the components survive to fade back in.
 		GhostTarget = 0.f;
 		RefreshTickState();
 		return;
 	}
 
-	// The carried object's own shape when there is one — the preview is then literally the thing
-	// being placed. Always mode has nothing to borrow, so it falls back to the authored mesh.
-	const UStaticMeshComponent* Source = Cast<UStaticMeshComponent>(
-		Approaching ? Approaching->GetDrivenComponent() : nullptr);
-	UStaticMesh* Mesh = Source ? Source->GetStaticMesh() : nullptr;
-	if (!Mesh)
-	{
-		Mesh = GhostMesh.LoadSynchronous();
-	}
-	if (!Mesh)
-	{
-		GhostTarget = 0.f;
-		RefreshTickState();
-		return;
-	}
+	ResizeGhostPool(Parts.Num());
 
-	UMaterialInterface* GhostSource = GhostMaterial.LoadSynchronous();
-	if (!GhostSource)
-	{
-		GhostTarget = 0.f;
-		RefreshTickState();
-		return; // cleared on purpose disables the preview
-	}
-
-	if (!Ghost)
-	{
-		Ghost = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
-		Ghost->SetupAttachment(this);
-		Ghost->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Ghost->SetCastShadow(false);
-		Ghost->RegisterComponent();
-	}
-
-	Ghost->SetStaticMesh(Mesh);
-
-	// One instance so the fade can be driven per frame without touching the shared material.
+	// One instance shared by every piece: they fade together, as one object would.
 	if (!GhostMID)
 	{
 		GhostMID = UMaterialInstanceDynamic::Create(GhostSource, this);
 	}
-	if (GhostMID)
+
+	// The seat pose the object will actually take, with each piece placed relative to it exactly as
+	// it sits on the real thing.
+	const FTransform Seat = GetSeatTransform(Approaching ? Approaching->GetDrivenComponent() : nullptr);
+
+	for (int32 Index = 0; Index < Parts.Num(); ++Index)
 	{
-		for (int32 Slot = 0; Slot < Ghost->GetNumMaterials(); ++Slot)
+		UStaticMeshComponent* Part = GhostParts[Index];
+		Part->SetStaticMesh(Parts[Index].Mesh);
+		Part->SetWorldTransform(Parts[Index].RelativeToRoot * Seat);
+		if (GhostMID)
 		{
-			Ghost->SetMaterial(Slot, GhostMID);
+			for (int32 Slot = 0; Slot < Part->GetNumMaterials(); ++Slot)
+			{
+				Part->SetMaterial(Slot, GhostMID);
+			}
 		}
 	}
-
-	// Drawn at the seat pose the object will actually take, scale included, so the preview is
-	// literally where it lands rather than an approximation of it.
-	Ghost->SetWorldTransform(GetSeatTransform(Source));
 
 	GhostTarget = 1.f;
 	ApplyGhostAlpha();
