@@ -138,12 +138,24 @@ protected:
 	EFXR_SocketGhostMode GhostMode = EFXR_SocketGhostMode::OnApproach;
 
 	/**
-	 * Shape the preview takes when nothing is being carried — required by Always, which has no
-	 * approaching object to borrow a shape from. On Approach uses the carried object itself and
-	 * falls back to this only when that object is not a static mesh.
+	 * Actor whose shape the preview takes when nothing is being carried — required by Always, which
+	 * has no approaching object to borrow from. Every static mesh on it is drawn, so an extinguisher
+	 * previews as body, pin, handle and hose rather than one part of itself.
+	 *
+	 * A class rather than a level actor: a mount says "an extinguisher belongs here", which is a
+	 * statement about a type. An instance reference would break when that actor is deleted or
+	 * streamed out, and would not survive the socket being reused in another level.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
-	TSoftObjectPtr<UStaticMesh> GhostMesh;
+	TSoftClassPtr<AActor> GhostActor;
+
+	/**
+	 * Component tags left out of the preview — an effect mesh, a collision proxy, a part that should
+	 * read as missing. Components already hidden are skipped regardless, so this is only for things
+	 * that are visible on the real object but unwanted on its ghost.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
+	TArray<FName> GhostIgnoreTags;
 
 	/**
 	 * Material the ghost draws with. Defaults to the one shipped with the plugin.
@@ -168,16 +180,39 @@ private:
 	void RefreshTickState();
 	void ApplyGhostAlpha();
 
+	/** One drawable piece of a ghost: a mesh and where it sits relative to the object's root. */
+	struct FGhostPart
+	{
+		UStaticMesh* Mesh = nullptr;
+		FTransform RelativeToRoot = FTransform::Identity;
+	};
+
 	/** Decide what the preview should be showing right now, and start it fading there. */
 	void RefreshGhost();
+
+	/** Collect the pieces of the preview from the carried object, else from the Ghost Actor class. */
+	void GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPart>& OutParts) const;
+
+	/** Pieces of a live actor — exact, including anything a construction script built. */
+	void GatherFromActor(const AActor* Actor, TArray<FGhostPart>& OutParts) const;
+
+	/** Pieces of a class, read from its component templates rather than by spawning one. */
+	void GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) const;
+
+	/** Whether a mesh belongs in the preview at all. */
+	bool ShouldGhost(const UStaticMeshComponent* Mesh) const;
+
+	/** Grow or shrink the pool of ghost mesh components to match what is being drawn. */
+	void ResizeGhostPool(int32 Count);
 
 	TWeakObjectPtr<UFXR_Grab> Socketed;
 	TWeakObjectPtr<UFXR_Grab> Preview;
 
-	// Created on first use rather than in the constructor: a component may not create subobjects
-	// there without breaking Blueprint reconstruction.
+	// One component per mesh in the previewed object. Created on first use rather than in the
+	// constructor: a component may not create subobjects there without breaking Blueprint
+	// reconstruction, and the count is not known until something is actually previewed.
 	UPROPERTY(Transient)
-	TObjectPtr<UStaticMeshComponent> Ghost;
+	TArray<TObjectPtr<UStaticMeshComponent>> GhostParts;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> GhostMID;
