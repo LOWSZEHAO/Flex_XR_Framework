@@ -127,6 +127,12 @@ protected:
 	/** Best owned grip point for this interactor's hand (highest priority, then nearest overlapping), or null. */
 	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
 
+	/**
+	 * Best grip point for a hand, ignoring reach — for claims made from range, where the object is
+	 * metres away, nothing overlaps, and the usual proximity test rejects every point.
+	 */
+	UFXR_GripPoint* SelectGripPointForHand(EFXR_HandSide Side) const;
+
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);
 
