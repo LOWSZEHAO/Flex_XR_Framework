@@ -48,6 +48,9 @@ public:
 	/** Set which hand this interactor drives (configured by the owning rig at construction). */
 	void SetHandSide(EFXR_HandSide Side) { HandSide = Side; }
 
+	/** Set the component that positions and aims this hand's far ray (wired by the owning rig). */
+	void SetAimSource(USceneComponent* Source) { AimSource = Source; }
+
 	/** Whether the query-shape gizmo (grab sphere + poke tip) is drawn — an authoring aid for offset tuning. */
 	bool IsEditorGizmoEnabled() const { return bShowEditorGizmo; }
 
@@ -74,6 +77,16 @@ protected:
 	/** Palm-contact offset from the tracked transform, in tracked-local space. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor")
 	FVector PalmLocalOffset = FVector::ZeroVector;
+
+	/**
+	 * Where this hand's far ray leaves it and which way it points, authored by dragging the component
+	 * rather than by typing offsets. AFXR_Pawn wires its Left Ray / Right Ray here; leave it unset
+	 * and the ray fires straight out of the tracked pose.
+	 *
+	 * Read as an offset from the tracked pose, never as a world transform — see UFXR_RayOrigin.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor")
+	TObjectPtr<USceneComponent> AimSource;
 
 	/** Index-fingertip (poke) offset from the tracked transform, in tracked-local space — align to the hand mesh's extended index tip. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactor")

@@ -4,6 +4,7 @@
 #include "Interactor/FXR_InteractorComponent.h"
 #include "Interactor/FXR_ControllerInteractor.h"
 #include "Interactor/FXR_HandInteractor.h"
+#include "Interactor/FXR_RayOrigin.h"
 #include "Interactor/FXR_DesktopSimInteractor.h"
 #include "Input/FXR_InputConfig.h"
 #include "System/FXR_XRSubsystem.h"
@@ -67,6 +68,21 @@ AFXR_Pawn::AFXR_Pawn()
 	RightHand = CreateDefaultSubobject<UFXR_HandInteractor>(TEXT("RightHand"));
 	RightHand->SetupAttachment(RightHandRoot);
 	RightHand->SetHandSide(EFXR_HandSide::Right);
+
+
+	// One ray origin per hand, not per interactor: the beam should leave the same place whether that
+	// hand is currently a controller or a tracked hand, and two sources to keep in sync would drift.
+	// Under the hand root rather than the motion controller so it sits where the hand will be in an
+	// untracked viewport, which is where it gets aimed.
+	LeftRay = CreateDefaultSubobject<UFXR_RayOrigin>(TEXT("LeftRay"));
+	LeftRay->SetupAttachment(LeftHandRoot);
+	LeftController->SetAimSource(LeftRay);
+	LeftHand->SetAimSource(LeftRay);
+
+	RightRay = CreateDefaultSubobject<UFXR_RayOrigin>(TEXT("RightRay"));
+	RightRay->SetupAttachment(RightHandRoot);
+	RightController->SetAimSource(RightRay);
+	RightHand->SetAimSource(RightRay);
 
 	DesktopSim = CreateDefaultSubobject<UFXR_DesktopSimInteractor>(TEXT("DesktopSim"));
 	DesktopSim->SetupAttachment(Camera);
