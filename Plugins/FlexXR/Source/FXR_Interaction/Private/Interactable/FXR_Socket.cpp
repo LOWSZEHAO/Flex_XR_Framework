@@ -19,12 +19,10 @@ UFXR_Socket::UFXR_Socket()
 	// is this component's reach instead.
 	ActivationRadius = 1.f;
 
-	// Ships with the plugin so a dropped-in socket previews without any material hunting.
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultGhost(TEXT("/FlexXR/Materials/M_FXR_Ghost.M_FXR_Ghost"));
-	if (DefaultGhost.Succeeded())
-	{
-		GhostMaterial = DefaultGhost.Object;
-	}
+	// Ships with the plugin so a dropped-in socket previews without any material hunting. Referenced
+	// by path rather than loaded here: a hard reference from this CDO roots the asset, which makes it
+	// unrebuildable from tooling and loads a preview material into every project that never shows one.
+	GhostMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Ghost.M_FXR_Ghost")));
 }
 
 void UFXR_Socket::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -216,9 +214,16 @@ void UFXR_Socket::Eject()
 void UFXR_Socket::ShowGhost(const UFXR_Grab* Object)
 {
 	const UStaticMeshComponent* Source = Cast<UStaticMeshComponent>(Object ? Object->GetDrivenComponent() : nullptr);
-	if (!bShowGhost || !GhostMaterial || !Source || !Source->GetStaticMesh())
+	if (!bShowGhost || !Source || !Source->GetStaticMesh())
 	{
 		return;
+	}
+
+	// Loaded on first preview rather than at startup, which is the point of holding it softly.
+	UMaterialInterface* GhostSource = GhostMaterial.LoadSynchronous();
+	if (!GhostSource)
+	{
+		return; // cleared on purpose disables the preview
 	}
 
 	if (!Ghost)
@@ -235,7 +240,7 @@ void UFXR_Socket::ShowGhost(const UFXR_Grab* Object)
 	// One instance so the fade can be driven per frame without touching the shared material.
 	if (!GhostMID)
 	{
-		GhostMID = UMaterialInstanceDynamic::Create(GhostMaterial, this);
+		GhostMID = UMaterialInstanceDynamic::Create(GhostSource, this);
 	}
 	if (GhostMID)
 	{
