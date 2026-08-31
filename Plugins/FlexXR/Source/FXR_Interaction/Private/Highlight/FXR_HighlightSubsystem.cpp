@@ -5,16 +5,24 @@
 #include "Detection/FXR_FocusSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Settings/FXR_InteractionSettings.h"
-#include "Components/MeshComponent.h"
-#include "Components/PrimitiveComponent.h"
-#include "GameFramework/Actor.h"
-#include "Engine/Engine.h"
-#include "Engine/World.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/MeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "GameFramework/Actor.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
+
+namespace
+{
+	/** Two bits of state leave six for the fade — 64 levels reads as smooth across a 150 ms ramp. */
+	constexpr int32 FXR_StencilStateStride = 4;
+	constexpr int32 FXR_StencilMaxLevel = 63;
+}
 
 UFXR_HighlightSubsystem* UFXR_HighlightSubsystem::Get(const UObject* WorldContextObject)
 {
@@ -52,6 +60,53 @@ void UFXR_HighlightSubsystem::Deinitialize()
 	}
 
 	Super::Deinitialize();
+}
+
+TStatId UFXR_HighlightSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UFXR_HighlightSubsystem, STATGROUP_Tickables);
+}
+
+void UFXR_HighlightSubsystem::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Highlight_Tick);
+
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+	const float FadeTime = Settings ? FMath::Max(Settings->HighlightFadeTime, 0.f) : 0.15f;
+	const float Step = (FadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / FadeTime) : 1.f;
+
+	TArray<TWeakObjectPtr<UFXR_InteractableBase>> Finished;
+
+	for (TPair<TWeakObjectPtr<UFXR_InteractableBase>, FFXR_HighlightRecord>& Pair : Active)
+	{
+		UFXR_InteractableBase* Interactable = Pair.Key.Get();
+		if (!Interactable)
+		{
+			Finished.Add(Pair.Key);
+			continue;
+		}
+
+		FFXR_HighlightRecord& Record = Pair.Value;
+		if (!FMath::IsNearlyEqual(Record.Alpha, Record.Target))
+		{
+			Record.Alpha = FMath::FInterpConstantTo(Record.Alpha, Record.Target, 1.f, Step);
+			Apply(Interactable, Record);
+		}
+
+		// Dropped only once it has actually faded out, so releasing a highlight never cuts it short.
+		if (Record.Target <= 0.f && Record.Alpha <= KINDA_SMALL_NUMBER)
+		{
+			Release(Interactable);
+			Finished.Add(Pair.Key);
+		}
+	}
+
+	for (const TWeakObjectPtr<UFXR_InteractableBase>& Key : Finished)
+	{
+		Active.Remove(Key);
+	}
 }
 
 void UFXR_HighlightSubsystem::HandleFocusChanged(UFXR_InteractableBase* Interactable, EFXR_FocusState State, EFXR_HandSide Hand)
@@ -104,6 +159,27 @@ EFXR_HighlightState UFXR_HighlightSubsystem::GetHighlightState(const UFXR_Intera
 	return EFXR_HighlightState::None;
 }
 
+float UFXR_HighlightSubsystem::GetHighlightAlpha(const UFXR_InteractableBase* Interactable) const
+{
+	const FFXR_HighlightRecord* Record = Active.Find(Interactable);
+	return Record ? Record->Alpha : 0.f;
+}
+
+int32 UFXR_HighlightSubsystem::PackStencil(EFXR_HighlightState State, float Alpha)
+{
+	int32 StateBits = 0;
+	switch (State)
+	{
+	case EFXR_HighlightState::Hover:    StateBits = 1; break;
+	case EFXR_HighlightState::Guidance: StateBits = 2; break;
+	case EFXR_HighlightState::Selected: StateBits = 3; break;
+	default:                            return 0;
+	}
+
+	const int32 Level = FMath::RoundToInt(FMath::Clamp(Alpha, 0.f, 1.f) * FXR_StencilMaxLevel);
+	return StateBits + Level * FXR_StencilStateStride;
+}
+
 void UFXR_HighlightSubsystem::GatherTargets(const UFXR_InteractableBase* Interactable, TArray<UPrimitiveComponent*>& OutTargets) const
 {
 	OutTargets.Reset();
@@ -135,16 +211,108 @@ void UFXR_HighlightSubsystem::GatherTargets(const UFXR_InteractableBase* Interac
 	}
 }
 
-int32 UFXR_HighlightSubsystem::StencilFor(EFXR_HighlightState State)
+void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 {
-	// The outline pass is one full-screen draw shared by every outlined object, so it cannot read a
-	// per-object colour. Encoding state here is what lets it colour hover differently from guidance.
-	switch (State)
+	if (!Interactable)
 	{
-	case EFXR_HighlightState::Hover:    return 1;
-	case EFXR_HighlightState::Guidance: return 2;
-	case EFXR_HighlightState::Selected: return 3;
-	default:                            return 0;
+		return;
+	}
+
+	const EFXR_HighlightState State = GetHighlightState(Interactable);
+
+	const UFXR_Highlight* Config = Interactable->GetOwner()
+		? Interactable->GetOwner()->FindComponentByClass<UFXR_Highlight>()
+		: nullptr;
+
+	// No component is the common case: the style comes straight from project settings, which is what
+	// makes a dropped-in FXR_Grab glow with zero setup.
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+	EFXR_HighlightStyle Style = EFXR_HighlightStyle::None;
+	if (State != EFXR_HighlightState::None)
+	{
+		Style = Config ? Config->ResolveStyle(State)
+			: (Settings ? Settings->GetStyleFor(State) : EFXR_HighlightStyle::None);
+	}
+
+	const bool bWanted = (State != EFXR_HighlightState::None) && (Style != EFXR_HighlightStyle::None);
+	if (!bWanted && !Active.Contains(Interactable))
+	{
+		return; // nothing to draw, and nothing part-way through fading out
+	}
+
+	FFXR_HighlightRecord& Record = Active.FindOrAdd(Interactable);
+	Record.Target = bWanted ? 1.f : 0.f;
+	if (bWanted)
+	{
+		// State and style take effect at once; only strength eases. A hover that becomes guidance
+		// recolours immediately rather than fading down through nothing and back up.
+		Record.State = State;
+		Record.Style = Style;
+		if (Style == EFXR_HighlightStyle::Outline)
+		{
+			EnsureOutlineBlendable();
+		}
+	}
+
+	Apply(Interactable, Record);
+}
+
+void UFXR_HighlightSubsystem::Apply(UFXR_InteractableBase* Interactable, const FFXR_HighlightRecord& Record)
+{
+	// Eased as well as timed, so the edge swells in rather than ramping linearly.
+	const float Eased = FMath::SmoothStep(0.f, 1.f, Record.Alpha);
+	const bool bOutline = (Record.Style == EFXR_HighlightStyle::Outline);
+	const bool bOverlay = (Record.Style == EFXR_HighlightStyle::InnerBlink || Record.Style == EFXR_HighlightStyle::Sweep);
+	const int32 Stencil = bOutline ? PackStencil(Record.State, Eased) : 0;
+
+	const UFXR_Highlight* Config = Interactable->GetOwner()
+		? Interactable->GetOwner()->FindComponentByClass<UFXR_Highlight>()
+		: nullptr;
+
+	TArray<UPrimitiveComponent*> Targets;
+	GatherTargets(Interactable, Targets);
+
+	for (UPrimitiveComponent* Target : Targets)
+	{
+		if (!Target)
+		{
+			continue;
+		}
+		Target->SetRenderCustomDepth(Stencil != 0);
+		Target->SetCustomDepthStencilValue(Stencil);
+
+		// Only meshes have an overlay slot; other primitives still take the stencil above.
+		if (UMeshComponent* Mesh = Cast<UMeshComponent>(Target))
+		{
+			if (bOverlay)
+			{
+				ApplyOverlay(Mesh, Record.Style, Record.State, Eased, Config);
+			}
+			else
+			{
+				ClearOverlay(Mesh);
+			}
+		}
+	}
+}
+
+void UFXR_HighlightSubsystem::Release(UFXR_InteractableBase* Interactable)
+{
+	TArray<UPrimitiveComponent*> Targets;
+	GatherTargets(Interactable, Targets);
+
+	for (UPrimitiveComponent* Target : Targets)
+	{
+		if (!Target)
+		{
+			continue;
+		}
+		Target->SetRenderCustomDepth(false);
+		Target->SetCustomDepthStencilValue(0);
+		if (UMeshComponent* Mesh = Cast<UMeshComponent>(Target))
+		{
+			ClearOverlay(Mesh);
+		}
 	}
 }
 
@@ -195,78 +363,7 @@ void UFXR_HighlightSubsystem::EnsureOutlineBlendable()
 	bOutlineBlendableAdded = true;
 }
 
-void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
-{
-	if (!Interactable)
-	{
-		return;
-	}
-
-	const EFXR_HighlightState State = GetHighlightState(Interactable);
-
-	const UFXR_Highlight* Config = Interactable->GetOwner()
-		? Interactable->GetOwner()->FindComponentByClass<UFXR_Highlight>()
-		: nullptr;
-
-	// No component is the common case: the style comes straight from project settings, which is what
-	// makes "drop FXR_Grab and it glows" true with zero setup.
-	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
-	EFXR_HighlightStyle Style = EFXR_HighlightStyle::None;
-	if (State != EFXR_HighlightState::None)
-	{
-		Style = Config ? Config->ResolveStyle(State)
-			: (Settings ? Settings->GetStyleFor(State) : EFXR_HighlightStyle::None);
-	}
-
-	// Style picks the mechanism, not the colour: Outline is one full-screen pass keyed off the
-	// stencil, while Inner Blink and Sweep draw per mesh through the overlay material slot.
-	const bool bOutline = (Style == EFXR_HighlightStyle::Outline);
-	const bool bOverlay = (Style == EFXR_HighlightStyle::InnerBlink || Style == EFXR_HighlightStyle::Sweep);
-	const int32 Stencil = bOutline ? StencilFor(State) : 0;
-
-	if (bOutline)
-	{
-		EnsureOutlineBlendable();
-	}
-
-	TArray<UPrimitiveComponent*> Targets;
-	GatherTargets(Interactable, Targets);
-
-	for (UPrimitiveComponent* Target : Targets)
-	{
-		if (!Target)
-		{
-			continue;
-		}
-		Target->SetRenderCustomDepth(Stencil != 0);
-		Target->SetCustomDepthStencilValue(Stencil);
-
-		// Only meshes have an overlay slot; other primitives still take the stencil above.
-		if (UMeshComponent* Mesh = Cast<UMeshComponent>(Target))
-		{
-			if (bOverlay)
-			{
-				ApplyOverlay(Mesh, Style, State, Config);
-			}
-			else
-			{
-				ClearOverlay(Mesh);
-			}
-		}
-	}
-
-	// Track only what is lit, so the "clear everything" path never walks the whole registry.
-	if (Stencil != 0)
-	{
-		Lit.Add(Interactable);
-	}
-	else
-	{
-		Lit.Remove(Interactable);
-	}
-}
-
-void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, const UFXR_Highlight* Config)
+void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config)
 {
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
 	if (!Mesh || !Settings)
@@ -305,6 +402,7 @@ void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightS
 	Record.Instance->SetScalarParameterValue(TEXT("HighlightIntensity"), Intensity);
 	Record.Instance->SetScalarParameterValue(TEXT("PulseRate"), PulseRate);
 	Record.Instance->SetScalarParameterValue(TEXT("SweepAmount"), Style == EFXR_HighlightStyle::Sweep ? 1.f : 0.f);
+	Record.Instance->SetScalarParameterValue(TEXT("FadeAlpha"), Alpha);
 	Record.Instance->SetVectorParameterValue(TEXT("SweepDirection"), FLinearColor(Sweep.X, Sweep.Y, Sweep.Z, 0.f));
 }
 

@@ -7,7 +7,9 @@
 #include "FXR_Socket.generated.h"
 
 class UFXR_Grab;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UPrimitiveComponent;
 class UStaticMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SocketEvent, UFXR_Grab*, Object);
@@ -35,6 +37,8 @@ public:
 
 	/** Sockets are found by the driver's socket pass, never by a hand's grab sphere. */
 	virtual bool IsGrabTarget() const override { return false; }
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** The object seated here, or null. */
 	UFUNCTION(BlueprintPure, Category = "Socket")
@@ -111,6 +115,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
 	bool bLockIn = false;
 
+	/**
+	 * How long the object takes to settle into the seat pose. Eased rather than teleported: an object
+	 * that jumps into place reads as a glitch, and the short travel is what sells the docking.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s"))
+	float SeatDuration = 0.25f;
+
 	/** Show a translucent preview of where the object would land while it is in range. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview")
 	bool bShowGhost = true;
@@ -119,8 +130,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "bShowGhost"))
 	TObjectPtr<UMaterialInterface> GhostMaterial;
 
+	/** How long the ghost takes to fade in or out. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s", EditCondition = "bShowGhost"))
+	float GhostFadeTime = 0.15f;
+
 private:
 	/** Build (or update) the translucent stand-in shown at the seat pose. */
+	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
+	FTransform GetSeatTransform(const UPrimitiveComponent* Driven) const;
+
+	/** Tick only while something is moving — an idle socket costs nothing. */
+	void RefreshTickState();
+	void ApplyGhostAlpha();
+
 	void ShowGhost(const UFXR_Grab* Object);
 	void HideGhost();
 
@@ -131,6 +153,19 @@ private:
 	// there without breaking Blueprint reconstruction.
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Ghost;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> GhostMID;
+
+	// Seat animation.
+	TWeakObjectPtr<UFXR_Grab> Seating;
+	FTransform SeatStart = FTransform::Identity;
+	FTransform SeatTarget = FTransform::Identity;
+	float SeatElapsed = 0.f;
+	bool bSeating = false;
+
+	float GhostAlpha = 0.f;
+	float GhostTarget = 0.f;
 
 	// What the seated object's physics were before this socket parked it, handed back so a later
 	// grab can restore simulation on release.
