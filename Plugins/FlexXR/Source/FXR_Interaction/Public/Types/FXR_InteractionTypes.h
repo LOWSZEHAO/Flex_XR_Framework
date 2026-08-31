@@ -111,3 +111,24 @@ enum class EFXR_LatchAxis : uint8
 	Y UMETA(DisplayName = "Local Y"),
 	Z UMETA(DisplayName = "Local Z")
 };
+
+/** When a socket shows its placement preview. */
+UENUM(BlueprintType)
+enum class EFXR_SocketGhostMode : uint8
+{
+	/** No preview at all. */
+	Off        UMETA(DisplayName = "Off"),
+
+	/**
+	 * Only while an accepted object is carried within range. The preview answers "will this go
+	 * here?" at the moment the question is being asked, and the world stays quiet otherwise.
+	 */
+	OnApproach UMETA(DisplayName = "On Approach"),
+
+	/**
+	 * Whenever the socket is enabled and empty. The mount advertises what belongs in it — right for
+	 * a labelled bracket with an obviously missing extinguisher, and noisy anywhere else. Needs a
+	 * Ghost Mesh, since nothing is being carried to borrow a shape from.
+	 */
+	Always     UMETA(DisplayName = "Always")
+};

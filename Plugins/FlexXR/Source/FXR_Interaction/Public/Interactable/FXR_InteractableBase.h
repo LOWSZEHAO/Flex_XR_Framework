@@ -103,6 +103,17 @@ public:
 	virtual bool IsGrabTarget() const { return true; }
 
 	/**
+	 * Whether a hand can ever hold this. Sockets receive and ray targets are pointed at; neither is
+	 * ever held, which makes some inherited settings meaningless on them.
+	 */
+	virtual bool CanEverBeHeld() const { return true; }
+
+#if WITH_EDITOR
+	/** Greys out inherited settings that cannot apply to this particular subclass. */
+	virtual bool CanEditChange(const FProperty* InProperty) const override;
+#endif
+
+	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
 	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).

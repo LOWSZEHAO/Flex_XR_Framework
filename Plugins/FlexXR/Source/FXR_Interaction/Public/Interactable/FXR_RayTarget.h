@@ -35,6 +35,9 @@ public:
 	/** Rays, not the grab sphere, find this — so it never competes with a hand reaching for something. */
 	virtual bool IsGrabTarget() const override { return false; }
 
+	/** Pointed at, never held. */
+	virtual bool CanEverBeHeld() const override { return false; }
+
 	/** Furthest a ray may be cast and still land on this target. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ray Target", meta = (ClampMin = "1.0", Units = "cm"))
 	float MaxRayDistance = 1000.f;

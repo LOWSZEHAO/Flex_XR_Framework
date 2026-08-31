@@ -10,6 +10,7 @@ class UFXR_Grab;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UPrimitiveComponent;
+class UStaticMesh;
 class UStaticMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SocketEvent, UFXR_Grab*, Object);
@@ -37,6 +38,11 @@ public:
 
 	/** Sockets are found by the driver's socket pass, never by a hand's grab sphere. */
 	virtual bool IsGrabTarget() const override { return false; }
+
+	/** A socket receives; it is never picked up. */
+	virtual bool CanEverBeHeld() const override { return false; }
+
+	virtual void OnRegister() override;
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -81,6 +87,11 @@ public:
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void BeginPlay() override;
+	virtual void DrawInteractionDebug() const override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
 	/**
 	 * Actor tags this socket accepts. Empty accepts any grabbable object — which is right for a
@@ -122,9 +133,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s"))
 	float SeatDuration = 0.25f;
 
-	/** Show a translucent preview of where the object would land while it is in range. */
+	/** When the translucent preview of the seated object is shown. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview")
-	bool bShowGhost = true;
+	EFXR_SocketGhostMode GhostMode = EFXR_SocketGhostMode::OnApproach;
+
+	/**
+	 * Shape the preview takes when nothing is being carried — required by Always, which has no
+	 * approaching object to borrow a shape from. On Approach uses the carried object itself and
+	 * falls back to this only when that object is not a static mesh.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
+	TSoftObjectPtr<UStaticMesh> GhostMesh;
 
 	/**
 	 * Material the ghost draws with. Defaults to the one shipped with the plugin.
@@ -134,11 +153,11 @@ protected:
 	 * takes the editor down with an IsRooted assertion if anything tries. It also stops every project
 	 * loading a preview material it may never show.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "bShowGhost"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
 	TSoftObjectPtr<UMaterialInterface> GhostMaterial;
 
 	/** How long the ghost takes to fade in or out. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s", EditCondition = "bShowGhost"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s", EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
 	float GhostFadeTime = 0.15f;
 
 private:
@@ -149,8 +168,8 @@ private:
 	void RefreshTickState();
 	void ApplyGhostAlpha();
 
-	void ShowGhost(const UFXR_Grab* Object);
-	void HideGhost();
+	/** Decide what the preview should be showing right now, and start it fading there. */
+	void RefreshGhost();
 
 	TWeakObjectPtr<UFXR_Grab> Socketed;
 	TWeakObjectPtr<UFXR_Grab> Preview;
