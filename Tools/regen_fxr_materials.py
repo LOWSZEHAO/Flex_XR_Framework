@@ -387,10 +387,12 @@ def build_ray():
     # centre stays thin, which is what keeps a pointer from looking like a plastic stick.
     fres = node(mat, unreal.MaterialExpressionFresnel, -900, 120)
     fres.set_editor_property('exponent', 1.5)
-    fres.set_editor_property('base_reflect_fraction', 0.5)
+    # A pointer has to read as a solid beam, so the facing-on floor is high and fresnel only brightens
+    # the silhouette. At a low floor the tube all but vanished at range.
+    fres.set_editor_property('base_reflect_fraction', 0.75)
 
     base = node(mat, unreal.MaterialExpressionMultiply, -600, 120)
-    base.set_editor_property('const_b', 0.7)
+    base.set_editor_property('const_b', 1.0)
     link(fres, '', base, 'A', 'fresnel->base')
 
     # Driven by the interaction driver so the beam fades in and out with far interaction.
