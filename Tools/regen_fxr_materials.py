@@ -1,11 +1,12 @@
 # Copyright (c) 2026 Low Sze Hao. All rights reserved.
 #
-# Regenerates the three FlexXR presentation materials from source, so plugin content is
+# Regenerates the FlexXR presentation materials from source, so plugin content is
 # reproducible rather than hand-authored:
 #
 #   M_FXR_Outline           highlight outline post-process (reads the packed stencil)
 #   M_FXR_HighlightOverlay  Inner Blink / Sweep, drawn per mesh through the overlay slot
 #   M_FXR_Ghost             FXR_Socket placement preview
+#   M_FXR_Ray               far-interaction pointer beam
 #
 # Run from the editor console:  py "G:/Flex_XR_Framework/Tools/regen_fxr_materials.py"
 
@@ -365,11 +366,52 @@ def build_ghost():
     finish(mat, full)
 
 
+# ---------------------------------------------------------------------------------------------
+# M_FXR_Ray — the far-interaction pointer beam, drawn on the arc-segment tube.
+# ---------------------------------------------------------------------------------------------
+def build_ray():
+    mat, full = new_material('M_FXR_Ray',
+                             blend=unreal.BlendMode.BLEND_TRANSLUCENT,
+                             shading=unreal.MaterialShadingModel.MSM_UNLIT,
+                             two_sided=True)
+
+    colour = vector(mat, 'RayColor', 0.45, 0.8, 1.0, -900, -300)
+    rgb = mask(mat, colour, '', -650, -300, True, 'ray colour mask')
+    intensity = scalar(mat, 'RayIntensity', 2.0, -900, -140)
+
+    emissive = node(mat, unreal.MaterialExpressionMultiply, -420, -260)
+    link(rgb, '', emissive, 'A', 'rgb->emissive')
+    link(intensity, '', emissive, 'B', 'intensity->emissive')
+
+    # Fresnel so the tube reads as a beam rather than a solid rod: the silhouette carries it and the
+    # centre stays thin, which is what keeps a pointer from looking like a plastic stick.
+    fres = node(mat, unreal.MaterialExpressionFresnel, -900, 120)
+    fres.set_editor_property('exponent', 1.5)
+    fres.set_editor_property('base_reflect_fraction', 0.5)
+
+    base = node(mat, unreal.MaterialExpressionMultiply, -600, 120)
+    base.set_editor_property('const_b', 0.7)
+    link(fres, '', base, 'A', 'fresnel->base')
+
+    # Driven by the interaction driver so the beam fades in and out with far interaction.
+    fade = scalar(mat, 'RayOpacity', 1.0, -900, 300)
+    opacity = node(mat, unreal.MaterialExpressionMultiply, -420, 200)
+    link(base, '', opacity, 'A', 'base->opacity')
+    link(fade, '', opacity, 'B', 'fade->opacity')
+
+    if not mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR):
+        fails.append('ray->EmissiveColor')
+    if not mel.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY):
+        fails.append('ray->Opacity')
+    finish(mat, full)
+
+
 # Each is independent, so one failure still leaves the others rebuilt and reports what broke
 # rather than stopping halfway with no explanation.
 for label, builder in (('M_FXR_Outline', build_outline),
                        ('M_FXR_HighlightOverlay', build_overlay),
-                       ('M_FXR_Ghost', build_ghost)):
+                       ('M_FXR_Ghost', build_ghost),
+                       ('M_FXR_Ray', build_ray)):
     try:
         builder()
         print('FXR_MATERIAL %s: rebuilt' % label)
