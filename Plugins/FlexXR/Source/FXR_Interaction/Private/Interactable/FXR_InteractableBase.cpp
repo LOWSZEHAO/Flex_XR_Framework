@@ -245,3 +245,27 @@ void UFXR_InteractableBase::BroadcastInteractionEvent(EFXR_InteractionPhase Phas
 		EventBus->Broadcast(Event);
 	}
 }
+
+#if WITH_EDITOR
+bool UFXR_InteractableBase::CanEditChange(const FProperty* InProperty) const
+{
+	if (!Super::CanEditChange(InProperty) || !InProperty)
+	{
+		return Super::CanEditChange(InProperty);
+	}
+
+	const FName Name = InProperty->GetFName();
+
+	// Greyed rather than removed: the setting is real and inherited, it simply has no bearing on this
+	// subclass, and seeing it disabled answers "why does my socket have a held policy?" on the spot.
+	if (Name == GET_MEMBER_NAME_CHECKED(UFXR_InteractableBase, AlreadyHeldPolicy))
+	{
+		return CanEverBeHeld();
+	}
+	if (Name == GET_MEMBER_NAME_CHECKED(UFXR_InteractableBase, ActivationRadius))
+	{
+		return IsGrabTarget();
+	}
+	return true;
+}
+#endif
