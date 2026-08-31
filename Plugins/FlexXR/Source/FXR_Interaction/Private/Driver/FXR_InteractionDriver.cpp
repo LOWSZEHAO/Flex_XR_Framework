@@ -12,11 +12,21 @@
 #include "Interactable/FXR_Socket.h"
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
 UFXR_InteractionDriver::UFXR_InteractionDriver()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+
+	// Ship with the plugin so a bare driver draws a pointer. The tube and ring are the same meshes
+	// the teleport arc uses — a beam is a stretched tube, and the endpoint marker is the same ring.
+	RayMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment")));
+	RayCursorMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle")));
+	RayMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Ray.M_FXR_Ray")));
 }
 
 void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -44,12 +54,12 @@ void UFXR_InteractionDriver::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	// After the hands are driven, so a grab claimed this frame publishes as Selected rather than
 	// spending a frame as Hovered first.
-	PublishFocus(EFXR_HandSide::Left, LeftHeld, LeftAimed, LeftSelect, LeftPrev);
-	PublishFocus(EFXR_HandSide::Right, RightHeld, RightAimed, RightSelect, RightPrev);
+	PublishFocus(EFXR_HandSide::Left, LeftHeld, LeftAimed, LeftSelect, LeftPrev, DeltaTime);
+	PublishFocus(EFXR_HandSide::Right, RightHeld, RightAimed, RightSelect, RightPrev, DeltaTime);
 }
 
 void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held,
-	TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect)
+	TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect, float DeltaTime)
 {
 	UFXR_FocusSubsystem* Focus = UFXR_FocusSubsystem::Get(this);
 	if (!Focus)
@@ -94,6 +104,10 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 	{
 		RayNow->NotifyRaySelected(Side);
 	}
+
+	// Drawn from the same answers the logic just used, so the beam can never disagree with what a
+	// press would actually do.
+	DriveRayVisual(Side, HeldNow != nullptr || Near != nullptr, Far, DeltaTime);
 }
 
 void UFXR_InteractionDriver::DrivePokes(EFXR_HandSide Side)
@@ -457,4 +471,112 @@ void UFXR_InteractionDriver::DriveProximity(EFXR_HandSide Side, bool bHolding, U
 	const float Closeness = 1.f - FMath::Clamp((Distance - GrabRadius) / Span, 0.f, 1.f);
 
 	Highlight->SetProximity(Side, Approaching, Closeness * Settings->ProximityMaxAlpha);
+}
+
+void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, const UFXR_InteractableBase* FarTarget, float DeltaTime)
+{
+	FRayVisual& Visual = RayVisuals[Side == EFXR_HandSide::Left ? 0 : 1];
+
+	// Shown while a hand is free and not already reaching for something. A beam that is always on
+	// says nothing; one that appears when far interaction becomes this hand's job does.
+	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	const bool bWanted = bShowRay && Interactor && !bBusyNear;
+
+	const float Step = (RayFadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / RayFadeTime) : 1.f;
+	Visual.Alpha = FMath::FInterpConstantTo(Visual.Alpha, bWanted ? 1.f : 0.f, 1.f, Step);
+
+	if (Visual.Alpha <= KINDA_SMALL_NUMBER)
+	{
+		if (UStaticMeshComponent* Beam = Visual.Beam.Get())
+		{
+			Beam->SetVisibility(false);
+		}
+		if (UStaticMeshComponent* Cursor = Visual.Cursor.Get())
+		{
+			Cursor->SetVisibility(false);
+		}
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	UStaticMesh* BeamMesh = RayMesh.LoadSynchronous();
+	UMaterialInterface* Material = RayMaterial.LoadSynchronous();
+	if (!Owner || !BeamMesh || !Material)
+	{
+		return; // cleared on purpose draws nothing; the ray itself still works
+	}
+
+	// Built on first use, like the locomotion arc — a rig that never points costs nothing.
+	if (!Visual.Beam.IsValid())
+	{
+		UStaticMeshComponent* Beam = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
+		Beam->SetupAttachment(Owner->GetRootComponent());
+		Beam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Beam->SetCastShadow(false);
+		Beam->SetStaticMesh(BeamMesh);
+		Beam->RegisterComponent();
+		Visual.Beam = Beam;
+
+		Visual.Material = UMaterialInstanceDynamic::Create(Material, this);
+		if (Visual.Material.IsValid())
+		{
+			Beam->SetMaterial(0, Visual.Material.Get());
+		}
+	}
+
+	if (UStaticMesh* CursorMesh = RayCursorMesh.LoadSynchronous())
+	{
+		if (!Visual.Cursor.IsValid())
+		{
+			UStaticMeshComponent* Cursor = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
+			Cursor->SetupAttachment(Owner->GetRootComponent());
+			Cursor->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Cursor->SetCastShadow(false);
+			Cursor->SetStaticMesh(CursorMesh);
+			Cursor->RegisterComponent();
+			if (Visual.Material.IsValid())
+			{
+				Cursor->SetMaterial(0, Visual.Material.Get());
+			}
+			Visual.Cursor = Cursor;
+		}
+	}
+
+	FVector Origin;
+	FVector Direction;
+	Interactor->GetFarRay(Origin, Direction);
+	Direction = Direction.GetSafeNormal();
+
+	// Stops at whatever the ray actually hit, so the beam reads as touching the world rather than
+	// passing through it. The same cached hit the claim and the hover use — one trace, one truth.
+	FHitResult Hit;
+	const bool bHit = GetFarHit(Side, Hit);
+	const float Length = bHit ? Hit.Distance : RayLength;
+
+	if (UStaticMeshComponent* Beam = Visual.Beam.Get())
+	{
+		// The arc-segment mesh is a 100 cm tube along +X, so scaling X by hundredths of the length
+		// stretches it to reach.
+		Beam->SetWorldLocationAndRotation(Origin, Direction.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
+		Beam->SetWorldScale3D(FVector(Length / 100.f, RayWidth, RayWidth));
+		Beam->SetVisibility(true);
+	}
+
+	if (UStaticMeshComponent* Cursor = Visual.Cursor.Get())
+	{
+		// Only on something worth pointing at: the beam says where you are aiming, the cursor says
+		// that what you are aiming at will answer.
+		const bool bOnTarget = FarTarget != nullptr;
+		Cursor->SetVisibility(bOnTarget);
+		if (bOnTarget)
+		{
+			Cursor->SetWorldLocation(Origin + Direction * Length, false, nullptr, ETeleportType::TeleportPhysics);
+			Cursor->SetWorldRotation((-Direction).Rotation());
+		}
+	}
+
+	if (Visual.Material.IsValid())
+	{
+		Visual.Material->SetScalarParameterValue(TEXT("RayOpacity"), FMath::SmoothStep(0.f, 1.f, Visual.Alpha));
+	}
 }

@@ -12,6 +12,10 @@ class IFXR_Interactor;
 class UFXR_Grab;
 class UFXR_InteractableBase;
 class UFXR_InteractionSubsystem;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UStaticMesh;
+class UStaticMeshComponent;
 class UFXR_RayTarget;
 class UFXR_Socket;
 
@@ -52,6 +56,33 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ReleaseThreshold = 0.35f;
 
+	/**
+	 * Draw a pointer beam for far interaction. It appears while a hand is free and not already
+	 * reaching for something, so it says "far interaction is what this hand is doing right now"
+	 * rather than being permanently on.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction")
+	bool bShowRay = true;
+
+	/** Beam thickness. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.05", ClampMax = "5.0", Units = "cm", EditCondition = "bShowRay"))
+	float RayWidth = 0.35f;
+
+	/** How long the beam takes to fade in or out, matching the highlight so nothing pops. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s", EditCondition = "bShowRay"))
+	float RayFadeTime = 0.12f;
+
+	//~ Ship with the plugin, so a bare driver draws. Soft references: a hard default roots the asset
+	//~ through this CDO, which makes it unrebuildable from tooling.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	TSoftObjectPtr<UStaticMesh> RayMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	TSoftObjectPtr<UStaticMesh> RayCursorMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "bShowRay"))
+	TSoftObjectPtr<UMaterialInterface> RayMaterial;
+
 	/** How far this rig casts its far ray. Each FXR_RayTarget may shorten its own reach below this. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "1.0", Units = "cm"))
 	float RayLength = 2000.f;
@@ -81,7 +112,7 @@ private:
 	 * edge, so a ray selection sees the same press a grab would have.
 	 */
 	void PublishFocus(EFXR_HandSide Side, const TWeakObjectPtr<UFXR_InteractableBase>& Held,
-		TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect);
+		TWeakObjectPtr<UFXR_RayTarget>& Aimed, float Select, float PrevSelect, float DeltaTime);
 
 	/** Cast both hands' far rays once per frame; hover and the distance-grab claim share the result. */
 	void UpdateFarHits();
@@ -95,6 +126,9 @@ private:
 
 	/** Fire enter/exit as the aimed target changes, so listeners never strand a prompt on. */
 	void UpdateAimed(EFXR_HandSide Side, TWeakObjectPtr<UFXR_RayTarget>& Aimed, UFXR_RayTarget* Now);
+
+	/** Draw or hide this hand's pointer beam, and place it along the ray it actually cast. */
+	void DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, const UFXR_InteractableBase* FarTarget, float DeltaTime);
 
 	float ReadSelect(EFXR_HandSide Side) const;
 	IFXR_Interactor* GetActiveInteractor(EFXR_HandSide Side) const;
@@ -115,6 +149,16 @@ private:
 	// dropping it on the floor.
 	TWeakObjectPtr<UFXR_Socket> LeftPreviewSocket;
 	TWeakObjectPtr<UFXR_Socket> RightPreviewSocket;
+
+	/** One beam plus endpoint cursor per hand, built on first use like the locomotion arc. */
+	struct FRayVisual
+	{
+		TWeakObjectPtr<UStaticMeshComponent> Beam;
+		TWeakObjectPtr<UStaticMeshComponent> Cursor;
+		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
+		float Alpha = 0.f;
+	};
+	FRayVisual RayVisuals[2];
 
 	// This frame's far-ray hits. Cached because three consumers want them and a line trace per
 	// consumer per hand adds up on a Quest frame budget.
