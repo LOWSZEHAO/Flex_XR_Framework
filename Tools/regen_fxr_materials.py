@@ -17,11 +17,20 @@ fails = []
 
 
 def new_material(name, blend=None, shading=None, domain=None, two_sided=False):
+    """Rebuild in place when the material already exists.
+
+    Never delete and recreate. A loaded CDO can hold a *hard* reference to one of these —
+    UFXR_Socket grabs M_FXR_Ghost through ConstructorHelpers — and force-deleting an asset out
+    from under such a reference takes the editor down with it. Clearing the expressions and
+    rebuilding on the same object leaves every existing reference intact.
+    """
     full = '%s/%s' % (PATH, name)
     if unreal.EditorAssetLibrary.does_asset_exist(full):
-        unreal.EditorAssetLibrary.delete_asset(full)
-    tools = unreal.AssetToolsHelpers.get_asset_tools()
-    mat = tools.create_asset(name, PATH, unreal.Material, unreal.MaterialFactoryNew())
+        mat = unreal.EditorAssetLibrary.load_asset(full)
+        mel.delete_all_material_expressions(mat)
+    else:
+        tools = unreal.AssetToolsHelpers.get_asset_tools()
+        mat = tools.create_asset(name, PATH, unreal.Material, unreal.MaterialFactoryNew())
     if domain is not None:
         mat.set_editor_property('material_domain', domain)
     if blend is not None:
@@ -356,7 +365,15 @@ def build_ghost():
     finish(mat, full)
 
 
-build_outline()
-build_overlay()
-build_ghost()
+# Each is independent, so one failure still leaves the others rebuilt and reports what broke
+# rather than stopping halfway with no explanation.
+for label, builder in (('M_FXR_Outline', build_outline),
+                       ('M_FXR_HighlightOverlay', build_overlay),
+                       ('M_FXR_Ghost', build_ghost)):
+    try:
+        builder()
+        print('FXR_MATERIAL %s: rebuilt' % label)
+    except Exception as error:
+        fails.append('%s raised %s' % (label, error))
+
 print('FXR_MATERIALS: %s' % ('OK' if not fails else 'FAILED %s' % fails))
