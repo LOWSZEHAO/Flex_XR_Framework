@@ -511,6 +511,11 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 	{
 		UStaticMeshComponent* Beam = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
 		Beam->SetupAttachment(Owner->GetRootComponent());
+		// Movable, and absolute. A component built at runtime defaults to Static mobility, which
+		// silently discards every transform update — the beam was being aimed each frame and ignoring
+		// it. Absolute keeps the rig own scale out of a thickness measured in centimetres.
+		Beam->SetMobility(EComponentMobility::Movable);
+		Beam->SetAbsolute(true, true, true);
 		Beam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Beam->SetCastShadow(false);
 		Beam->SetStaticMesh(BeamMesh);
@@ -530,6 +535,8 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		{
 			UStaticMeshComponent* Cursor = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
 			Cursor->SetupAttachment(Owner->GetRootComponent());
+			Cursor->SetMobility(EComponentMobility::Movable);
+			Cursor->SetAbsolute(true, true, true);
 			Cursor->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Cursor->SetCastShadow(false);
 			Cursor->SetStaticMesh(CursorMesh);

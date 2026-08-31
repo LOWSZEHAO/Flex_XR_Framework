@@ -17,18 +17,58 @@ mel = unreal.MaterialEditingLibrary
 fails = []
 
 
-def new_material(name, blend=None, shading=None, domain=None, two_sided=False):
-    """Rebuild in place when the material already exists.
+def clear_expressions(mat):
+    """Empty a material's graph, and verify it actually emptied.
 
-    Never delete and recreate. A loaded CDO can hold a *hard* reference to one of these —
-    UFXR_Socket grabs M_FXR_Ghost through ConstructorHelpers — and force-deleting an asset out
-    from under such a reference takes the editor down with it. Clearing the expressions and
-    rebuilding on the same object leaves every existing reference intact.
+    delete_all_material_expressions silently leaves nodes behind. Every rebuild then stacked a fresh
+    copy on top of the survivors while the material's inputs stayed wired to the *old* chain — so the
+    graph grew duplicate parameters, edits appeared to do nothing, and a material could report
+    "rebuilt" with zero errors while rendering from a version nobody had authored. Deleting one by
+    one afterwards is what actually clears it.
     """
+    try:
+        mel.delete_all_material_expressions(mat)
+    except Exception:
+        pass
+
+    for _ in range(4):
+        try:
+            collection = mat.get_editor_property('expression_collection')
+            remaining = list(collection.get_editor_property('expressions'))
+        except Exception:
+            return
+        if not remaining:
+            return
+        for expression in remaining:
+            if expression:
+                try:
+                    mel.delete_material_expression(mat, expression)
+                except Exception:
+                    pass
+
+
+def new_material(name, blend=None, shading=None, domain=None, two_sided=False):
+    """Recreate the material from scratch, falling back to clearing it in place."""
     full = '%s/%s' % (PATH, name)
+
+    # Deleted and recreated, so the graph is provably empty. Rebuilding in place looked like the
+    # careful option and was the opposite: clearing leaves nodes behind, every rebuild stacked a
+    # fresh copy on the survivors, and the material's inputs stayed wired to the *old* chain — so
+    # edits appeared to do nothing and a material rendered from a version nobody had authored.
+    #
+    # Safe only because every reference to these is now soft. A hard reference from a CDO roots the
+    # asset, and deleting a rooted asset takes the editor down: that is exactly what happened when
+    # UFXR_Socket held M_FXR_Ghost through ConstructorHelpers. If that ever returns, this crashes
+    # again — hence the fallback below rather than an assumption.
+    if unreal.EditorAssetLibrary.does_asset_exist(full):
+        try:
+            unreal.EditorAssetLibrary.delete_asset(full)
+        except Exception:
+            pass
+
     if unreal.EditorAssetLibrary.does_asset_exist(full):
         mat = unreal.EditorAssetLibrary.load_asset(full)
-        mel.delete_all_material_expressions(mat)
+        clear_expressions(mat)
     else:
         tools = unreal.AssetToolsHelpers.get_asset_tools()
         mat = tools.create_asset(name, PATH, unreal.Material, unreal.MaterialFactoryNew())
@@ -370,8 +410,13 @@ def build_ghost():
 # M_FXR_Ray — the far-interaction pointer beam, drawn on the arc-segment tube.
 # ---------------------------------------------------------------------------------------------
 def build_ray():
+    # Additive rather than translucent. Standard translucency rendered nothing at all here even with a
+    # provably clean graph, while the same mesh with an opaque material filled the screen — a beam
+    # starts at the hand, so the camera sits inside its geometry, which is exactly where translucent
+    # sorting is least reliable. Additive is also simply what a glowing beam wants: opacity 0 means
+    # invisible, so the fade still works.
     mat, full = new_material('M_FXR_Ray',
-                             blend=unreal.BlendMode.BLEND_TRANSLUCENT,
+                             blend=unreal.BlendMode.BLEND_ADDITIVE,
                              shading=unreal.MaterialShadingModel.MSM_UNLIT,
                              two_sided=True)
 
@@ -383,23 +428,12 @@ def build_ray():
     link(rgb, '', emissive, 'A', 'rgb->emissive')
     link(intensity, '', emissive, 'B', 'intensity->emissive')
 
-    # Fresnel so the tube reads as a beam rather than a solid rod: the silhouette carries it and the
-    # centre stays thin, which is what keeps a pointer from looking like a plastic stick.
-    fres = node(mat, unreal.MaterialExpressionFresnel, -900, 120)
-    fres.set_editor_property('exponent', 1.5)
-    # A pointer has to read as a solid beam, so the facing-on floor is high and fresnel only brightens
-    # the silhouette. At a low floor the tube all but vanished at range.
-    fres.set_editor_property('base_reflect_fraction', 0.75)
-
-    base = node(mat, unreal.MaterialExpressionMultiply, -600, 120)
-    base.set_editor_property('const_b', 1.0)
-    link(fres, '', base, 'A', 'fresnel->base')
-
-    # Driven by the interaction driver so the beam fades in and out with far interaction.
-    fade = scalar(mat, 'RayOpacity', 1.0, -900, 300)
-    opacity = node(mat, unreal.MaterialExpressionMultiply, -420, 200)
-    link(base, '', opacity, 'A', 'base->opacity')
-    link(fade, '', opacity, 'B', 'fade->opacity')
+    # Opacity is the driver-fed fade and nothing else. A fresnel version of this compiled cleanly and
+    # rendered completely invisible, while the same mesh with a plain unlit material filled the
+    # screen — so the beam is now the simplest graph that can express it. A pointer wants to read as
+    # a solid emissive tube anyway; the silhouette shaping that suits the socket ghost buys nothing
+    # on something this thin, and it was the one node here that could silently evaluate to zero.
+    opacity = scalar(mat, 'RayOpacity', 0.9, -900, 200)
 
     if not mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR):
         fails.append('ray->EmissiveColor')
