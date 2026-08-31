@@ -84,6 +84,36 @@ public:
 	float HighlightPulseRate = 1.5f;
 
 	/**
+	 * How the Outline style is produced. Auto picks Mesh Hull on a mobile feature level and Post
+	 * Process elsewhere, which is also what the editor's mobile preview reports — so the Quest path
+	 * can be looked at without a Quest.
+	 *
+	 * Forcing a tier is for comparing them, and for a PCVR project that wants the hull anyway: it
+	 * needs no post-process chain and no custom depth, so it survives a project that has turned both
+	 * off.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline")
+	EFXR_HighlightTier HighlightTier = EFXR_HighlightTier::Auto;
+
+	/**
+	 * How far the hull is pushed along the mesh's normals, in centimetres of world space.
+	 *
+	 * World space, not screen space: the post-process tier holds a constant pixel width, and this one
+	 * cannot — the shell is geometry, so a distant object's outline thins out the way the object
+	 * does. That is the honest trade for costing a draw call instead of a full-screen pass.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (ClampMin = "0.01", ClampMax = "10.0", Units = "cm"))
+	float OutlineHullThickness = 0.5f;
+
+	/**
+	 * The Mesh Hull tier's material, drawn through each mesh's overlay slot. Cleared to disable the
+	 * hull, or repointed at a project's own — it only has to push vertices along their normals and
+	 * mask away front faces.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
+	TSoftObjectPtr<UMaterialInterface> OutlineHullMaterial;
+
+	/**
 	 * Emissive multiplier for the Outline pass. Higher than the overlay default on purpose: the band
 	 * is thin and composited against the scene, so it needs headroom to read as a glow.
 	 */
@@ -114,6 +144,9 @@ public:
 
 	/** The colour for a state, falling back to white when the map has no entry. */
 	FLinearColor GetColorFor(EFXR_HighlightState State) const;
+
+	/** Resolve Auto against the world actually rendering, so the mobile preview reports the Quest path. */
+	EFXR_HighlightTier ResolveTier(const UWorld* World) const;
 
 	static const UFXR_InteractionSettings* Get();
 };

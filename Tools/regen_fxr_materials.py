@@ -437,12 +437,65 @@ def build_ray():
     finish(mat, full)
 
 
+# ---------------------------------------------------------------------------------------------
+# M_FXR_OutlineHull
+#
+# The Mesh Hull tier of the Outline style: the mesh drawn a second time through its overlay slot,
+# pushed out along its own normals, with front faces masked away so only the back of the shell
+# survives — which is exactly the silhouette. Costs a draw call per highlighted mesh rather than a
+# full-screen pass, which is the right trade on a tiler.
+#
+# TwoSidedSign is the whole trick: +1 on front faces, -1 on back faces, so masking on it keeps the
+# shell and discards the cap that would otherwise paint over the object.
+# ---------------------------------------------------------------------------------------------
+def build_outline_hull():
+    mat, full = new_material('M_FXR_OutlineHull',
+                             blend=unreal.BlendMode.BLEND_MASKED,
+                             shading=unreal.MaterialShadingModel.MSM_UNLIT,
+                             two_sided=True)
+
+    colour = vector(mat, 'HighlightColor', 1.0, 1.0, 1.0, -900, -400)
+    rgb = mask(mat, colour, '', -650, -400, True, 'hull colour mask')
+    intensity = scalar(mat, 'HighlightIntensity', 3.0, -900, -240)
+
+    emissive = node(mat, unreal.MaterialExpressionMultiply, -420, -360)
+    link(rgb, '', emissive, 'A', 'hull rgb->emissive')
+    link(intensity, '', emissive, 'B', 'hull intensity->emissive')
+
+    # Along the vertex normal, in world units. The subsystem folds the fade into this value, so a
+    # thickness of zero leaves the shell exactly on the surface where the mesh's own front faces
+    # hide it — that is the fade-out, since a masked material has no opacity to fade.
+    normal = node(mat, unreal.MaterialExpressionVertexNormalWS, -900, 60)
+    thickness = scalar(mat, 'HullThickness', 0.5, -900, 220)
+    offset = node(mat, unreal.MaterialExpressionMultiply, -560, 100)
+    link(normal, '', offset, 'A', 'hull normal->wpo')
+    link(thickness, '', offset, 'B', 'hull thickness->wpo')
+
+    # Back faces only: TwoSidedSign is -1 there, so negating it gives 1 on the shell and -1 on the
+    # cap, and the mask threshold discards everything at or below zero.
+    sign = node(mat, unreal.MaterialExpressionTwoSidedSign, -900, 420)
+    flip = node(mat, unreal.MaterialExpressionMultiply, -620, 440)
+    minus_one = node(mat, unreal.MaterialExpressionConstant, -900, 540)
+    minus_one.set_editor_property('r', -1.0)
+    link(sign, '', flip, 'A', 'hull sign->flip')
+    link(minus_one, '', flip, 'B', 'hull -1->flip')
+
+    if not mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR):
+        fails.append('hull->EmissiveColor')
+    if not mel.connect_material_property(offset, '', unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET):
+        fails.append('hull->WorldPositionOffset')
+    if not mel.connect_material_property(flip, '', unreal.MaterialProperty.MP_OPACITY_MASK):
+        fails.append('hull->OpacityMask')
+    finish(mat, full)
+
+
 # Each is independent, so one failure still leaves the others rebuilt and reports what broke
 # rather than stopping halfway with no explanation.
 for label, builder in (('M_FXR_Outline', build_outline),
                        ('M_FXR_HighlightOverlay', build_overlay),
                        ('M_FXR_Ghost', build_ghost),
-                       ('M_FXR_Ray', build_ray)):
+                       ('M_FXR_Ray', build_ray),
+                       ('M_FXR_OutlineHull', build_outline_hull)):
     try:
         builder()
         print('FXR_MATERIAL %s: rebuilt' % label)

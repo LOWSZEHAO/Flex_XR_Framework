@@ -309,9 +309,16 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 		// recolours immediately rather than fading down through nothing and back up.
 		Record.State = DrawState;
 		Record.Style = Style;
+		// The full-screen pass is installed lazily and only where it is the implementation. On the
+		// hull tier no blendable is ever added, so a mobile project never pays for a post-process
+		// chain it does not use — which is most of the point of having the tier.
 		if (Style == EFXR_HighlightStyle::Outline)
 		{
-			EnsureOutlineBlendable();
+			const UFXR_InteractionSettings* TierSettings = UFXR_InteractionSettings::Get();
+			if (!TierSettings || TierSettings->ResolveTier(GetWorld()) == EFXR_HighlightTier::PostProcess)
+			{
+				EnsureOutlineBlendable();
+			}
 		}
 	}
 
@@ -320,11 +327,21 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 
 void UFXR_HighlightSubsystem::Apply(UFXR_InteractableBase* Interactable, const FFXR_HighlightRecord& Record)
 {
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+
 	// Eased as well as timed, so the edge swells in rather than ramping linearly.
 	const float Eased = FMath::SmoothStep(0.f, 1.f, Record.Alpha);
+
+	// One style, two implementations. Which one is a rendering decision, so it is resolved here and
+	// never leaks into the state->style map that projects and training code actually read.
+	const bool bHullTier = Settings && Settings->ResolveTier(GetWorld()) == EFXR_HighlightTier::MeshHull;
 	const bool bOutline = (Record.Style == EFXR_HighlightStyle::Outline);
+	const bool bHull = bOutline && bHullTier;
 	const bool bOverlay = (Record.Style == EFXR_HighlightStyle::InnerBlink || Record.Style == EFXR_HighlightStyle::Sweep);
-	const int32 Stencil = bOutline ? PackStencil(Record.State, Eased) : 0;
+
+	// Nothing is written to the stencil on the hull tier: it is the post-process pass's private
+	// channel, and a mobile project pays for custom depth the moment anything asks for it.
+	const int32 Stencil = (bOutline && !bHullTier) ? PackStencil(Record.State, Eased) : 0;
 
 	const UFXR_Highlight* Config = Interactable->GetOwner()
 		? Interactable->GetOwner()->FindComponentByClass<UFXR_Highlight>()
@@ -348,6 +365,10 @@ void UFXR_HighlightSubsystem::Apply(UFXR_InteractableBase* Interactable, const F
 			if (bOverlay)
 			{
 				ApplyOverlay(Mesh, Record.Style, Record.State, Eased, Config);
+			}
+			else if (bHull)
+			{
+				ApplyHull(Mesh, Record.State, Eased, Config);
 			}
 			else
 			{
@@ -424,33 +445,53 @@ void UFXR_HighlightSubsystem::EnsureOutlineBlendable()
 	bOutlineBlendableAdded = true;
 }
 
+UMaterialInstanceDynamic* UFXR_HighlightSubsystem::EnsureOverlayInstance(UMeshComponent* Mesh, UMaterialInterface* Source)
+{
+	if (!Mesh || !Source)
+	{
+		return nullptr; // a cleared material disables its style on purpose
+	}
+
+	FFXR_OverlayRecord& Record = Overlays.FindOrAdd(Mesh);
+
+	// Rebuilt when the parent changes, not just when there is none: the hull and the blink share this
+	// one slot, so a mesh whose state remaps from Outline to Guidance would otherwise keep pushing
+	// hull parameters at a blink material that has never heard of them.
+	if (Record.Instance && Record.Source == Source)
+	{
+		return Record.Instance;
+	}
+
+	if (!Record.Instance)
+	{
+		// Remember what was there first: clearing later restores it rather than blanking a mesh whose
+		// overlay the project set for its own reasons.
+		Record.Original = Mesh->GetOverlayMaterial();
+	}
+
+	Record.Instance = UMaterialInstanceDynamic::Create(Source, this);
+	if (!Record.Instance)
+	{
+		Overlays.Remove(Mesh);
+		return nullptr;
+	}
+	Record.Source = Source;
+	Mesh->SetOverlayMaterial(Record.Instance);
+	return Record.Instance;
+}
+
 void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config)
 {
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
-	if (!Mesh || !Settings)
+	if (!Settings)
 	{
 		return;
 	}
 
-	FFXR_OverlayRecord& Record = Overlays.FindOrAdd(Mesh);
-	if (!Record.Instance)
+	UMaterialInstanceDynamic* Instance = EnsureOverlayInstance(Mesh, Settings->OverlayMaterial.LoadSynchronous());
+	if (!Instance)
 	{
-		UMaterialInterface* Source = Settings->OverlayMaterial.LoadSynchronous();
-		if (!Source)
-		{
-			return; // cleared on purpose disables Inner Blink and Sweep
-		}
-
-		// Remember what was there first: clearing later restores it rather than blanking a mesh whose
-		// overlay the project set for its own reasons.
-		Record.Original = Mesh->GetOverlayMaterial();
-		Record.Instance = UMaterialInstanceDynamic::Create(Source, this);
-		if (!Record.Instance)
-		{
-			Overlays.Remove(Mesh);
-			return;
-		}
-		Mesh->SetOverlayMaterial(Record.Instance);
+		return;
 	}
 
 	// Pushed every refresh, not just on creation, so a state change recolours without rebuilding.
@@ -459,12 +500,36 @@ void UFXR_HighlightSubsystem::ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightS
 	const float PulseRate = Config ? Config->ResolvePulseRate() : Settings->HighlightPulseRate;
 	const FVector Sweep = Config ? Config->GetSweepDirection() : FVector::UpVector;
 
-	Record.Instance->SetVectorParameterValue(TEXT("HighlightColor"), Color);
-	Record.Instance->SetScalarParameterValue(TEXT("HighlightIntensity"), Intensity);
-	Record.Instance->SetScalarParameterValue(TEXT("PulseRate"), PulseRate);
-	Record.Instance->SetScalarParameterValue(TEXT("SweepAmount"), Style == EFXR_HighlightStyle::Sweep ? 1.f : 0.f);
-	Record.Instance->SetScalarParameterValue(TEXT("FadeAlpha"), Alpha);
-	Record.Instance->SetVectorParameterValue(TEXT("SweepDirection"), FLinearColor(Sweep.X, Sweep.Y, Sweep.Z, 0.f));
+	Instance->SetVectorParameterValue(TEXT("HighlightColor"), Color);
+	Instance->SetScalarParameterValue(TEXT("HighlightIntensity"), Intensity);
+	Instance->SetScalarParameterValue(TEXT("PulseRate"), PulseRate);
+	Instance->SetScalarParameterValue(TEXT("SweepAmount"), Style == EFXR_HighlightStyle::Sweep ? 1.f : 0.f);
+	Instance->SetScalarParameterValue(TEXT("FadeAlpha"), Alpha);
+	Instance->SetVectorParameterValue(TEXT("SweepDirection"), FLinearColor(Sweep.X, Sweep.Y, Sweep.Z, 0.f));
+}
+
+void UFXR_HighlightSubsystem::ApplyHull(UMeshComponent* Mesh, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config)
+{
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+	if (!Settings)
+	{
+		return;
+	}
+
+	UMaterialInstanceDynamic* Instance = EnsureOverlayInstance(Mesh, Settings->OutlineHullMaterial.LoadSynchronous());
+	if (!Instance)
+	{
+		return;
+	}
+
+	const FLinearColor Color = Config ? Config->ResolveColor(State) : Settings->GetColorFor(State);
+
+	// The fade is the thickness, because a masked material has no opacity to fade. At zero the shell
+	// sits exactly on the surface and the mesh's own front faces hide it, so it disappears cleanly
+	// rather than flashing a black silhouette the way a faded emissive would.
+	Instance->SetVectorParameterValue(TEXT("HighlightColor"), Color);
+	Instance->SetScalarParameterValue(TEXT("HighlightIntensity"), Settings->OutlineIntensity);
+	Instance->SetScalarParameterValue(TEXT("HullThickness"), Settings->OutlineHullThickness * Alpha);
 }
 
 void UFXR_HighlightSubsystem::ClearOverlay(UMeshComponent* Mesh)
