@@ -523,7 +523,10 @@ FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) con
 	// Aim the flight at the pose the object would be held in, so it arrives already seated and the
 	// handover to the ordinary hold is invisible rather than a snap at the end.
 	FTransform Target = Grip;
-	if (UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor))
+	// Chosen by hand and priority, not by reach: at this distance nothing overlaps, so the ordinary
+	// selection rejects every point, and the flight then aims at the object's own origin regardless
+	// of which hand called it — which is exactly the "it ignores which hand I used" symptom.
+	if (UFXR_GripPoint* GripPoint = SelectGripPointForHand(Interactor->GetHandSide()))
 	{
 		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(GetHeldTransform());
 		Target = PointRelative.Inverse() * Grip;

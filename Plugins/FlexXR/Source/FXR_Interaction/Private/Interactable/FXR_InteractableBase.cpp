@@ -299,3 +299,27 @@ bool UFXR_InteractableBase::CanEditChange(const FProperty* InProperty) const
 	return true;
 }
 #endif
+
+UFXR_GripPoint* UFXR_InteractableBase::SelectGripPointForHand(EFXR_HandSide Side) const
+{
+	// Hand filter and priority only. Reach is deliberately not consulted: this exists for claims made
+	// from across the room, where no grip point overlaps anything and the proximity test that serves
+	// a normal grab would reject all of them and leave the object flying to its own origin instead.
+	UFXR_GripPoint* Best = nullptr;
+	int32 BestPriority = TNumericLimits<int32>::Min();
+
+	for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
+	{
+		UFXR_GripPoint* Point = WeakPoint.Get();
+		if (!Point || !Point->AcceptsHand(Side))
+		{
+			continue;
+		}
+		if (Point->GetPriority() > BestPriority)
+		{
+			Best = Point;
+			BestPriority = Point->GetPriority();
+		}
+	}
+	return Best;
+}
