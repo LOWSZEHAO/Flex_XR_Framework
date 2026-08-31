@@ -522,12 +522,18 @@ FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) con
 
 	// Aim the flight at the pose the object would be held in, so it arrives already seated and the
 	// handover to the ordinary hold is invisible rather than a snap at the end.
+	FTransform Target = Grip;
 	if (UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor))
 	{
 		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(GetHeldTransform());
-		return PointRelative.Inverse() * Grip;
+		Target = PointRelative.Inverse() * Grip;
 	}
-	return Grip;
+
+	// Position and rotation come from the hand; scale stays the object's own. Composing the grip's
+	// scale in would resize the object as it flew, and it would land at the wrong size — the same
+	// mistake the socket seat pose made.
+	Target.SetScale3D(GetHeldTransform().GetScale3D());
+	return Target;
 }
 
 void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
