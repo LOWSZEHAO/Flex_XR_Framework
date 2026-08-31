@@ -85,6 +85,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Highlight")
 	float GetHighlightAlpha(const UFXR_InteractableBase* Interactable) const;
 
+	/**
+	 * A hand is approaching this interactable, Alpha 0..1 by distance. Null clears that hand.
+	 *
+	 * Kept separate from Hover: hover means "you can take this", and that promise would be diluted if
+	 * an object 35 cm away counted as hovered — the far ray suppression reads it, for one.
+	 */
+	void SetProximity(EFXR_HandSide Hand, UFXR_InteractableBase* Interactable, float Alpha);
+
 	static UFXR_HighlightSubsystem* Get(const UObject* WorldContextObject);
 
 	/**
@@ -101,7 +109,10 @@ private:
 	UFUNCTION()
 	void HandleFocusChanged(UFXR_InteractableBase* Interactable, EFXR_FocusState State, EFXR_HandSide Hand);
 
-	/** Re-resolve one interactable's target state and style; the fade itself happens on tick. */
+	/** Strongest approach glow any hand is casting on this interactable. */
+	float GetProximityAlpha(const UFXR_InteractableBase* Interactable) const;
+
+	/** Re-resolve one interactable.s target state and style; the fade itself happens on tick. */
 	void Refresh(UFXR_InteractableBase* Interactable);
 
 	/** Push one interactable's current fade to its primitives. */
@@ -128,6 +139,11 @@ private:
 	// Guidance is authored state, so it is stored rather than derived. Hover and Selected are not
 	// stored at all — the focus subsystem already owns them and a second copy could drift.
 	TSet<TWeakObjectPtr<UFXR_InteractableBase>> Guided;
+
+	// What each hand is currently approaching, and how strongly. Per hand rather than a set, because
+	// only the nearest candidate glows — a cloud of dimly lit objects is the noise this design avoids.
+	TWeakObjectPtr<UFXR_InteractableBase> ProximityTarget[2];
+	float ProximityAlpha[2] = { 0.f, 0.f };
 
 	// Everything currently drawing or fading out. An entry leaves only once it has faded to nothing,
 	// which is what keeps a released highlight from cutting off mid-fade.

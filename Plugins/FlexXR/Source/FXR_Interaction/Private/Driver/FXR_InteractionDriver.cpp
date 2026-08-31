@@ -3,6 +3,8 @@
 #include "Driver/FXR_InteractionDriver.h"
 #include "Detection/FXR_InteractionSubsystem.h"
 #include "Detection/FXR_FocusSubsystem.h"
+#include "Highlight/FXR_HighlightSubsystem.h"
+#include "Settings/FXR_InteractionSettings.h"
 #include "Interactable/FXR_Grab.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Interactable/FXR_Press.h"
@@ -60,21 +62,21 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 
 	// A hand that owns something is not shopping for the next thing: holding a valve must not keep
 	// the crate behind it lit. Hover resolves only for a free hand.
+	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
+	UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
+
 	UFXR_InteractableBase* Near = nullptr;
-	if (!HeldNow)
+	if (!HeldNow && Interactor && Subsystem)
 	{
-		IFXR_Interactor* Interactor = GetActiveInteractor(Side);
-		UFXR_InteractionSubsystem* Subsystem = UFXR_InteractionSubsystem::Get(this);
-		if (Interactor && Subsystem)
-		{
-			// The same query the grab claim uses, run every frame instead of only on the rising edge —
-			// which is what makes the object that lights up provably the object you would take.
-			FVector GrabCenter;
-			float GrabRadius = 0.f;
-			Interactor->GetGrabSphere(GrabCenter, GrabRadius);
-			Near = Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side);
-		}
+		// The same query the grab claim uses, run every frame instead of only on the rising edge —
+		// which is what makes the object that lights up provably the object you would take.
+		FVector GrabCenter;
+		float GrabRadius = 0.f;
+		Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+		Near = Subsystem->FindBestCandidate(GrabCenter, GrabRadius, Side);
 	}
+
+	DriveProximity(Side, HeldNow != nullptr, Near, Interactor, Subsystem);
 
 	// Far yields to near. A hand already able to touch something must not also be pointing past it,
 	// or reaching for a valve would arm a selection on the wall behind it.
@@ -415,4 +417,44 @@ void UFXR_InteractionDriver::DriveSockets(EFXR_HandSide Side, TWeakObjectPtr<UFX
 		Best->Seat(Carried);
 		PreviewSocket = nullptr;
 	}
+}
+
+void UFXR_InteractionDriver::DriveProximity(EFXR_HandSide Side, bool bHolding, UFXR_InteractableBase* Near,
+	IFXR_Interactor* Interactor, UFXR_InteractionSubsystem* Subsystem)
+{
+	UFXR_HighlightSubsystem* Highlight = UFXR_HighlightSubsystem::Get(this);
+	if (!Highlight)
+	{
+		return;
+	}
+
+	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
+
+	// A hand that is holding something is not approaching anything, and an object already in reach
+	// is Hovered outright — the ramp only covers the stretch before that.
+	if (bHolding || Near || !Interactor || !Subsystem || !Settings || !Settings->bProximityHighlight)
+	{
+		Highlight->SetProximity(Side, nullptr, 0.f);
+		return;
+	}
+
+	FVector GrabCenter;
+	float GrabRadius = 0.f;
+	Interactor->GetGrabSphere(GrabCenter, GrabRadius);
+
+	// The same detection query, widened. Nothing new is invented for the ramp: what glows on approach
+	// is exactly what would become the candidate if the hand kept going.
+	const float Reach = GrabRadius + FMath::Max(Settings->ProximityRange, 0.f);
+	UFXR_InteractableBase* Approaching = Subsystem->FindBestCandidate(GrabCenter, Reach, Side);
+	if (!Approaching)
+	{
+		Highlight->SetProximity(Side, nullptr, 0.f);
+		return;
+	}
+
+	const float Distance = FVector::Dist(GrabCenter, Approaching->GetInteractionLocation());
+	const float Span = FMath::Max(Reach - GrabRadius, KINDA_SMALL_NUMBER);
+	const float Closeness = 1.f - FMath::Clamp((Distance - GrabRadius) / Span, 0.f, 1.f);
+
+	Highlight->SetProximity(Side, Approaching, Closeness * Settings->ProximityMaxAlpha);
 }

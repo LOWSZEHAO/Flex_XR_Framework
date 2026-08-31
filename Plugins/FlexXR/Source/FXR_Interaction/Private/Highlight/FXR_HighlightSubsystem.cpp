@@ -165,6 +165,46 @@ float UFXR_HighlightSubsystem::GetHighlightAlpha(const UFXR_InteractableBase* In
 	return Record ? Record->Alpha : 0.f;
 }
 
+float UFXR_HighlightSubsystem::GetProximityAlpha(const UFXR_InteractableBase* Interactable) const
+{
+	float Best = 0.f;
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		// Both hands can be approaching the same object; the nearer one decides.
+		if (ProximityTarget[Index].Get() == Interactable)
+		{
+			Best = FMath::Max(Best, ProximityAlpha[Index]);
+		}
+	}
+	return Best;
+}
+
+void UFXR_HighlightSubsystem::SetProximity(EFXR_HandSide Hand, UFXR_InteractableBase* Interactable, float Alpha)
+{
+	const int32 Index = (Hand == EFXR_HandSide::Left) ? 0 : 1;
+
+	UFXR_InteractableBase* Was = ProximityTarget[Index].Get();
+	const float WasAlpha = ProximityAlpha[Index];
+	if (Was == Interactable && FMath::IsNearlyEqual(WasAlpha, Alpha))
+	{
+		return; // nothing moved
+	}
+
+	ProximityTarget[Index] = Interactable;
+	ProximityAlpha[Index] = Interactable ? FMath::Clamp(Alpha, 0.f, 1.f) : 0.f;
+
+	// The object being left has to be re-resolved too, or it would hold the glow it had when the
+	// hand turned away.
+	if (Was && Was != Interactable)
+	{
+		Refresh(Was);
+	}
+	if (Interactable)
+	{
+		Refresh(Interactable);
+	}
+}
+
 int32 UFXR_HighlightSubsystem::PackStencil(EFXR_HighlightState State, float Alpha)
 {
 	int32 StateBits = 0;
@@ -234,19 +274,40 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 			: (Settings ? Settings->GetStyleFor(State) : EFXR_HighlightStyle::None);
 	}
 
-	const bool bWanted = (State != EFXR_HighlightState::None) && (Style != EFXR_HighlightStyle::None);
+	bool bWanted = (State != EFXR_HighlightState::None) && (Style != EFXR_HighlightStyle::None);
+	float Target = bWanted ? 1.f : 0.f;
+
+	// An approaching hand lights the object part-way, in the Hover style. Full strength stays
+	// reserved for actual reach: the step up is what says "you can take this now".
+	EFXR_HighlightState DrawState = State;
+	if (!bWanted)
+	{
+		const float Approach = GetProximityAlpha(Interactable);
+		if (Approach > 0.f)
+		{
+			DrawState = EFXR_HighlightState::Hover;
+			Style = Config ? Config->ResolveStyle(DrawState)
+				: (Settings ? Settings->GetStyleFor(DrawState) : EFXR_HighlightStyle::None);
+			if (Style != EFXR_HighlightStyle::None)
+			{
+				bWanted = true;
+				Target = Approach;
+			}
+		}
+	}
+
 	if (!bWanted && !Active.Contains(Interactable))
 	{
 		return; // nothing to draw, and nothing part-way through fading out
 	}
 
 	FFXR_HighlightRecord& Record = Active.FindOrAdd(Interactable);
-	Record.Target = bWanted ? 1.f : 0.f;
+	Record.Target = Target;
 	if (bWanted)
 	{
 		// State and style take effect at once; only strength eases. A hover that becomes guidance
 		// recolours immediately rather than fading down through nothing and back up.
-		Record.State = State;
+		Record.State = DrawState;
 		Record.Style = Style;
 		if (Style == EFXR_HighlightStyle::Outline)
 		{
