@@ -261,6 +261,14 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 		}
 	}
 
+	// Outside play the ghost is rebuilt each tick so it stays glued to the socket while it is dragged
+	// around the viewport, which is the whole point of showing it at author time.
+	const UWorld* World = GetWorld();
+	if (World && !World->IsGameWorld())
+	{
+		RefreshGhost();
+	}
+
 	// Ghost fades rather than blinking on: a preview that pops reads as a rendering fault.
 	if (!FMath::IsNearlyEqual(GhostAlpha, GhostTarget))
 	{
@@ -321,8 +329,9 @@ void UFXR_Socket::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
-	// Takes effect as Debug Draw is changed, rather than at the next BeginPlay.
+	// Takes effect as Debug Draw or the Ghost Actor changes, rather than at the next BeginPlay.
 	RefreshTickState();
+	RefreshGhost();
 }
 #endif
 
@@ -510,6 +519,10 @@ void UFXR_Socket::ResizeGhostPool(int32 Count)
 		Part->SetupAttachment(this);
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetCastShadow(false);
+
+		// Flagged as a visualiser so the editor keeps it out of selection, serialisation and anything
+		// that walks an actor's real components — it exists to be looked at, nothing more.
+		Part->SetIsVisualizationComponent(true);
 		Part->RegisterComponent();
 		GhostParts.Add(Part);
 	}
@@ -517,16 +530,20 @@ void UFXR_Socket::ResizeGhostPool(int32 Count)
 
 void UFXR_Socket::RefreshGhost()
 {
-	// Editor worlds get the debug shapes but no ghost: spawning transient components outside play is
-	// a reliable way to corrupt a Blueprint's component list.
 	const UWorld* World = GetWorld();
 	const bool bPlaying = World && World->IsGameWorld();
 
-	UFXR_Grab* Approaching = Preview.Get();
-	const bool bWanted = bPlaying && GhostMode != EFXR_SocketGhostMode::Off &&
-		(GhostMode == EFXR_SocketGhostMode::Always
-			? (IsInteractionEnabled() && !Socketed.IsValid())
-			: Approaching != nullptr);
+	// Outside play the ghost is an authoring aid, drawn with Debug Draw so the seat pose can be placed
+	// against the object that will actually sit there rather than by guesswork. Nothing is being
+	// carried then, so the shape comes from the Ghost Actor.
+	const bool bAuthoring = World && !bPlaying && IsDrawDebugEnabled() && !GhostActor.IsNull();
+
+	UFXR_Grab* Approaching = bPlaying ? Preview.Get() : nullptr;
+	const bool bWanted = bAuthoring ||
+		(bPlaying && GhostMode != EFXR_SocketGhostMode::Off &&
+			(GhostMode == EFXR_SocketGhostMode::Always
+				? (IsInteractionEnabled() && !Socketed.IsValid())
+				: Approaching != nullptr));
 
 	TArray<FGhostPart> Parts;
 	UMaterialInterface* GhostSource = bWanted ? GhostMaterial.LoadSynchronous() : nullptr;
