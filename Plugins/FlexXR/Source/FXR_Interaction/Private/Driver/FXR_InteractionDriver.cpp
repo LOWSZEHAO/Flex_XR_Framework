@@ -13,6 +13,7 @@
 #include "Interactor/FXR_Interactor.h"
 #include "Rig/FXR_Pawn.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -519,9 +520,16 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		// it. Absolute keeps the rig own scale out of a thickness measured in centimetres.
 		Beam->SetMobility(EComponentMobility::Movable);
 		Beam->SetAbsolute(true, true, true);
-		Beam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Beam->SetCastShadow(false);
 		Beam->SetStaticMesh(BeamMesh);
+		// Collision cleared after the mesh is assigned, not before: SetStaticMesh brings the mesh's own
+		// body setup with it, so anything set earlier is arguing with a body that does not exist yet.
+		// The beam is a picture of a trace, never a participant in one — it must not block the trace
+		// that positions it, catch a poke, or stop a thrown object in mid-air.
+		Beam->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Beam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Beam->SetGenerateOverlapEvents(false);
+		Beam->CanCharacterStepUpOn = ECB_No;
 		Beam->RegisterComponent();
 		Visual.Beam = Beam;
 
@@ -536,9 +544,12 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 			Cursor->SetupAttachment(Owner->GetRootComponent());
 			Cursor->SetMobility(EComponentMobility::Movable);
 			Cursor->SetAbsolute(true, true, true);
-			Cursor->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Cursor->SetCastShadow(false);
 			Cursor->SetStaticMesh(CursorMesh);
+			Cursor->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+			Cursor->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Cursor->SetGenerateOverlapEvents(false);
+			Cursor->CanCharacterStepUpOn = ECB_No;
 			Cursor->RegisterComponent();
 			Cursor->SetMaterial(0, Material);
 			Visual.Cursor = Cursor;
