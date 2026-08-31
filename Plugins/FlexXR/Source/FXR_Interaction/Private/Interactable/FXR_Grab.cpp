@@ -568,41 +568,27 @@ void UFXR_Grab::NotifyParkedPhysics(bool bWasSimulating)
 
 FTransform UFXR_Grab::GetHeldTransform() const
 {
-	// Whole Actor is the frame everything else is expressed in: grip offsets, the two-hand solve, the
-	// distance-grab flight and a socket's seat pose all read and write through here, so they stay
-	// consistent whichever scope is set.
-	if (GrabScope == EFXR_GrabScope::WholeActor)
-	{
-		if (const AActor* Owner = GetOwner())
-		{
-			return Owner->GetActorTransform();
-		}
-	}
-
+	// The driven mesh is the frame everything else is expressed in: grip offsets, the two-hand solve,
+	// the distance-grab flight and a socket's seat pose all read and write through here, so they stay
+	// in step with one another.
 	const UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
 	return Driven ? Driven->GetComponentTransform() : GetComponentTransform();
 }
 
 void UFXR_Grab::SetHeldTransform(const FTransform& NewTransform)
 {
-	if (GrabScope == EFXR_GrabScope::WholeActor)
+	UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
+	if (!Driven)
 	{
-		if (AActor* Owner = GetOwner())
-		{
-			Owner->SetActorTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-
-			// A component that has simulated stops following its parent by attachment even once it is
-			// kinematic again, so moving the actor leaves it behind. Parked bodies are driven from the
-			// same frame instead — which is what the solver does for everything else anyway.
-			PlaceParkedBodies(NewTransform);
-			return;
-		}
+		return;
 	}
 
-	if (UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent())
-	{
-		Driven->SetWorldTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
-	}
+	Driven->SetWorldTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Anything beneath it that simulates has to be driven too: a component that has simulated stops
+	// following its parent by attachment even once it is kinematic again, so it would be left behind
+	// and then snap back the moment simulation resumed.
+	PlaceParkedBodies(NewTransform);
 }
 
 bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
@@ -612,13 +598,9 @@ bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
 		return false;
 	}
 
-	if (GrabScope == EFXR_GrabScope::WholeActor)
-	{
-		return Component->GetOwner() == GetOwner();
-	}
-
-	// Driven Mesh takes whatever hangs beneath it too — a handle parented to the door travels with
-	// the door, which is the whole point of parenting it there.
+	// The driven mesh and whatever hangs beneath it. That is the same set physics treats as one body,
+	// so what travels with the hold is exactly what falls with it on release — a mesh parked beside
+	// the driven one rather than under it belongs to neither.
 	const USceneComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
 	return Driven && (Component == Driven || Component->IsAttachedTo(Driven));
 }

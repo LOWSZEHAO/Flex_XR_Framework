@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.10 (motion — fades, easing, proximity ramp)
+**Version:** 0.11 (object structure — what a grab moves, and what falls with it)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -154,6 +154,21 @@ Grip drive (handle) and contact drive (palm) feed the **same solver** — identi
 
 ### FXR_Press
 Poke interactions: buttons, keypads, touchscreens. Fingertip-depth driven, press travel + haptic tick + audio from the motion spec.
+
+### Object structure: what a grab actually moves
+A grab moves its **driven component** — the mesh `FXR_Grab` is attached under — and everything attached beneath it. A mesh sitting *beside* the driven one, rather than under it, moves with neither the hold nor the fall.
+
+That is one rule, not two: whatever travels with the hold is whatever physics treats as part of that body. There is deliberately no separate "grab moves this set, physics moves that set", because the two disagreeing is the bug that structure error produces.
+
+| The object is | Build it as |
+|---|---|
+| **Grabbable** — picked up, carried, dropped | One body. The simulating mesh is the **root**, other meshes attached beneath it (they weld into that body), or merged into a single mesh. |
+| **Fixed** — a machine, cabinet or panel bolted in place | Any hierarchy. Parts are driven individually by `FXR_Latch` / `FXR_Press` off their own component transforms; the actor never moves, so no body structure is needed. |
+| **A detachable part of a fixed object** | `FXR_Grab` on the part. It drives that part, and the rest of the actor stays put. |
+
+This is not a FlexXR convention — it falls out of the physics engine, and every framework lands on it. Unity's XR Interaction Toolkit *requires* a Rigidbody on a grab interactable, and a Rigidbody owns the colliders beneath it; VRExpansion ships `GrippableStaticMeshActor` so the mesh is the root by construction.
+
+**Where the trap comes from:** dragging a mesh into a level gives `AStaticMeshActor`, whose root *is* the mesh — correct for free. Creating a **Blueprint Actor** gives `DefaultSceneRoot`, a transform-only node with no body, and every mesh added lands as its sibling. The validation panel (§13, Phase 3) reports this at author time rather than leaving it to be found in a headset.
 
 ### FXR_Socket
 Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **ghost preview** appears if the object passes the filter → release in zone (or auto-snap on proximity, per setting) → detaches from hand, attaches to socket. Re-grab pulls it back out.
@@ -726,6 +741,20 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.11 — Object structure**
+- New §4 note: a grab moves its driven mesh and whatever is attached beneath it. One rule governs both the
+  carry and the fall, because that set is exactly what physics treats as one body. A `Grab Scope` enum
+  briefly existed to move the whole actor instead; it was removed. With a correctly structured object it
+  is identical to driving the driven mesh, and with a badly structured one it made things worse — the
+  object carried perfectly and then came apart on release, which reads as a physics bug rather than a
+  hierarchy error. Matching the standard (Unity requires a Rigidbody; VRExpansion roots the mesh) and
+  letting a bad hierarchy fail visibly is the better trade.
+- Driven-component resolution gained a last resort: an interactable under a bare `DefaultSceneRoot`
+  previously resolved to nothing and silently did nothing at all.
+- A hold now parks *every* simulating body it carries, not just the driven one, and re-places them on
+  release — a parked body stops following its parent by attachment, so it was snapping back to the
+  pickup point the instant simulation resumed.
 
 **v0.10 — Motion**
 - Nothing pops. Highlights fade over `Highlight Fade Time`, sockets ease objects into the seat pose, and

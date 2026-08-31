@@ -116,13 +116,6 @@ protected:
 	float ThrowVelocityScale = 1.f;
 
 	/**
-	 * What a hold moves. Whole Actor by default, because picking something up takes all of it: a mesh
-	 * that happens to sit beside the grabbed one rather than beneath it is still part of the object.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab")
-	EFXR_GrabScope GrabScope = EFXR_GrabScope::WholeActor;
-
-	/**
 	 * Let this object be pulled to the hand from across the room. Off by default: being able to yank
 	 * something you cannot reach changes how it feels, and in a training sim it can quietly delete the
 	 * physical performance the exercise is meant to teach — so it is a deliberate tick, per object.
