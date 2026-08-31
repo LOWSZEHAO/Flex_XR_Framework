@@ -41,6 +41,28 @@ enum class EFXR_HighlightStyle : uint8
 	Sweep      UMETA(DisplayName = "Sweep")
 };
 
+/**
+ * How the Outline style is drawn. Same silhouette, two entirely different costs — which is the whole
+ * reason the style is named for what it says rather than for how it is produced.
+ */
+UENUM(BlueprintType)
+enum class EFXR_HighlightTier : uint8
+{
+	/** Mesh Hull on a mobile feature level, Post Process everywhere else. */
+	Auto        UMETA(DisplayName = "Auto"),
+
+	/** Custom depth + one full-screen pass. Exact edges, constant cost, needs r.CustomDepth=3. */
+	PostProcess UMETA(DisplayName = "Post Process"),
+
+	/**
+	 * Inverted hull: the mesh drawn again, pushed along its normals with front faces masked away.
+	 * Costs a draw call per highlighted mesh instead of a full-screen pass — the right trade on a
+	 * tiler, where post-processing forces a resolve and pays for every pixel whether or not anything
+	 * is highlighted.
+	 */
+	MeshHull    UMETA(DisplayName = "Mesh Hull")
+};
+
 /** Which primitives light up when an interactable highlights. */
 UENUM(BlueprintType)
 enum class EFXR_HighlightScope : uint8

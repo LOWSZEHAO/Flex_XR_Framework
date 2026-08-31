@@ -27,6 +27,10 @@ struct FFXR_OverlayRecord
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> Instance = nullptr;
+
+	/** Parent the instance was made from — a mesh that switches between hull and overlay needs a new one. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> Source = nullptr;
 };
 
 /** One interactable's live highlight: what it should look like, and how far it has faded there. */
@@ -130,8 +134,17 @@ private:
 	 */
 	void EnsureOutlineBlendable();
 
+	/** Borrow a mesh's overlay slot for Source, remembering what was there. Null if the slot is unusable. */
+	UMaterialInstanceDynamic* EnsureOverlayInstance(UMeshComponent* Mesh, UMaterialInterface* Source);
+
 	/** Drive one mesh's overlay slot for the Inner Blink and Sweep styles. */
 	void ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config);
+
+	/**
+	 * Draw the Outline style as an inverted hull on this mesh — the Mesh Hull tier. Shares the overlay
+	 * slot with Inner Blink and Sweep, which is safe because an interactable draws one style at a time.
+	 */
+	void ApplyHull(UMeshComponent* Mesh, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config);
 
 	/** Hand the overlay slot back, restoring whatever the mesh carried before. */
 	void ClearOverlay(UMeshComponent* Mesh);
