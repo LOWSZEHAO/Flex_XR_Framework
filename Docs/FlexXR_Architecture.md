@@ -168,6 +168,8 @@ That is one rule, not two: whatever travels with the hold is whatever physics tr
 
 This is not a FlexXR convention — it falls out of the physics engine, and every framework lands on it. Unity's XR Interaction Toolkit *requires* a Rigidbody on a grab interactable, and a Rigidbody owns the colliders beneath it; VRExpansion ships `GrippableStaticMeshActor` so the mesh is the root by construction.
 
+**The symptom that is not general knowledge:** the actor's transform *is* its root component's, so a driven mesh that is not the root moves while `GetActorLocation` stays put. Blueprint logic, save/load and — worst — World Partition streaming relevancy all read that stale location, so a prop carried far enough can be streamed out while it is in your hand. It looks like a random disappearing-object bug and nobody traces it back to component hierarchy.
+
 **Where the trap comes from:** dragging a mesh into a level gives `AStaticMeshActor`, whose root *is* the mesh — correct for free. Creating a **Blueprint Actor** gives `DefaultSceneRoot`, a transform-only node with no body, and every mesh added lands as its sibling. The validation panel (§13, Phase 3) reports this at author time rather than leaving it to be found in a headset.
 
 ### FXR_Socket
