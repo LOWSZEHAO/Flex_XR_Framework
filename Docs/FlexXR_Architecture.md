@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.11 (object structure — what a grab moves, and what falls with it)
+**Version:** 0.12 (far-ray pointer — where it starts, when it shows, what it is made of)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -197,7 +197,7 @@ Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **
 Justifications: real travel + spring feel; multiple distinct use points per object (pin + handle + nozzle); per-affordance SOP validation.
 
 ### FXR_RayTarget
-**Not a laser-grab component — the "you can point at me from far away" marker.** The laser itself lives on the interactor (FXR_Core service); the focus manager controls its visibility (UI pointing, deliberate point gesture). Behavior composes with what else is on the object:
+**Not a laser-grab component — the "you can point at me from far away" marker.** The beam itself belongs to the interaction driver, not to this component or to the interactor (see *Far-ray pointer* below); RayTarget only says an object answers to one. Behavior composes with what else is on the object:
 
 | On the object | Point + pinch/trigger does |
 |---|---|
@@ -208,6 +208,50 @@ Justifications: real travel + spring feel; multiple distinct use points per obje
 **Deliberately no laser-Latch:** dragging doors/valves by ray feels cheap and destroys training fidelity (a trainee who laser-opened a valve learned nothing). Ray-select a latch object = fine; ray-drive it = a game-side custom interactable if truly wanted.
 
 **No Far Interaction Policy.** An earlier draft put distance grab behind a project-wide toggle. Dropped: the per-object checkbox already says it, and a global setting that silently changes how a specific object behaves between projects is worse than the one tick that made it so. A training sim simply leaves the box unticked, which is also the default — physical performance of every motion is what it gets for free.
+
+### Far-ray pointer *(rig-side, not per object)*
+
+The beam lives on `FXR_InteractionDriver`, because near and far interaction have to be arbitrated in one
+place: a hand that can reach something must never also point past it at the wall behind. Everything below
+is one component's detail panel, under **Far Interaction**.
+
+**Where it starts — `Left Ray` / `Right Ray` on the pawn.** Two `UFXR_RayOrigin` scene components, one per
+hand. They carry no settings, because their transform *is* the setting: drag one in the viewport and the
+beam follows. One per hand rather than per interactor — the ray should leave the same place whether that
+hand is currently a controller or a tracked hand, and two sources to keep in sync would drift apart.
+
+Their transform is read **relative to the parent and composed onto the interactor's tracked pose**, never
+used as a world transform. A tracked hand's pose comes from joint data rather than from where a component
+sits in the rig, so a world read would simply not follow the hand. Some pitch is normally wanted: a
+controller reports its pose along the grip axis, so at zero rotation the beam aims at the floor.
+
+**When it shows — `Ray Visibility`.**
+
+| Mode | Behaviour |
+|---|---|
+| **On Target** *(default)* | Only while the hand is aimed at something that will answer |
+| **Always** | Whenever the hand is free. Reads as a menu pointer; for far-UI-heavy scenes |
+| **Never** | No beam; the hover highlight carries it alone |
+
+An always-on beam says nothing and reads as a menu cursor in a scene that is not a menu. This is affordable
+because the beam never carried "you can interact with that" alone — far targets hover through the focus
+subsystem exactly like near ones, so a distant object lights up whether or not a beam is drawn. Acquisition
+stays coarse and refinement is fine: point the hand, the beam arrives, aim from there. The beam is drawn
+from the same target the driver already resolved for its own logic, so it cannot disagree with what a press
+would do, and it can never point at nothing.
+
+**What it is made of.** An opaque unlit tube. Translucent and additive both compiled clean, reported no
+errors and rendered nothing at all on the beam mesh, while a plain opaque material on the very same
+component drew immediately — and raising emissive to 60 did not bring the additive version back, so it was
+never exposure. A pointer reads as a solid emissive tube in every shipping VR title regardless. An opaque
+beam cannot fade its opacity, so **the fade is geometric**: the beam thins to nothing and the cursor scales
+with it, which on a tube this narrow reads as retracting rather than dissolving.
+
+`Ray Width` is honest centimetres — the scale comes from the mesh's own bounds, so 1.5 cm is 1.5 cm whether
+the tube was authored at radius 1 or radius 10. Colour and brightness are `RayColor` / `RayIntensity` inside
+`M_FXR_Ray`; keep intensity at or below 1, since unlit emissive above 1 clips after tonemapping and turns a
+cyan beam white. The beam carries no collision at all: it is a picture of a trace, never a participant in
+one.
 
 ### FXR_GripPoint
 "A sticker on the object: hands go here, shaped like this."
@@ -743,6 +787,32 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.12 — Far-ray pointer**
+- New §4 *Far-ray pointer*: the beam belongs to the interaction driver, not to `FXR_RayTarget` and not to the
+  interactor. Near and far have to be arbitrated in one place, or a hand that can reach something also points
+  past it.
+- `Left Ray` / `Right Ray` (`UFXR_RayOrigin`) join the pawn — the beam is aimed by dragging a component, not
+  by typing offsets. One per hand, not per interactor, and read as an offset from the tracked pose rather
+  than as a world transform: a tracked hand's pose comes from joint data, so a world read would not follow
+  the hand. A plain SceneComponent rather than an ArrowComponent, which would have drawn its own arrow for
+  free — Epic guards those behind `WITH_EDITORONLY_DATA`, so the offset would exist in the editor and vanish
+  from a packaged build.
+- `Ray Visibility` (Never / On Target / Always) replaces a `Show Ray` bool, defaulting to **On Target**. An
+  always-on beam says nothing and reads as a menu cursor. Affordable because far targets already hover
+  through the focus subsystem, so the beam was duplicating information the highlight already carried.
+- **The beam is opaque.** Translucent and additive both compiled clean and rendered nothing on the beam mesh
+  while opaque drew immediately; emissive at 60 did not recover the additive version, so it was never
+  exposure. The fade moved into the geometry — the beam thins to nothing instead of fading its opacity.
+- Emissive intensity capped at 1: above that, unlit emissive clips after tonemapping and the cyan beam turns
+  white. The same trap the highlight overlay hit at v0.8.
+- Distance grab now selects the grip point **for the hand that claimed it**. It reused the near-grab
+  selection, which requires the point inside the hand's grab sphere — never true across a room, so no point
+  was returned and the object flew to its own origin regardless of which hand had pointed.
+- `Tools/regen_fxr_materials.py` deletes and recreates rather than clearing in place:
+  `delete_all_material_expressions` leaves nodes behind, so every rebuild stacked a fresh graph on the
+  survivors while the material's inputs stayed wired to the stale chain. Materials grew duplicate
+  parameters and edits appeared to do nothing. Safe only because every reference to these assets is now soft.
 
 **v0.11 — Object structure**
 - New §4 note: a grab moves its driven mesh and whatever is attached beneath it. One rule governs both the
