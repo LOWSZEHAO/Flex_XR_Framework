@@ -8,6 +8,7 @@
 #include "FXR_InteractionSettings.generated.h"
 
 class UMaterialInterface;
+class UFXR_ScoringPolicy;
 
 /**
  * UFXR_InteractionSettings — project-wide interaction defaults, under Project Settings → FlexXR.
@@ -29,6 +30,16 @@ public:
 	UFXR_InteractionSettings();
 
 	virtual FName GetCategoryName() const override { return TEXT("FlexXR"); }
+
+	/**
+	 * Which of several in-reach interactables a hand takes. Left unset, the nearest wins.
+	 *
+	 * The one seam in narrow-phase detection (ADR-010): subclass UFXR_ScoringPolicy to weight by
+	 * gaze, approach angle, or a game's own notion of "best". It ranks; it cannot veto, because
+	 * eligibility already belongs to the interactable.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Detection")
+	TSoftClassPtr<UFXR_ScoringPolicy> ScoringPolicy;
 
 	/** The style each semantic state is drawn with. Editing this restyles every interactable in the project. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight")

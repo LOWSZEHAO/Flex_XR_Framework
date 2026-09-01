@@ -8,6 +8,7 @@
 #include "FXR_InteractionSubsystem.generated.h"
 
 class UFXR_InteractableBase;
+class UFXR_ScoringPolicy;
 
 /**
  * UFXR_InteractionSubsystem — the registry-based detection service (ADR-002, design 5.4).
@@ -45,6 +46,17 @@ public:
 	static UFXR_InteractionSubsystem* Get(const UObject* WorldContextObject);
 
 private:
+	/**
+	 * The scoring policy, resolved once from project settings. Held rather than looked up per call:
+	 * detection runs for both hands every frame and must not allocate or hit the asset registry there.
+	 */
+	const UFXR_ScoringPolicy* GetScoringPolicy() const;
+
+	UPROPERTY(Transient)
+	mutable TObjectPtr<UFXR_ScoringPolicy> ScoringPolicy;
+
+	mutable bool bScoringPolicyResolved = false;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UFXR_InteractableBase>> Registered;
 };
