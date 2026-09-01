@@ -7,6 +7,8 @@
 #   M_FXR_HighlightOverlay  Inner Blink / Sweep, drawn per mesh through the overlay slot
 #   M_FXR_Ghost             FXR_Socket placement preview
 #   M_FXR_Ray               far-interaction pointer beam
+#   M_FXR_OutlineHull       Mesh Hull tier of the outline (inverted hull, for Quest)
+#   M_FXR_Arrow             guidance arrow
 #
 # Run from the editor console:  py "G:/Flex_XR_Framework/Tools/regen_fxr_materials.py"
 
@@ -489,17 +491,57 @@ def build_outline_hull():
     finish(mat, full)
 
 
+# ---------------------------------------------------------------------------------------------
+# M_FXR_Arrow
+#
+# The guidance arrow. Opaque unlit for the same reason the ray is: translucent and additive both
+# compiled clean and rendered nothing on a plugin mesh, and the fade is geometric anyway — the
+# arrow grows in rather than dissolving.
+#
+# Colour is a parameter rather than a constant because the component drives it from the Guidance
+# state colour, so the arrow and the highlight it leads to are never two different vocabularies.
+# ---------------------------------------------------------------------------------------------
+def build_arrow():
+    mat, full = new_material('M_FXR_Arrow',
+                             blend=unreal.BlendMode.BLEND_OPAQUE,
+                             shading=unreal.MaterialShadingModel.MSM_UNLIT,
+                             two_sided=True)
+
+    colour = vector(mat, 'ArrowColor', 1.0, 0.75, 0.15, -900, -300)
+    rgb = mask(mat, colour, '', -650, -300, True, 'arrow colour mask')
+    intensity = scalar(mat, 'ArrowIntensity', 1.0, -900, -140)
+
+    emissive = node(mat, unreal.MaterialExpressionMultiply, -420, -260)
+    link(rgb, '', emissive, 'A', 'arrow rgb->emissive')
+    link(intensity, '', emissive, 'B', 'arrow intensity->emissive')
+
+    if not mel.connect_material_property(emissive, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR):
+        fails.append('arrow->EmissiveColor')
+    finish(mat, full)
+
+
 # Each is independent, so one failure still leaves the others rebuilt and reports what broke
 # rather than stopping halfway with no explanation.
+#
+# Reported through unreal.log_warning as well as print, because print goes nowhere a commandlet
+# records: run headlessly, this script announced "executed successfully" while silently rebuilding
+# none of the materials that already existed. Which is also the caveat below.
+#
+# **Run this from an editor console, not unattended.** Deleting an existing asset needs a
+# confirmation the commandlet cannot give, so create_asset then refuses the name and every material
+# that already exists is left untouched. New ones are still created, which is exactly the sort of
+# half-success that looks like a pass.
+
 for label, builder in (('M_FXR_Outline', build_outline),
                        ('M_FXR_HighlightOverlay', build_overlay),
                        ('M_FXR_Ghost', build_ghost),
                        ('M_FXR_Ray', build_ray),
-                       ('M_FXR_OutlineHull', build_outline_hull)):
+                       ('M_FXR_OutlineHull', build_outline_hull),
+                       ('M_FXR_Arrow', build_arrow)):
     try:
         builder()
-        print('FXR_MATERIAL %s: rebuilt' % label)
+        unreal.log_warning('FXR_MATERIAL %s: rebuilt' % label)
     except Exception as error:
         fails.append('%s raised %s' % (label, error))
 
-print('FXR_MATERIALS: %s' % ('OK' if not fails else 'FAILED %s' % fails))
+unreal.log_warning('FXR_MATERIALS: %s' % ('OK' if not fails else 'FAILED %s' % fails))
