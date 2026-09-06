@@ -62,7 +62,18 @@ public:
 	bool IsRail() const { return RailLength > KINDA_SMALL_NUMBER; }
 
 	/** Rail length (cm) along the component's local X, centred on the component. 0 = point grip. */
-	float GetRailLength() const { return RailLength; }
+	/**
+	 * Rail length in world centimetres — the authored length times this component's world scale.
+	 *
+	 * Scaled, unlike the activation radius, because the two answer different questions. The radius is
+	 * hand ergonomics: a hand is a hand, so 8 cm of grab tolerance stays 8 cm however large the object
+	 * is, and shrinking a part must not make it harder to grab. The rail is *geometry* — how far along
+	 * this object a hand may slide — so scaling the object has to scale it too, or the hand slides off
+	 * the end of the mesh it is supposedly holding.
+	 *
+	 * Read live rather than cached, so rescaling the mesh takes effect without re-adding anything.
+	 */
+	float GetRailLength() const { return RailLength * FMath::Abs(GetComponentScale().X); }
 
 	/**
 	 * Where on this grip a hand at WorldLocation lands: the nearest point along the rail, or simply
