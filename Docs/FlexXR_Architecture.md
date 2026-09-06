@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.13 (the Outline style gets its second implementation)
+**Version:** 0.14 (one motion spec, enforced rather than written down)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -67,7 +67,7 @@ User-facing components (§4), the internal systems powering them (§5), the dete
 
 ### 3.3 FXR_UI — where the premium feel lives
 - Spatial UI kit: panels, buttons, sliders, keypads (auto ray-targetable).
-- **One motion-design spec** (durations, easing, spatial-audio ticks, micro-haptics) enforced framework-wide.
+- **One motion-design spec** — see below. It lives in **FXR_Core**, not here, for dependency reasons.
 - Diegetic guidance primitives: ghost-hand demonstrations, directional arrows (consumed by FXR_Training, usable by games).
 
 ### 3.4 FXR_Training — the SOP layer (optional)
@@ -580,6 +580,36 @@ locomotion. Checked against interactor state each frame; no locomotion input is 
 
 ---
 
+### 5.9 Motion design — `UFXR_MotionSettings`
+
+**A document is not enforced, so the spec is settings the components read.** The framework proved the
+point: highlights faded over 0.15 s, the far-ray beam over 0.12, the guidance arrow over 0.20 — three
+numbers nobody chose against each other, each picked in isolation by whoever wrote that system. They
+accumulated. Written down in a doc, the fourth system would have accumulated too.
+
+| Setting | Governs |
+|---|---|
+| `Fade Duration` *(0.15 s)* | Highlights, the socket ghost, the far-ray beam, the guidance arrow |
+| `FFXR_Motion::EaseFade` | `SmoothStep`, so an edge swells in rather than ramping linearly |
+
+**It lives in `FXR_Core`, not `FXR_UI` where this document originally filed it.** `FXR_Interaction`,
+`FXR_UI` and `FXR_Locomotion` all need these values, and Core is the only module beneath all three.
+Motion is a vocabulary, and vocabulary belongs at the bottom.
+
+**Deliberately out of scope**, because sharing a number is not the same as sharing a meaning:
+
+- **Travel** — a socket seating an object (0.25 s), a distance grab crossing a room (0.3 s). These
+  cover a distance; they are not appearances, and one duration would be wrong for both.
+- **Teleport fade** — comfort, tuned per project and sometimes per player. It stays on
+  `FXR_Locomotion` where a designer goes looking for it.
+- **Haptics** — one call site today. A spec governing a single caller is ceremony; it moves here when
+  there is a second one to disagree with it.
+
+The per-component fade properties are **gone**, not defaulted — `Ray Fade Time`, `Ghost Fade Time`,
+`Highlight Fade Time` and the arrow's own. A per-object override would have re-created the drift the
+setting exists to remove, and "these two things fade differently" is a change to the spec, not to one
+component.
+
 ## 6. Hand Pose Authoring — three tiers of effort
 
 | Tier | Workflow | Time |
@@ -804,6 +834,26 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.14 — Motion design**
+- New §5.9 and `UFXR_MotionSettings`: the motion spec is settings the components read, not a document
+  they are meant to honour. Fades were 0.12 / 0.15 / 0.20 across the beam, the highlight and the arrow —
+  three numbers nobody chose against each other. One `Fade Duration` now governs highlights, the socket
+  ghost, the beam and the arrow, and `FFXR_Motion::EaseFade` gives them one curve.
+- **It lives in `FXR_Core`, not `FXR_UI` where §3.3 filed it.** `FXR_Interaction`, `FXR_UI` and
+  `FXR_Locomotion` all read it, and Core is the only module beneath all three.
+- Per-component fade properties are removed rather than defaulted. An override would re-create the drift
+  the setting exists to remove.
+- Travel (socket seat, distance-grab flight), the teleport comfort fade and haptics are deliberately out
+  of scope, for reasons recorded in §5.9.
+- A grab no longer writes scale. A grip point is attached beneath the mesh, so it inherits the mesh's
+  scale, and `GripPose.GetRelativeTransform(Held)` divides that scale by itself — leaving a unit-scale
+  offset that overwrote whatever the object was authored at. A cube built at 0.2 became a 1.0 cube on
+  pickup. Fixed once in `SetHeldTransform`, where snap, smooth, two-hand, the flight and a socket's seat
+  all land.
+- A grip point's rail length now scales with the object; its activation radius still does not. The radius
+  is hand ergonomics — a hand is a hand — while the rail is geometry, so a rifle scaled to a fifth kept a
+  full-length foregrip and the hand slid off the mesh.
 
 **v0.13 — Highlight tiers**
 - The Outline style gains its **Mesh Hull** implementation, which §4 has promised since v0.2. The mesh is

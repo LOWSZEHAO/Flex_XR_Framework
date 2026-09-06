@@ -73,10 +73,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.1", ClampMax = "20.0", Units = "cm", EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
 	float RayWidth = 1.5f;
 
-	/** How long the beam takes to fade in or out, matching the highlight so nothing pops. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s", EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))
-	float RayFadeTime = 0.12f;
-
 	//~ Ship with the plugin, so a bare driver draws. Soft references: a hard default roots the asset
 	//~ through this CDO, which makes it unrebuildable from tooling.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction", meta = (EditCondition = "RayVisibility != EFXR_RayVisibility::Never"))

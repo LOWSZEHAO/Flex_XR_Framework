@@ -5,6 +5,7 @@
 #include "Detection/FXR_FocusSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "Settings/FXR_InteractionSettings.h"
+#include "Settings/FXR_MotionSettings.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/MeshComponent.h"
@@ -74,7 +75,7 @@ void UFXR_HighlightSubsystem::Tick(float DeltaTime)
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Highlight_Tick);
 
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
-	const float FadeTime = Settings ? FMath::Max(Settings->HighlightFadeTime, 0.f) : 0.15f;
+	const float FadeTime = UFXR_MotionSettings::GetFadeDuration();
 	const float Step = (FadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / FadeTime) : 1.f;
 
 	TArray<TWeakObjectPtr<UFXR_InteractableBase>> Finished;
@@ -330,7 +331,7 @@ void UFXR_HighlightSubsystem::Apply(UFXR_InteractableBase* Interactable, const F
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
 
 	// Eased as well as timed, so the edge swells in rather than ramping linearly.
-	const float Eased = FMath::SmoothStep(0.f, 1.f, Record.Alpha);
+	const float Eased = FFXR_Motion::EaseFade(Record.Alpha);
 
 	// One style, two implementations. Which one is a rendering decision, so it is resolved here and
 	// never leaks into the state->style map that projects and training code actually read.
