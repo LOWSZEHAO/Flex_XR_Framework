@@ -168,10 +168,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
 	TSoftObjectPtr<UMaterialInterface> GhostMaterial;
 
-	/** How long the ghost takes to fade in or out. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket|Preview", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s", EditCondition = "GhostMode != EFXR_SocketGhostMode::Off"))
-	float GhostFadeTime = 0.15f;
-
 private:
 	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
 	FTransform GetSeatTransform(const UFXR_Grab* Object) const;

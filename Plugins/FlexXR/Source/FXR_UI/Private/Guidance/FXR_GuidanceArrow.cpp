@@ -2,6 +2,7 @@
 
 #include "Guidance/FXR_GuidanceArrow.h"
 #include "Settings/FXR_InteractionSettings.h"
+#include "Settings/FXR_MotionSettings.h"
 #include "Types/FXR_HighlightTypes.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -120,7 +121,7 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		Anchor = CameraLocation + YawOnly.RotateVector(FVector(Distance, 0.f, 0.f)) + FVector(0.f, 0.f, HeightOffset);
 	}
 
-	const float Step = (FadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / FadeTime) : 1.f;
+	const float Step = FFXR_Motion::FadeStep(DeltaTime, UFXR_MotionSettings::GetFadeDuration());
 	Alpha = FMath::FInterpConstantTo(Alpha, bWanted ? 1.f : 0.f, 1.f, Step);
 
 	if (Alpha <= KINDA_SMALL_NUMBER)
@@ -192,7 +193,7 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 
 	// The fade is geometric — the arrow grows in rather than dissolving, which an opaque unlit
 	// material cannot do anyway, and which reads as arriving rather than materialising.
-	const float Eased = FMath::SmoothStep(0.f, 1.f, Alpha);
+	const float Eased = FFXR_Motion::EaseFade(Alpha);
 	const float Length = (ArrowSize * Eased) / MeshLength;
 	const float Girth = (ArrowSize * 0.55f * Eased) / MeshGirth;
 

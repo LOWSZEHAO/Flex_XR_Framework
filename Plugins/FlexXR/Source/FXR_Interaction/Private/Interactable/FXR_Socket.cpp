@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Low Sze Hao. All rights reserved.
 
 #include "Interactable/FXR_Socket.h"
+#include "Settings/FXR_MotionSettings.h"
 #include "Interactable/FXR_Grab.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
@@ -272,7 +273,7 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 	// Ghost fades rather than blinking on: a preview that pops reads as a rendering fault.
 	if (!FMath::IsNearlyEqual(GhostAlpha, GhostTarget))
 	{
-		const float Step = DeltaTime / FMath::Max(GhostFadeTime, KINDA_SMALL_NUMBER);
+		const float Step = FFXR_Motion::FadeStep(DeltaTime, UFXR_MotionSettings::GetFadeDuration());
 		GhostAlpha = FMath::FInterpConstantTo(GhostAlpha, GhostTarget, 1.f, Step);
 		ApplyGhostAlpha();
 	}
@@ -295,7 +296,7 @@ void UFXR_Socket::ApplyGhostAlpha()
 	// each mesh arriving on its own.
 	if (GhostMID)
 	{
-		GhostMID->SetScalarParameterValue(TEXT("GhostOpacity"), FMath::SmoothStep(0.f, 1.f, GhostAlpha));
+		GhostMID->SetScalarParameterValue(TEXT("GhostOpacity"), FFXR_Motion::EaseFade(GhostAlpha));
 	}
 
 	// Hidden outright at zero so a fully faded ghost costs no draw calls.

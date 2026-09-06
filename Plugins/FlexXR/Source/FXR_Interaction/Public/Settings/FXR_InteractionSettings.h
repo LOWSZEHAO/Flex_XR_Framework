@@ -62,14 +62,6 @@ public:
 	float HighlightIntensity = 1.f;
 
 	/**
-	 * How long a highlight takes to fade in or out. Nothing pops: an outline that appears at full
-	 * strength on one frame and vanishes the next reads as a flicker, and in a headset the hand is
-	 * never quite still on the edge of a hover.
-	 */
-	UPROPERTY(Config, EditAnywhere, Category = "Highlight", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s"))
-	float HighlightFadeTime = 0.15f;
-
-	/**
 	 * Interactables begin to glow as a hand approaches and reach full strength at grab range.
 	 *
 	 * The alternative — every interactable lit all the time — reads as a tutorial level rather than a

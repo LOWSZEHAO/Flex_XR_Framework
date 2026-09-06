@@ -80,10 +80,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.0", Units = "cm"))
 	float ArriveRadius = 120.f;
 
-	/** How long the arrow takes to fade in or out, matching the highlight so nothing pops. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.0", ClampMax = "1.0", Units = "s"))
-	float FadeTime = 0.2f;
-
 	//~ Ship with the plugin so a bare component draws. Soft: a hard default roots the asset through
 	//~ this CDO, which makes it unrebuildable from tooling.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")

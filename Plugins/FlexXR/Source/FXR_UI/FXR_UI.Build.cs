@@ -14,6 +14,9 @@ public class FXR_UI : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			// Directly references UFXR_MotionSettings and FFXR_Motion. A transitive public dep through
+			// FXR_Interaction gives header access but still fails to link.
+			"FXR_Core",
 			"FXR_Interaction",
 			"UMG"
 		});

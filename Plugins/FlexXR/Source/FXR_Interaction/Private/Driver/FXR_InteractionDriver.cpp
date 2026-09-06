@@ -11,6 +11,7 @@
 #include "Interactable/FXR_RayTarget.h"
 #include "Interactable/FXR_Socket.h"
 #include "Interactor/FXR_Interactor.h"
+#include "Settings/FXR_MotionSettings.h"
 #include "Rig/FXR_Pawn.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
@@ -486,7 +487,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		(RayVisibility == EFXR_RayVisibility::OnTarget && FarTarget != nullptr);
 	const bool bWanted = bHasReason && Interactor && !bBusyNear;
 
-	const float Step = (RayFadeTime > KINDA_SMALL_NUMBER) ? (DeltaTime / RayFadeTime) : 1.f;
+	const float Step = FFXR_Motion::FadeStep(DeltaTime, UFXR_MotionSettings::GetFadeDuration());
 	Visual.Alpha = FMath::FInterpConstantTo(Visual.Alpha, bWanted ? 1.f : 0.f, 1.f, Step);
 
 	if (Visual.Alpha <= KINDA_SMALL_NUMBER)
@@ -578,7 +579,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		// The fade is geometric: an opaque beam cannot fade its opacity, so it thins to nothing
 		// instead. On a tube this narrow that reads as the beam retracting rather than dissolving,
 		// which is the better motion anyway — nothing pops on or off.
-		const float Eased = FMath::SmoothStep(0.f, 1.f, Visual.Alpha);
+		const float Eased = FFXR_Motion::EaseFade(Visual.Alpha);
 		const float Thickness = (RayWidth * 0.5f * Eased) / MeshRadius;
 
 		Beam->SetWorldLocationAndRotation(Origin, Direction.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
@@ -586,7 +587,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		Beam->SetVisibility(true);
 	}
 
-	const float CursorEased = FMath::SmoothStep(0.f, 1.f, Visual.Alpha);
+	const float CursorEased = FFXR_Motion::EaseFade(Visual.Alpha);
 	if (UStaticMeshComponent* Cursor = Visual.Cursor.Get())
 	{
 		// Only on something worth pointing at: the beam says where you are aiming, the cursor says

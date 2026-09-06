@@ -19,7 +19,9 @@ public class FXR_Core : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"HeadMountedDisplay",
-			"XRBase"
+			"XRBase",
+			// UFXR_MotionSettings derives from UDeveloperSettings, whose UCLASS lives here.
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
