@@ -592,12 +592,23 @@ void UFXR_Grab::SetHeldTransform(const FTransform& NewTransform)
 		return;
 	}
 
-	Driven->SetWorldTransform(NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	// Scale is never written by a hold. Grip offsets are composed transforms, and a snapped grip
+	// divides the object's scale by its own — the grip point is attached beneath the mesh, so it
+	// inherits it — leaving an offset of scale 1 that then overwrites whatever the mesh was authored
+	// at. A cube built at 0.2 became a 1.0 cube the instant it was picked up.
+	//
+	// Fixed here rather than in each composition, because every path lands here: snap, smooth,
+	// two-hand, the distance-grab flight and a socket's seat. A grab moves and rotates. It resizes
+	// nothing.
+	FTransform Placed = NewTransform;
+	Placed.SetScale3D(Driven->GetComponentScale());
+
+	Driven->SetWorldTransform(Placed, false, nullptr, ETeleportType::TeleportPhysics);
 
 	// Anything beneath it that simulates has to be driven too: a component that has simulated stops
 	// following its parent by attachment even once it is kinematic again, so it would be left behind
 	// and then snap back the moment simulation resumed.
-	PlaceParkedBodies(NewTransform);
+	PlaceParkedBodies(Placed);
 }
 
 bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
