@@ -523,7 +523,14 @@ void UFXR_Socket::ResizeGhostPool(int32 Count)
 
 		// Flagged as a visualiser so the editor keeps it out of selection, serialisation and anything
 		// that walks an actor's real components — it exists to be looked at, nothing more.
+		//
+		// Editor-only, and guarded: the flag it sets only exists under WITH_EDITORONLY_DATA, so an
+		// unguarded call compiles happily against the editor and breaks the Android build. Nothing is
+		// lost at runtime — selection and serialisation are editor concerns, and the part is already
+		// transient.
+#if WITH_EDITOR
 		Part->SetIsVisualizationComponent(true);
+#endif
 		Part->RegisterComponent();
 		GhostParts.Add(Part);
 	}
