@@ -1,6 +1,6 @@
 # FlexXR — Project Status & Handoff
 
-**Last updated:** 2026-10-05 · **Last active development:** 2026-09-06
+**Last updated:** 2026-10-08 · **Last active development:** 2026-10-08
 **Current branch:** `phase-3-ui-presentation` · **Architecture doc version:** 0.14
 
 This document is the single place to find *where the project actually is*. The architecture
@@ -141,10 +141,11 @@ not simply widen the enum. Locomotion modes are closed by ADR-005 and need a sup
 
 ---
 
-## 6. Quest smoke test — half complete, resume here
+## 6. Quest smoke test — on device, needs to be worn
 
 The standing rule is that a Quest build closes every phase from 2 onward. It had never been run,
-because the project carried **no Android configuration at all**. That is now fixed.
+because the project carried **no Android configuration at all**. That is now fixed, and the build is
+installed on the headset.
 
 **What is proven:**
 - ✅ Android toolchain present (SDK, NDK 27.2, JDK, `adb`).
@@ -153,16 +154,39 @@ because the project carried **no Android configuration at all**. That is now fix
   device never uses.
 - ✅ **The whole framework compiles for arm64.** First time ever.
 - ✅ **Cooks and packages end to end** — a 118 MB APK at `Binaries/Android/FlexXR-arm64.apk`.
+- ✅ **Installed and launches on a Quest 3** (Android 14 / SDK 34, 2026-10-08). The app starts,
+  mounts its OBB, reports `Vulkan version: 1.1.0` and `OpenXR_APL Found OpenXR Oculus Mobile mode`,
+  and logs no errors.
 
-**What is not done:** the install. It failed with `device not found` — the headset dropped off USB
-during the ~4 minute build. Nothing is wrong with the project.
+**What is not done:** nobody has worn it. The app is suspended by the proximity sensor the moment it
+launches with the headset off a head — `onPause → onStop → App in background`, with
+`Oculus: Ignoring APP_CMD_PAUSE command before APP_CMD_INIT_WINDOW`, i.e. the XR session never
+starts. That is the device behaving normally, not a fault. Put the headset on and launch **FlexXR**
+from Unknown Sources in the library.
 
-**To resume:** reconnect the Quest, confirm `adb devices` lists it, then install the existing APK —
-no rebuild needed:
+### Installing the build — the APK alone is not enough
+
+The package is split: a 124 MB APK and a **78 MB OBB** holding the cooked content. `adb install` by
+itself gives you an app with no content. The full sequence (paths relative to `Binaries/Android`):
 
 ```
-adb install -r Binaries/Android/FlexXR-arm64.apk
+adb install FlexXR-arm64.apk
+adb shell rm -r /sdcard/UnrealGame/FlexXR
+adb shell rm -r /sdcard/Android/obb/com.LowSzeHao.FlexXR
+"C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/DotNET/Android/UnrealAndroidFileTool/win-x64/UnrealAndroidFileTool.exe" ^
+    -p com.LowSzeHao.FlexXR -k 951BD0864FB0127E76F8C7B2C85A6672 push main.1.com.LowSzeHao.FlexXR.obb "^mainobb"
 ```
+
+UE generates `Install_FlexXR-arm64.bat` to do exactly this, but it invokes the file tool as
+`.\win-x64\UnrealAndroidFileTool.exe` — **a folder that is not deployed next to the APK**, so the bat
+fails at the OBB step. Either copy the engine's `win-x64` folder in beside the APK or call the tool
+by absolute path as above. The `-k` key is per-package and is printed in the generated bat.
+
+Under Git Bash, prefix adb shell commands with `MSYS_NO_PATHCONV=1` or a device path like `/sdcard/...`
+is rewritten into a Windows path and the command fails on a nonsense directory.
+
+**A rebuild is only needed when source or content is newer than the APK.** Compare timestamps before
+assuming — as of 2026-10-08 the installed APK still matches the tree.
 
 **The first Android compile immediately found a real portability bug** the editor could never
 surface: `UFXR_Socket` called `SetIsVisualizationComponent`, which only exists under
@@ -231,10 +255,12 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Finish the Quest smoke test** — reconnect, `adb install`, launch, confirm OpenXR comes up and
-   interaction works on device. Highest value: it closes standing debt and exercises the Mesh Hull
-   tier for the first time.
-2. **Test the guidance arrow** — it has never been seen rendering.
+1. **Wear the Quest and run the installed build** — the APK and its OBB are on the headset and the
+   app launches cleanly; only the in-headset pass is left. Confirm the OpenXR session comes up, hands
+   or controllers track, grab / press / latch behave, and the far ray appears on a `FXR_RayTarget`.
+   This closes standing debt and exercises the **Mesh Hull** highlight tier for the first time. See §6.
+2. **Test the guidance arrow** — it has never been seen rendering. `BP_FXR_Pawn` already carries the
+   component; drive it from PIE with `Point To Component` against a test interactable.
 3. **Close Phase 3** — PR into `main`, tag `v0.4-ui`.
 4. **Phase 4 — `FXR_Training`** — the SOP step graph (ADR-004) and the fire-safety demo. Build the
    validation panel and spatial UI kit *inside* this phase, where a real consumer defines what they
