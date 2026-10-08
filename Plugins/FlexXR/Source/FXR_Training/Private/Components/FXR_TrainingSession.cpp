@@ -221,10 +221,11 @@ void UFXR_TrainingSession::StartSession()
 
 	Runner.OnFinished = [this]()
 	{
+		// Built before the locks come off, so the report reflects the run and not the cleanup.
+		const FFXR_SessionReport Report = BuildReport();
 		ReleaseAll();
-		OnSessionFinished.Broadcast();
+		OnSessionFinished.Broadcast(Report);
 	};
-
 	Runner.Start(MoveTemp(Compiled), EntryIndex, Mode);
 	LockAllGatedSteps();
 
@@ -260,4 +261,73 @@ void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_TrainingSession_HandleBusEvent);
 	Runner.HandleEvent(Event);
+}
+
+FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
+{
+	FFXR_SessionReport Report;
+	Report.GraphName = Graph ? Graph->GetFName() : NAME_None;
+	Report.Mode = Runner.GetMode();
+	Report.bReachedEnd = Runner.ReachedEnd();
+	Report.DurationSeconds = Runner.GetElapsedSeconds();
+	Report.Mistakes = Runner.GetMistakes();
+
+	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
+	Report.StepsTotal = Steps.Num();
+	Report.Steps.Reserve(Steps.Num());
+
+	for (int32 Index = 0; Index < Steps.Num(); ++Index)
+	{
+		FFXR_StepRecord& Record = Report.Steps.AddDefaulted_GetRef();
+		Record.StepId = Steps[Index].StepId;
+		Record.Status = Runner.GetStatus(Index);
+		Record.OpenedAtSeconds = Runner.GetStepOpenedAt(Index);
+		Record.ClosedAtSeconds = Runner.GetStepClosedAt(Index);
+		Record.HintsUsed = Runner.GetStepHintLevel(Index);
+		Record.MistakeCount = Runner.GetStepMistakeCount(Index);
+
+		if (Record.OpenedAtSeconds >= 0.f && Record.ClosedAtSeconds >= 0.f)
+		{
+			Record.DurationSeconds = Record.ClosedAtSeconds - Record.OpenedAtSeconds;
+		}
+
+		// The label lives with the authoring, not the runtime, so it is read back out here.
+		if (Graph)
+		{
+			if (const FFXR_StepDefinition* Authored = Graph->Steps.FindByPredicate(
+				[&Record](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == Record.StepId; }))
+			{
+				Record.DisplayName = Authored->DisplayName;
+			}
+		}
+
+		if (Record.Status == EFXR_StepStatus::Complete)
+		{
+			++Report.StepsCompleted;
+		}
+
+		Report.HintsUsed += Record.HintsUsed;
+	}
+
+	float Score = Scoring.StartingScore;
+	for (const FFXR_Mistake& Mistake : Report.Mistakes)
+	{
+		switch (Mistake.Kind)
+		{
+		case EFXR_MistakeKind::WrongAction:
+			Score -= Scoring.WrongAction;
+			break;
+		case EFXR_MistakeKind::OutOfOrder:
+			Score -= Scoring.OutOfOrder;
+			break;
+		case EFXR_MistakeKind::Timeout:
+			Score -= Scoring.Timeout;
+			break;
+		}
+	}
+
+	Score -= Scoring.PerHint * static_cast<float>(Report.HintsUsed);
+	Report.Score = FMath::Max(0.f, Score);
+
+	return Report;
 }
