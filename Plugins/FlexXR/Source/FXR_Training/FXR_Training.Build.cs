@@ -15,6 +15,8 @@ public class FXR_Training : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"FXR_Core",
+			"FXR_Interaction",
 			"FXR_UI"
 		});
 
