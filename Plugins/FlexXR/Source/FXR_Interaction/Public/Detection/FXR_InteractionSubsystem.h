@@ -42,6 +42,16 @@ public:
 	/** All registered interactables — for driver-side passes (pokes). Broad-phase culling is the caller's job until the spatial hash lands. */
 	const TArray<TObjectPtr<UFXR_InteractableBase>>& GetRegistered() const { return Registered; }
 
+	/**
+	 * The registered interactable carrying this Interaction Id, or null. Linear, and meant to be:
+	 * callers resolve a step's target when that step opens, not every frame, and the registry is
+	 * the only place that already knows every interactable in the world.
+	 *
+	 * Exists for FXR_Training, which needs to turn the id a step is authored against into the
+	 * thing to highlight and, for an opt-in hard-lock, the thing to enable.
+	 */
+	UFXR_InteractableBase* FindByInteractionId(FName InteractionId) const;
+
 	/** Resolve the subsystem from any world context object (may return null). */
 	static UFXR_InteractionSubsystem* Get(const UObject* WorldContextObject);
 
