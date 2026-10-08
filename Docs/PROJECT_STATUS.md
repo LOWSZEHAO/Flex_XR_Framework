@@ -1,7 +1,7 @@
 # FlexXR - Project Status & Handoff
 
 **Last updated:** 2026-10-09 · **Last active development:** 2026-10-09
-**Current branch:** `phase-3-ui-presentation` · **Architecture doc version:** 0.14
+**Current branch:** `phase-4-training` · **Architecture doc version:** 0.14
 
 This document is the single place to find *where the project actually is*. The architecture
 document says what FlexXR is and why; this says what is built, what is half-built, what was
@@ -34,11 +34,11 @@ only observes it; games simply never load it. That separation is enforced mechan
 
 | Phase | State | Tag |
 |---|---|---|
-| 1 - `FXR_Core` | ✅ Complete | pending `v0.1-core` |
+| 1 - `FXR_Core` | ✅ Complete | `v0.1-core` |
 | 2 - Interaction core | ✅ Complete, **fully verified in-headset** | `v0.2-interaction` |
 | 2.5 - `FXR_Locomotion` | ✅ Complete, **fully verified in-headset** | `v0.3.1-locomotion` |
-| **3 - `FXR_UI` + presentation** | 🔶 **In progress - current work** | - |
-| 4 - `FXR_Training` + SOP demo | ⬜ Not started | - |
+| 3 - `FXR_UI` + presentation | ✅ Complete, verified in-headset | `v0.4-ui` |
+| **4 - `FXR_Training` + SOP demo** | 🔶 **In progress - current work** | - |
 | 5 - Optimization + Quest standalone | ⬜ Not started | - |
 | 6 - MR pass + game demo | ⬜ Not started | - |
 
