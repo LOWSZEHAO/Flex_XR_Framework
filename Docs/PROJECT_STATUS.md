@@ -232,6 +232,21 @@ Each of these cost real time. They are not obvious from the code.
   that would overwrite the authored size. Handled centrally in `SetHeldTransform`.
 - **Activation radius is absolute cm; rail length scales with the object.** The radius is hand
   ergonomics — a hand is a hand — while a rail is geometry. Different questions, different answers.
+- **Mobile deferred shading silently destroys stereo.** `r.Mobile.ShadingPath` must be `0` (forward)
+  for Quest. `MobileDeferredShadingPass` builds its own PSO render-target info and never sets
+  `RenderTargets.MultiViewCount`, while every other mobile pass does — so with mobile multi-view the
+  lighting pass resolves one view and **both eyes receive the same image**. Nothing warns. The engine
+  logs `bMobileMultiViewEnabled = 1` and the HMD agrees, so the usual multi-view checks all look
+  healthy. Forward also admits MSAA (deferred cannot — `RendererSettings.cpp` quietly forces mobile AA
+  back to `None`) and turns on the tonemap subpass, which wants Mobile HDR **on**, multi-view on and
+  deferred off. That is why `r.MobileHDR=True` is correct here and must not be "fixed".
+- **Plugin content referenced only by `FSoftObjectPath` in C++ is never cooked.** A soft path built
+  from a string literal in a constructor leaves no asset-registry dependency edge, so the cooker
+  never learns the package exists. The first Quest build shipped with **none** of FlexXR's materials
+  or meshes. They cannot be hard references (see the `MaterialEditingLibrary` note above), so the
+  folders are named in `DirectoriesToAlwaysCook` in `DefaultGame.ini`. Add any new plugin content
+  folder there. Symptom on device: `LogStreaming: Warning: SkipPackage: /FlexXR/... does not exist on
+  disk or in the loader`.
 - **Editor file locks:** the editor holds `Content/*.uasset` open. `git checkout` of a content file
   fails with `unable to unlink ... Invalid argument` while it is running, and a branch switch can
   abort half-applied. Close the editor first. **Never `git clean -fd` in this repo.**
@@ -250,6 +265,13 @@ Small and recorded so they are not rediscovered as mysteries.
   the component, and call `Point To Component`. A design exists but was not built: have the arrow
   *follow* `UFXR_HighlightSubsystem::SetGuidance` automatically, so one call drives both the glow and
   the arrow, and nothing touches the pawn. Dependency direction allows it (`FXR_UI` → `FXR_Interaction`).
+- **The plugin is not self-contained for packaging.** FlexXR's materials and meshes ship only because
+  *this project* names them in `DirectoriesToAlwaysCook`. Anyone who drops the plugin into their own
+  project gets a build with no ray, no reticle, no arc, no vignette and no outline hull, and no error
+  explaining why. That is a poor first impression for a framework meant to be consumed. The proper fix
+  keeps it inside the plugin: subscribe to `UE::Cook::FDelegates::ModifyCook` from a module's
+  `StartupModule`, or give the plugin an asset-manager rule, so enabling it is enough. Worth doing
+  before any 1.0 claim.
 
 ---
 
