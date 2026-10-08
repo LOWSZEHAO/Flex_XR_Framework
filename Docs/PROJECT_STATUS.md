@@ -1,6 +1,6 @@
 # FlexXR — Project Status & Handoff
 
-**Last updated:** 2026-10-08 · **Last active development:** 2026-10-08
+**Last updated:** 2026-10-09 · **Last active development:** 2026-10-09
 **Current branch:** `phase-3-ui-presentation` · **Architecture doc version:** 0.14
 
 This document is the single place to find *where the project actually is*. The architecture
@@ -295,29 +295,45 @@ Small and recorded so they are not rediscovered as mysteries.
   keeps it inside the plugin: subscribe to `UE::Cook::FDelegates::ModifyCook` from a module's
   `StartupModule`, or give the plugin an asset-manager rule, so enabling it is enough. Worth doing
   before any 1.0 claim.
-- **Black tearing/ghosting at the outer edge of the right eye on Quest.** Reported 2026-10-08, small,
-  at the extreme periphery. Unresolved. The leading suspect is foveated rendering, because the
-  project's own setting is being silently overridden: `DefaultEngine.ini` sets
-  `xr.VRS.FoveationLevel=0` and `xr.VRS.DynamicFoveation=False`, both are applied, and then the
-  `Meta_Quest_3` device profile pushes `xr.VRS.DynamicFoveation 0 → 1`, `r.Vulkan.AllowFDMOffset
-  0 → 1` and `r.Vulkan.VRSFormat 0 → 3`. The RHI then reports *"Image-based Variable Rate Shading
-  supported via EXTFragmentDensityMap extension. Selected VRS tile size 16 by 16 pixels per VRS image
-  texel."* So foveation is live on device against the project's wishes, at coarse granularity, in
-  exactly the region where the artifact appears. **That override is worth fixing regardless of
-  whether it causes this.** Other suspects if it is not: the 4x MSAA resolve under mobile multi-view,
-  and the render target being marginally smaller than the compositor's distortion samples.
-  To A/B it without repackaging, push a one-line command-line override to the device — note it
-  **replaces** the whole command line, so it must carry `-project`, and `ForceDPCVars=` applies at
-  command-line priority, above the device profile:
+- **Black tearing/ghosting at the outer edge of the right eye on Quest.** Reported 2026-10-08.
+  **Open, and accepted as minor** — the owner's call after investigation stalled; it is small, and
+  standalone is otherwise smooth. Not reproducible on PCVR.
+  Characterisation, which is the useful part: it appears only where a **high-contrast silhouette**
+  crosses that region — the ridge line where the landscape meets the sky or the flat ground. Looking
+  at uniform sky or uniform ground, it is invisible. "Needs an edge to be visible" is the signature
+  of a shading-rate or reconstruction artifact rather than of geometry or lighting.
+  **Ruled out, each confirmed from a device log rather than inferred:**
+  - *Foveated rendering.* The project asks for it off and was being overridden by the engine's
+    `Android_OpenXR` device profile; that is now corrected (see `Config/DefaultDeviceProfiles.ini`),
+    the log confirms `xr.VRS.DynamicFoveation 0 → 0` and `r.Vulkan.AllowFDMOffset 0 → 0`, and the
+    artifact survives. Foveation is **not** the cause.
+  - *`r.Mobile.Oculus.ForceSymmetric`*, set by the `Meta_Quest_3` profile. It is a dummy: the log
+    says *"Creating unregistered Device Profile CVar"* / *"deferred - dummy variable created"*,
+    because Meta's own plugin is not installed. It does nothing.
+  **Still untested, in the order worth trying:**
+  1. *Image-based VRS itself.* `r.Vulkan.VRSFormat=3` is still pushed by the device profile and the
+     RHI still reports *"Image-based Variable Rate Shading supported via EXTFragmentDensityMap
+     extension. Selected VRS tile size 16 by 16 pixels per VRS image texel"* even with foveation
+     off. A density map attached but no longer meaningfully populated would shade the periphery at
+     the wrong rate — invisible in flat colour, visible across an edge. Test
+     `r.Vulkan.VRSFormat=0,r.VRS.Support=0`.
+  2. *The 4x MSAA resolve under mobile multi-view.* Note there is **no device baseline without it**:
+     MSAA was enabled in the same session as the first successful device run, and the pre-existing
+     Sep 6 build was never run on a headset. Test `r.Mobile.AntiAliasing=0`.
+  3. *The render target being marginally smaller than the compositor's distortion samples.*
+  **How to A/B on device without repackaging** (this harness is the reusable part): push a one-line
+  command-line override. It **replaces** the entire command line, so it must carry `-project`, and
+  `ForceDPCVars=` applies at command-line priority, above the device profile:
   ```
   adb push UECommandLine.txt /sdcard/Android/data/com.LowSzeHao.FlexXR/files/UnrealGame/FlexXR/UECommandLine.txt
   ```
   ```
-  -project="../../../FlexXR/FlexXR.uproject" -ForceDPCVars=xr.VRS.DynamicFoveation=0,r.Vulkan.AllowFDMOffset=0
+  -project="../../../FlexXR/FlexXR.uproject" -ForceDPCVars=r.Vulkan.VRSFormat=0,r.VRS.Support=0
   ```
   With `UseExternalFilesDir=True` that external-files path is the one the engine reads; `adb install`
-  does not remove it, but the generated install bat does. Confirm it took by looking for
-  `Using override commandline file:` and `Setting CommandLine Device Profile CVar:` in the log.
+  does not remove it, but the generated install bat does. Delete the device's `FlexXR.log` before a
+  run so the log is unambiguous, confirm with `Using override commandline file:` in it, and remember
+  a headless launch proves nothing — the proximity sensor suspends the app before the renderer runs.
 - **PC and Quest brightness will not match, and level editing cannot fix it.** Attempted once and
   reverted (`5713778`). The cause is the renderer and post-process stack, not the level: mobile
   forward plus the mobile tonemapper, and the `Meta_Quest_3` profile dropping post-process, GI,
