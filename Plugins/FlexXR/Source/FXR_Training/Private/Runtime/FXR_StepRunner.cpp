@@ -3,17 +3,28 @@
 #include "Runtime/FXR_StepRunner.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
+namespace
+{
+	/** Sentinel for "this never happened", so a report can tell a skipped step from one at t=0. */
+	constexpr float NeverHappened = -1.f;
+}
+
 void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode)
 {
 	Steps = MoveTemp(InSteps);
 	Mode = InMode;
 	Elapsed = 0.f;
 	bAnyMistakeYet = false;
+	bReachedEnd = false;
 
-	Status.Init(EFXR_StepStatus::Pending, Steps.Num());
+	const int32 Count = Steps.Num();
+	Status.Init(EFXR_StepStatus::Pending, Count);
+	OpenedAt.Init(NeverHappened, Count);
+	ClosedAt.Init(NeverHappened, Count);
+	HintLevelReached.Init(0, Count);
+	MistakeCounts.Init(0, Count);
+
 	ActiveSteps.Reset();
-	ActiveElapsed.Reset();
-	ActiveHintLevel.Reset();
 	Mistakes.Reset();
 
 	bRunning = Steps.IsValidIndex(EntryIndex);
@@ -31,6 +42,26 @@ void FFXR_StepRunner::Stop()
 EFXR_StepStatus FFXR_StepRunner::GetStatus(int32 StepIndex) const
 {
 	return Status.IsValidIndex(StepIndex) ? Status[StepIndex] : EFXR_StepStatus::Pending;
+}
+
+float FFXR_StepRunner::GetStepOpenedAt(int32 StepIndex) const
+{
+	return OpenedAt.IsValidIndex(StepIndex) ? OpenedAt[StepIndex] : NeverHappened;
+}
+
+float FFXR_StepRunner::GetStepClosedAt(int32 StepIndex) const
+{
+	return ClosedAt.IsValidIndex(StepIndex) ? ClosedAt[StepIndex] : NeverHappened;
+}
+
+int32 FFXR_StepRunner::GetStepHintLevel(int32 StepIndex) const
+{
+	return HintLevelReached.IsValidIndex(StepIndex) ? HintLevelReached[StepIndex] : 0;
+}
+
+int32 FFXR_StepRunner::GetStepMistakeCount(int32 StepIndex) const
+{
+	return MistakeCounts.IsValidIndex(StepIndex) ? MistakeCounts[StepIndex] : 0;
 }
 
 bool FFXR_StepRunner::ShouldShowHints() const
@@ -55,9 +86,8 @@ void FFXR_StepRunner::Activate(int32 StepIndex)
 	}
 
 	Status[StepIndex] = EFXR_StepStatus::Active;
+	OpenedAt[StepIndex] = Elapsed;
 	ActiveSteps.Add(StepIndex);
-	ActiveElapsed.Add(0.f);
-	ActiveHintLevel.Add(0);
 
 	if (OnStepActivated)
 	{
@@ -72,15 +102,9 @@ bool FFXR_StepRunner::Matches(const FFXR_CompiledTransition& Transition, const F
 
 void FFXR_StepRunner::Complete(int32 StepIndex, const FFXR_CompiledTransition& Via)
 {
-	const int32 Slot = ActiveSteps.IndexOfByKey(StepIndex);
-	if (Slot != INDEX_NONE)
-	{
-		ActiveSteps.RemoveAt(Slot, EAllowShrinking::No);
-		ActiveElapsed.RemoveAt(Slot, EAllowShrinking::No);
-		ActiveHintLevel.RemoveAt(Slot, EAllowShrinking::No);
-	}
-
+	ActiveSteps.RemoveSingle(StepIndex);
 	Status[StepIndex] = EFXR_StepStatus::Complete;
+	ClosedAt[StepIndex] = Elapsed;
 
 	if (OnStepCompleted)
 	{
@@ -99,6 +123,7 @@ void FFXR_StepRunner::Complete(int32 StepIndex, const FFXR_CompiledTransition& V
 	if (ActiveSteps.IsEmpty())
 	{
 		bRunning = false;
+		bReachedEnd = true;
 		if (OnFinished)
 		{
 			OnFinished();
@@ -114,6 +139,17 @@ void FFXR_StepRunner::RecordMistake(FName StepId, FName InteractionId, EFXR_Mist
 	Mistake.Kind = Kind;
 	Mistake.TimeSeconds = Elapsed;
 	Mistake.Message = Message;
+
+	// Attributed to the step that was open, so a report can say which part of the procedure is the
+	// one people get wrong.
+	for (int32 Index = 0; Index < Steps.Num(); ++Index)
+	{
+		if (Steps[Index].StepId == StepId)
+		{
+			++MistakeCounts[Index];
+			break;
+		}
+	}
 
 	bAnyMistakeYet = true;
 
@@ -132,15 +168,14 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// Completion is resolved first and against a copy of the active set, because completing a step
-	// opens others and mutating what we are walking would let one event cascade through a chain.
+	// Completion is resolved before anything mutates, because completing a step opens others and
+	// walking a set while it changes would let one event cascade through a chain.
 	int32 CompletedIndex = INDEX_NONE;
 	FFXR_CompiledTransition FiredTransition;
 
 	for (const int32 StepIndex : ActiveSteps)
 	{
-		const FFXR_CompiledStep& Step = Steps[StepIndex];
-		for (const FFXR_CompiledTransition& Transition : Step.Transitions)
+		for (const FFXR_CompiledTransition& Transition : Steps[StepIndex].Transitions)
 		{
 			if (Matches(Transition, Event))
 			{
@@ -207,23 +242,22 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	Elapsed += DeltaSeconds;
 
-	for (int32 Slot = 0; Slot < ActiveSteps.Num(); ++Slot)
+	for (const int32 StepIndex : ActiveSteps)
 	{
-		const int32 StepIndex = ActiveSteps[Slot];
 		const FFXR_CompiledStep& Step = Steps[StepIndex];
 		if (Step.TimeoutSeconds <= 0.f)
 		{
 			continue;
 		}
 
-		ActiveElapsed[Slot] += DeltaSeconds;
+		const float OpenFor = Elapsed - OpenedAt[StepIndex];
 
-		// Escalation is per elapsed multiple of the timeout, so a trainee who is lost gets a
+		// Escalation is per elapsed multiple of the timeout, so someone who is lost gets a
 		// progressively louder hint rather than one nag and then silence.
-		const int32 WantedLevel = FMath::FloorToInt32(ActiveElapsed[Slot] / Step.TimeoutSeconds);
-		if (WantedLevel > ActiveHintLevel[Slot])
+		const int32 WantedLevel = FMath::FloorToInt32(OpenFor / Step.TimeoutSeconds);
+		if (WantedLevel > HintLevelReached[StepIndex])
 		{
-			ActiveHintLevel[Slot] = WantedLevel;
+			HintLevelReached[StepIndex] = WantedLevel;
 
 			// The first expiry is the one worth recording. After that it is the same finding louder.
 			if (WantedLevel == 1)

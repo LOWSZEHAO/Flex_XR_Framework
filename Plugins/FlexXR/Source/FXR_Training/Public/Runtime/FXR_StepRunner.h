@@ -91,6 +91,15 @@ struct FXR_TRAINING_API FFXR_StepRunner
 
 	EFXR_StepStatus GetStatus(int32 StepIndex) const;
 
+	//~ Per-step history, kept after a step closes so a report can be built from it.
+	float GetStepOpenedAt(int32 StepIndex) const;
+	float GetStepClosedAt(int32 StepIndex) const;
+	int32 GetStepHintLevel(int32 StepIndex) const;
+	int32 GetStepMistakeCount(int32 StepIndex) const;
+
+	/** True when a transition with no next steps ran out, rather than the session being stopped. */
+	bool ReachedEnd() const { return bReachedEnd; }
+
 	/** Hints are suppressed entirely in Exam, and held back until a mistake in Practice. */
 	bool ShouldShowHints() const;
 
@@ -110,12 +119,11 @@ private:
 	TArray<FFXR_CompiledStep> Steps;
 	TArray<EFXR_StepStatus> Status;
 
-	/** Seconds each step has been open, parallel to ActiveSteps. */
-	TArray<float> ActiveElapsed;
-
-	/** How many times each active step has escalated, parallel to ActiveSteps. */
-	TArray<int32> ActiveHintLevel;
-
+	//~ Parallel to Steps, not to ActiveSteps: a closed step keeps its record.
+	TArray<float> OpenedAt;
+	TArray<float> ClosedAt;
+	TArray<int32> HintLevelReached;
+	TArray<int32> MistakeCounts;
 	TArray<int32> ActiveSteps;
 	TArray<FFXR_Mistake> Mistakes;
 
@@ -125,4 +133,7 @@ private:
 
 	/** Practice mode opens up once the trainee has got something wrong. */
 	bool bAnyMistakeYet = false;
+
+	/** Distinguishes a procedure that finished from one that was stopped. */
+	bool bReachedEnd = false;
 };

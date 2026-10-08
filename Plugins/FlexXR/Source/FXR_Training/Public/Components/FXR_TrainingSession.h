@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Runtime/FXR_SessionReport.h"
 #include "Runtime/FXR_StepRunner.h"
 #include "Types/FXR_TrainingTypes.h"
 #include "FXR_TrainingSession.generated.h"
@@ -14,7 +15,7 @@ struct FFXR_InteractionEvent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FFXR_StepEvent, FName, StepId, FText, Instruction);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_MistakeEvent, FFXR_Mistake, Mistake);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_SessionEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SessionFinishedEvent, FFXR_SessionReport, Report);
 
 /**
  * UFXR_TrainingSession — runs one procedure against the live world.
@@ -60,6 +61,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	TArray<FFXR_Mistake> GetMistakes() const { return Runner.GetMistakes(); }
 
+	/**
+	 * Everything the run produced, built on demand. Safe to call mid-session for a live panel
+	 * and after it for the record; a step still open simply has no close time.
+	 */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FFXR_SessionReport BuildReport() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
 	FFXR_StepEvent OnStepActivated;
 
@@ -70,7 +78,7 @@ public:
 	FFXR_MistakeEvent OnMistake;
 
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
-	FFXR_SessionEvent OnSessionFinished;
+	FFXR_SessionFinishedEvent OnSessionFinished;
 
 protected:
 	/** The procedure to run. */
@@ -92,6 +100,10 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	bool bHighlightCurrentStep = true;
+
+	/** What a mistake costs. Expand to tune; the defaults are a starting point, not a standard. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
+	FFXR_ScoringWeights Scoring;
 
 private:
 	void HandleBusEvent(const FFXR_InteractionEvent& Event);
