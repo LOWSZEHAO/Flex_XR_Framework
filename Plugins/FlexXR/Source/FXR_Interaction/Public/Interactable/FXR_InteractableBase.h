@@ -49,6 +49,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Interaction")
 	bool IsHeld() const { return bHeld; }
 
+	/** The id this interactable broadcasts on the event bus. None unless it opted in. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FName GetInteractionId() const { return bExposeToTraining ? InteractionId : NAME_None; }
+
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	bool IsExposedToTraining() const { return bExposeToTraining; }
+
 	//~ Extension contract (ADR-003) — override these in subclasses.
 	virtual bool CanBegin(IFXR_Interactor* Interactor) const;
 	virtual void OnBegin(IFXR_Interactor* Interactor);
