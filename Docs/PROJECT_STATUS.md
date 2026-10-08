@@ -87,6 +87,12 @@ except where noted in §4.
   that way". The one guidance problem highlighting can't solve, since a highlight only reaches what
   is already on screen. Hides itself once the target is within `Hide Within Angle` of where the
   player is already looking, or nearer than `Arrive Radius`.
+- The visual is swappable. `Arrow Mesh` and `Arrow Material` take your own assets, and
+  `Mesh Forward Axis` says which way that mesh points so it is not assumed to be the engine
+  cone's +Z. `Visual Class` takes a Blueprint instead, for anything a single static mesh
+  cannot be, and keeps its own scale while the fade multiplies it. Placement is `Distance`,
+  `Height Offset` and `Lateral Offset`, all anchored on camera yaw so the arrow holds still
+  while the player looks up and down.
 
 **Motion design**
 - `UFXR_MotionSettings` in **`FXR_Core`** - one `Fade Duration` governing highlights, the socket
@@ -107,7 +113,7 @@ except where noted in §4.
 
 | Item | Notes |
 |---|---|
-| **Guidance arrow: never seen rendering** | Built, builds clean, material verified correct - but nothing has confirmed it draws. **Highest-value next test.** See §6 for how |
+| **Guidance arrow** | Working, confirmed in-headset 2026-10-09. Takes a custom mesh or a Blueprint, see §3 |
 | **Spatial UI kit** | Panels, buttons, sliders, keypads, auto ray-targetable. Explicitly wanted **last** |
 | **Validation panel** | An in-world "you did this wrong" surface. Recommend building it in Phase 4, where the step graph defines what it must show, rather than guessing now |
 | **Ghost-hand guidance** | **Deliberately dropped** - see §5 |
@@ -348,16 +354,13 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Test the guidance arrow** - the last piece of Phase 3 that has never been seen rendering. Its
-   material now ships on device (it didn't before), but nothing has confirmed it draws on either
-   platform. `BP_FXR_Pawn` already carries the component; drive it from PIE with `Point To Component`
-   against a test interactable.
-2. **Close Phase 3** - PR into `main`, tag `v0.4-ui`.
-3. **Phase 4 - `FXR_Training`** - the SOP step graph (ADR-004) and the fire-safety demo. Build the
+1. **Close Phase 3** - PR into `main`, tag `v0.4-ui`. Everything in §3 is built and verified; what
+   remains in §4 is deliberately deferred into Phase 4.
+2. **Phase 4 - `FXR_Training`** - the SOP step graph (ADR-004) and the fire-safety demo. Build the
    validation panel and spatial UI kit *inside* this phase, where a real consumer defines what they
    need. Light that level for the device from the start rather than with the desktop template sky (§7).
 
-Done: the Quest smoke test (§6) - installed, launched and confirmed in-headset on 2026-10-08.
+Done: the Quest smoke test (§6), and the guidance arrow, confirmed working in-headset 2026-10-09.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.

@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -118,11 +119,12 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		// Anchored on the camera's yaw rather than its full rotation, so the arrow holds still while
 		// the player looks up and down instead of swimming around the view.
 		const FRotator YawOnly(0.f, Cam->GetComponentRotation().Yaw, 0.f);
-		Anchor = CameraLocation + YawOnly.RotateVector(FVector(Distance, 0.f, 0.f)) + FVector(0.f, 0.f, HeightOffset);
+		Anchor = CameraLocation + YawOnly.RotateVector(FVector(Distance, LateralOffset, 0.f)) + FVector(0.f, 0.f, HeightOffset);
 	}
 
 	const float Step = FFXR_Motion::FadeStep(DeltaTime, UFXR_MotionSettings::GetFadeDuration());
 	Alpha = FMath::FInterpConstantTo(Alpha, bWanted ? 1.f : 0.f, 1.f, Step);
+
 
 	if (Alpha <= KINDA_SMALL_NUMBER)
 	{
@@ -130,13 +132,63 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		{
 			Arrow->SetVisibility(false);
 		}
+		if (VisualActor)
+		{
+			VisualActor->SetActorHiddenInGame(true);
+		}
 		return;
 	}
 
 	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	// The fade is geometric: the arrow grows in rather than dissolving, which an opaque unlit
+	// material cannot do anyway, and which reads as arriving rather than materialising.
+	const float Eased = FFXR_Motion::EaseFade(Alpha);
+
+	// A Blueprint wins when one is set. Anything a single static mesh cannot be lives here: a
+	// particle trail, an animated marker, something that spins.
+	if (VisualClass)
+	{
+		if (!VisualActor && !bVisualSpawnAttempted)
+		{
+			bVisualSpawnAttempted = true;
+			if (UWorld* World = GetWorld())
+			{
+				FActorSpawnParameters Params;
+				Params.Owner = Owner;
+				Params.Instigator = Owner->GetInstigator();
+				// Transient so it never lands in a save, and always-spawn because guidance is a
+				// picture: refusing to appear because something is in the way would be nonsense.
+				Params.ObjectFlags |= RF_Transient;
+				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				VisualActor = World->SpawnActor<AActor>(VisualClass, Anchor, FRotator::ZeroRotator, Params);
+				if (VisualActor)
+				{
+					// Kept so the fade multiplies the author's scale instead of overwriting it.
+					VisualBaseScale = VisualActor->GetActorScale3D();
+				}
+			}
+		}
+
+		if (!VisualActor)
+		{
+			return; // spawn failed once; do not thrash trying again every frame
+		}
+
+		// Actors face +X by UE convention, so a Blueprint needs no axis setting of its own.
+		VisualActor->SetActorLocationAndRotation(Anchor, FRotationMatrix::MakeFromX(Heading).Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+		VisualActor->SetActorScale3D(VisualBaseScale * Eased);
+		VisualActor->SetActorHiddenInGame(false);
+		return;
+	}
+
 	UStaticMesh* Mesh = ArrowMesh.LoadSynchronous();
 	UMaterialInterface* Material = ArrowMaterial.LoadSynchronous();
-	if (!Owner || !Mesh)
+	if (!Mesh)
 	{
 		return; // cleared on purpose draws nothing; guidance state is unaffected
 	}
@@ -185,19 +237,77 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		}
 	}
 
-	// Size from the mesh's own bounds, so Arrow Size is honestly centimetres whatever mesh is set.
-	// The cone points +Z, so Z is its length and X/Y its girth.
+	// Size from the mesh's own bounds, so Arrow Size is honestly centimetres whatever mesh is set,
+	// measured along whichever axis the mesh actually points down.
 	const FVector Extent = Mesh->GetBounds().BoxExtent;
-	const float MeshLength = FMath::Max(Extent.Z * 2.f, KINDA_SMALL_NUMBER);
-	const float MeshGirth = FMath::Max(Extent.X * 2.f, KINDA_SMALL_NUMBER);
+	float MeshLength = KINDA_SMALL_NUMBER;
+	float MeshGirth = KINDA_SMALL_NUMBER;
+	switch (MeshForwardAxis)
+	{
+	case EFXR_MeshAxis::X:
+	case EFXR_MeshAxis::NegX:
+		MeshLength = FMath::Max(Extent.X * 2.f, KINDA_SMALL_NUMBER);
+		MeshGirth = FMath::Max(FMath::Max(Extent.Y, Extent.Z) * 2.f, KINDA_SMALL_NUMBER);
+		break;
+	case EFXR_MeshAxis::Y:
+	case EFXR_MeshAxis::NegY:
+		MeshLength = FMath::Max(Extent.Y * 2.f, KINDA_SMALL_NUMBER);
+		MeshGirth = FMath::Max(FMath::Max(Extent.X, Extent.Z) * 2.f, KINDA_SMALL_NUMBER);
+		break;
+	default:
+		MeshLength = FMath::Max(Extent.Z * 2.f, KINDA_SMALL_NUMBER);
+		MeshGirth = FMath::Max(FMath::Max(Extent.X, Extent.Y) * 2.f, KINDA_SMALL_NUMBER);
+		break;
+	}
 
-	// The fade is geometric — the arrow grows in rather than dissolving, which an opaque unlit
-	// material cannot do anyway, and which reads as arriving rather than materialising.
-	const float Eased = FFXR_Motion::EaseFade(Alpha);
 	const float Length = (ArrowSize * Eased) / MeshLength;
 	const float Girth = (ArrowSize * 0.55f * Eased) / MeshGirth;
 
-	Arrow->SetWorldLocationAndRotation(Anchor, FRotationMatrix::MakeFromZ(Heading).Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
-	Arrow->SetWorldScale3D(FVector(Girth, Girth, Length));
+	FRotator Rotation;
+	FVector Scale;
+	switch (MeshForwardAxis)
+	{
+	case EFXR_MeshAxis::X:
+		Rotation = FRotationMatrix::MakeFromX(Heading).Rotator();
+		Scale = FVector(Length, Girth, Girth);
+		break;
+	case EFXR_MeshAxis::NegX:
+		Rotation = FRotationMatrix::MakeFromX(-Heading).Rotator();
+		Scale = FVector(Length, Girth, Girth);
+		break;
+	case EFXR_MeshAxis::Y:
+		Rotation = FRotationMatrix::MakeFromY(Heading).Rotator();
+		Scale = FVector(Girth, Length, Girth);
+		break;
+	case EFXR_MeshAxis::NegY:
+		Rotation = FRotationMatrix::MakeFromY(-Heading).Rotator();
+		Scale = FVector(Girth, Length, Girth);
+		break;
+	case EFXR_MeshAxis::NegZ:
+		Rotation = FRotationMatrix::MakeFromZ(-Heading).Rotator();
+		Scale = FVector(Girth, Girth, Length);
+		break;
+	case EFXR_MeshAxis::Z:
+	default:
+		Rotation = FRotationMatrix::MakeFromZ(Heading).Rotator();
+		Scale = FVector(Girth, Girth, Length);
+		break;
+	}
+
+	Arrow->SetWorldLocationAndRotation(Anchor, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+	Arrow->SetWorldScale3D(Scale);
 	Arrow->SetVisibility(true);
+}
+
+void UFXR_GuidanceArrow::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// The static mesh component is transient and goes with the owner, but a spawned actor is our
+	// own and has to be cleaned up or it outlives the pawn.
+	if (VisualActor)
+	{
+		VisualActor->Destroy();
+		VisualActor = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
 }

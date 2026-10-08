@@ -4,13 +4,28 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Templates/SubclassOf.h"
 #include "FXR_GuidanceArrow.generated.h"
 
+class AActor;
 class UCameraComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
+
+/** Which of a mesh's local axes points along the arrow. The engine cone points +Z; an arrow
+ *  modelled in most DCC packages points +X. Without this a custom mesh aims sideways. */
+UENUM(BlueprintType)
+enum class EFXR_MeshAxis : uint8
+{
+	X        UMETA(DisplayName = "+X"),
+	Y        UMETA(DisplayName = "+Y"),
+	Z        UMETA(DisplayName = "+Z"),
+	NegX     UMETA(DisplayName = "-X"),
+	NegY     UMETA(DisplayName = "-Y"),
+	NegZ     UMETA(DisplayName = "-Z")
+};
 
 /**
  * UFXR_GuidanceArrow — "the thing you need is not here; it is that way."
@@ -40,6 +55,7 @@ public:
 	UFXR_GuidanceArrow();
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Point at a fixed place in the world. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Guidance")
@@ -65,6 +81,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (Units = "cm"))
 	float HeightOffset = -30.f;
 
+	/** Sideways from centre, positive is to the player's right. Zero keeps it straight ahead. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (Units = "cm"))
+	float LateralOffset = 0.f;
+
 	/** Arrow length in centimetres, taken from the mesh's own bounds rather than an assumed authoring scale. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.5", Units = "cm"))
 	float ArrowSize = 8.f;
@@ -88,6 +108,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
 	TSoftObjectPtr<UMaterialInterface> ArrowMaterial;
 
+	/** Which way the mesh points. Only used by Arrow Mesh; a Visual Class orients itself. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
+	EFXR_MeshAxis MeshForwardAxis = EFXR_MeshAxis::Z;
+
+	/**
+	 * Drop a Blueprint here to use it as the arrow instead of Arrow Mesh, for anything a single
+	 * static mesh cannot be: a particle trail, an animated marker, a spinning ring. It is spawned
+	 * on first use and driven by this component, so give it no collision and let it face +X.
+	 * Its own scale is kept and multiplied by the fade, so Arrow Size does not apply to it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
+	TSubclassOf<AActor> VisualClass;
+
 private:
 	/** Where the arrow should be pointing this frame, or false if nothing. */
 	bool ResolveTarget(FVector& OutLocation) const;
@@ -102,6 +135,15 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Arrow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> VisualActor;
+
+	/** The Blueprint's own authored scale, kept so the fade multiplies it instead of replacing it. */
+	FVector VisualBaseScale = FVector::OneVector;
+
+	/** One shot: a Visual Class that fails to spawn must not be retried every frame. */
+	bool bVisualSpawnAttempted = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> ArrowMID;
