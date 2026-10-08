@@ -25,6 +25,19 @@ enum class EFXR_AlreadyHeldPolicy : uint8
 	ForceRelease    UMETA(DisplayName = "Force Release")
 };
 
+/** When a hand draws its far-interaction pointer beam. */
+UENUM(BlueprintType)
+enum class EFXR_RayVisibility : uint8
+{
+	// No beam. Far interaction still works — the hover highlight says what a press would take.
+	Never    UMETA(DisplayName = "Never"),
+	// Only while the hand is aimed at something that will answer. The beam becomes a statement
+	// rather than a fixture, and it never points at nothing.
+	OnTarget UMETA(DisplayName = "On Target"),
+	// Whenever the hand is free. Reads as a menu pointer; useful for far UI-heavy scenes.
+	Always   UMETA(DisplayName = "Always")
+};
+
 /** How much authoring debug an interactable draws (viewport gizmo and runtime). */
 UENUM(BlueprintType)
 enum class EFXR_DebugDraw : uint8
@@ -110,4 +123,25 @@ enum class EFXR_LatchAxis : uint8
 	X UMETA(DisplayName = "Local X"),
 	Y UMETA(DisplayName = "Local Y"),
 	Z UMETA(DisplayName = "Local Z")
+};
+
+/** When a socket shows its placement preview. */
+UENUM(BlueprintType)
+enum class EFXR_SocketGhostMode : uint8
+{
+	/** No preview at all. */
+	Off        UMETA(DisplayName = "Off"),
+
+	/**
+	 * Only while an accepted object is carried within range. The preview answers "will this go
+	 * here?" at the moment the question is being asked, and the world stays quiet otherwise.
+	 */
+	OnApproach UMETA(DisplayName = "On Approach"),
+
+	/**
+	 * Whenever the socket is enabled and empty. The mount advertises what belongs in it — right for
+	 * a labelled bracket with an obviously missing extinguisher, and noisy anywhere else. Needs a
+	 * Ghost Mesh, since nothing is being carried to borrow a shape from.
+	 */
+	Always     UMETA(DisplayName = "Always")
 };

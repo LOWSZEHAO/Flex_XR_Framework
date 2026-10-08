@@ -12,6 +12,7 @@ class UCameraComponent;
 class UMotionControllerComponent;
 class UFXR_ControllerInteractor;
 class UFXR_HandInteractor;
+class UFXR_RayOrigin;
 class UFXR_DesktopSimInteractor;
 class UFXR_InteractorComponent;
 class UFXR_InputConfig;
@@ -81,6 +82,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_HandInteractor> RightHand;
+
+	/** Where the left hand's far ray leaves it — drag this to aim the pointer. Wired to both left interactors. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
+	TObjectPtr<UFXR_RayOrigin> LeftRay;
+
+	/** Where the right hand's far ray leaves it — drag this to aim the pointer. Wired to both right interactors. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
+	TObjectPtr<UFXR_RayOrigin> RightRay;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_DesktopSimInteractor> DesktopSim;

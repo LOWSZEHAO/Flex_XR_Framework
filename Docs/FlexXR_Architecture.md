@@ -1,6 +1,6 @@
 # FlexXR Framework — Architecture Summary
 
-**Version:** 0.6 (per-hand locomotion input — ADR-008; climbing — ADR-009)
+**Version:** 0.14 (one motion spec, enforced rather than written down)
 **Engine:** Unreal Engine 5.8 · C++ core, Blueprint-exposed API · OpenXR
 **Targets:** PCVR (priority) · Meta Quest standalone (scalability tier) · MR-ready
 **Author:** [your name]
@@ -67,7 +67,7 @@ User-facing components (§4), the internal systems powering them (§5), the dete
 
 ### 3.3 FXR_UI — where the premium feel lives
 - Spatial UI kit: panels, buttons, sliders, keypads (auto ray-targetable).
-- **One motion-design spec** (durations, easing, spatial-audio ticks, micro-haptics) enforced framework-wide.
+- **One motion-design spec** — see below. It lives in **FXR_Core**, not here, for dependency reasons.
 - Diegetic guidance primitives: ghost-hand demonstrations, directional arrows (consumed by FXR_Training, usable by games).
 
 ### 3.4 FXR_Training — the SOP layer (optional)
@@ -99,11 +99,6 @@ Interaction
 ├─ Interactor Filter:  Any ▾      (hand side / interactor type / gameplay-tag
 │                                  conditions, e.g. "State.HasGloves")
 ├─ Driven Component:   Auto ▾     (see resolution rule below)
-Highlight
-├─ Highlight Style:    Outline ▾  (Outline / Inner Blink / Sweep /
-│                                  Project Default / None)
-├─ Highlight Color:    ▉ Bright Yellow (default)
-└─ Sweep Direction:    Left → Right ▾   (shown only when Style = Sweep)
 Training
 ├─ ☐ Expose to Training
 └─ InteractionId:      "Open_FireDoor_A"
@@ -121,7 +116,7 @@ Training
 2. **Explicit:** multi-mesh actors → dropdown lists the actor's primitives, pick one. The editor validation panel flags ambiguity at author time.
 3. Pivot/mechanism transforms are **cached in actor space at initialization** — so a latch component that is a child of the mesh it rotates never orbits its own pivot (circular-parenting trap, pre-solved).
 
-**Highlight resolution order:** FXR_Highlight component (if present) → the interactable's own dropdown → project settings.
+**Highlight resolution order:** FXR_Highlight component (if present) → project settings. There is no per-interactable dropdown; see FXR_Highlight below for why.
 
 ---
 
@@ -160,10 +155,33 @@ Grip drive (handle) and contact drive (palm) feed the **same solver** — identi
 ### FXR_Press
 Poke interactions: buttons, keypads, touchscreens. Fingertip-depth driven, press travel + haptic tick + audio from the motion spec.
 
+### Object structure: what a grab actually moves
+A grab moves its **driven component** — the mesh `FXR_Grab` is attached under — and everything attached beneath it. A mesh sitting *beside* the driven one, rather than under it, moves with neither the hold nor the fall.
+
+That is one rule, not two: whatever travels with the hold is whatever physics treats as part of that body. There is deliberately no separate "grab moves this set, physics moves that set", because the two disagreeing is the bug that structure error produces.
+
+| The object is | Build it as |
+|---|---|
+| **Grabbable** — picked up, carried, dropped | One body. The simulating mesh is the **root**, other meshes attached beneath it (they weld into that body), or merged into a single mesh. |
+| **Fixed** — a machine, cabinet or panel bolted in place | Any hierarchy. Parts are driven individually by `FXR_Latch` / `FXR_Press` off their own component transforms; the actor never moves, so no body structure is needed. |
+| **A detachable part of a fixed object** | `FXR_Grab` on the part. It drives that part, and the rest of the actor stays put. |
+
+This is not a FlexXR convention — it falls out of the physics engine, and every framework lands on it. Unity's XR Interaction Toolkit *requires* a Rigidbody on a grab interactable, and a Rigidbody owns the colliders beneath it; VRExpansion ships `GrippableStaticMeshActor` so the mesh is the root by construction.
+
+**The symptom that is not general knowledge:** the actor's transform *is* its root component's, so a driven mesh that is not the root moves while `GetActorLocation` stays put. Blueprint logic, save/load and — worst — World Partition streaming relevancy all read that stale location, so a prop carried far enough can be streamed out while it is in your hand. It looks like a random disappearing-object bug and nobody traces it back to component hierarchy.
+
+**Where the trap comes from:** dragging a mesh into a level gives `AStaticMeshActor`, whose root *is* the mesh — correct for free. Creating a **Blueprint Actor** gives `DefaultSceneRoot`, a transform-only node with no body, and every mesh added lands as its sibling. The validation panel (§13, Phase 3) reports this at author time rather than leaving it to be found in a headset.
+
 ### FXR_Socket
 Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **ghost preview** appears if the object passes the filter → release in zone (or auto-snap on proximity, per setting) → detaches from hand, attaches to socket. Re-grab pulls it back out.
 - Options: accepted-object tag filter, required orientation alignment (plug must face the right way), lock-in (explicit release action to remove).
-- Events on both sides: `OnHoverStart/End`, `OnSocketed`, `OnRemoved` — each emits `InteractionId`s ("docked extinguisher on wall mount" is a validatable SOP step).
+- Events: `OnHoverStart/End`, `OnSocketed`, `OnRemoved`, and seating emits the socket's `InteractionId` ("docked extinguisher on wall mount" is a validatable SOP step).
+- **The socket's own transform is the seat pose** — place the component where the object's origin should end up and point it the way the object should face. No separate offset to author, and the alignment check reads against the same facing.
+- Filtering is by **actor tag**, not gameplay tags: a mount needs a short list of names, and pulling in the GameplayTags module for that would widen `FXR_Interaction`'s dependencies for no gain.
+- **Nearest accepting socket wins**, so two mounts side by side resolve to the one being reached toward. The pass is driven by the interaction driver alongside the poke pass, so sockets never tick per object.
+- Object-side events (the object learning it was docked, whichever socket took it) are deliberately not on `FXR_Grab` yet: they would grow the most-used component's panel for a case most objects never use. Bind the socket.
+
+
 
 ### FXR_Use *(optional child component)*
 > **Rule of thumb:** using the thing is simple → FXR_Grab's built-in events. The usable part is a **physical mechanism on** the thing, or needs its own training ID → add FXR_Use where the mechanism lives.
@@ -179,17 +197,61 @@ Snap zones — **pairs with FXR_Grab**: grab object → carry near socket → **
 Justifications: real travel + spring feel; multiple distinct use points per object (pin + handle + nozzle); per-affordance SOP validation.
 
 ### FXR_RayTarget
-**Not a laser-grab component — the "you can point at me from far away" marker.** The laser itself lives on the interactor (FXR_Core service); the focus manager controls its visibility (UI pointing, deliberate point gesture). Behavior composes with what else is on the object:
+**Not a laser-grab component — the "you can point at me from far away" marker.** The beam itself belongs to the interaction driver, not to this component or to the interactor (see *Far-ray pointer* below); RayTarget only says an object answers to one. Behavior composes with what else is on the object:
 
 | On the object | Point + pinch/trigger does |
 |---|---|
 | RayTarget alone | Select/focus: hover highlight, `OnRaySelected` (training: "point to the correct extinguisher"; games: examine/scan) |
-| RayTarget + FXR_Grab | **Distance grab**: object pulls/flicks to the hand, then **FXR_Grab takes over completely** — same grip point, pose blend, everything (gravity-gloves style) |
+| FXR_Grab with **Distance Grab** ticked | **Distance grab**: the object flies to the hand, then **FXR_Grab takes over completely** — same grip point, pose blend, everything (gravity-gloves style). A checkbox on Grab rather than a second component: making a grabbable object grabbable-at-range should not need one. |
 | FXR_UI panels | Pointer events route into UMG automatically (no manual RayTarget needed) |
 
 **Deliberately no laser-Latch:** dragging doors/valves by ray feels cheap and destroys training fidelity (a trainee who laser-opened a valve learned nothing). Ray-select a latch object = fine; ray-drive it = a game-side custom interactable if truly wanted.
 
-**Far Interaction Policy** (`FXR_ProjectSettings`): games may enable distance-grab everywhere; training sims may restrict rays to UI + selection, forcing physical performance of every motion. Same framework, one toggle.
+**No Far Interaction Policy.** An earlier draft put distance grab behind a project-wide toggle. Dropped: the per-object checkbox already says it, and a global setting that silently changes how a specific object behaves between projects is worse than the one tick that made it so. A training sim simply leaves the box unticked, which is also the default — physical performance of every motion is what it gets for free.
+
+### Far-ray pointer *(rig-side, not per object)*
+
+The beam lives on `FXR_InteractionDriver`, because near and far interaction have to be arbitrated in one
+place: a hand that can reach something must never also point past it at the wall behind. Everything below
+is one component's detail panel, under **Far Interaction**.
+
+**Where it starts — `Left Ray` / `Right Ray` on the pawn.** Two `UFXR_RayOrigin` scene components, one per
+hand. They carry no settings, because their transform *is* the setting: drag one in the viewport and the
+beam follows. One per hand rather than per interactor — the ray should leave the same place whether that
+hand is currently a controller or a tracked hand, and two sources to keep in sync would drift apart.
+
+Their transform is read **relative to the parent and composed onto the interactor's tracked pose**, never
+used as a world transform. A tracked hand's pose comes from joint data rather than from where a component
+sits in the rig, so a world read would simply not follow the hand. Some pitch is normally wanted: a
+controller reports its pose along the grip axis, so at zero rotation the beam aims at the floor.
+
+**When it shows — `Ray Visibility`.**
+
+| Mode | Behaviour |
+|---|---|
+| **On Target** *(default)* | Only while the hand is aimed at something that will answer |
+| **Always** | Whenever the hand is free. Reads as a menu pointer; for far-UI-heavy scenes |
+| **Never** | No beam; the hover highlight carries it alone |
+
+An always-on beam says nothing and reads as a menu cursor in a scene that is not a menu. This is affordable
+because the beam never carried "you can interact with that" alone — far targets hover through the focus
+subsystem exactly like near ones, so a distant object lights up whether or not a beam is drawn. Acquisition
+stays coarse and refinement is fine: point the hand, the beam arrives, aim from there. The beam is drawn
+from the same target the driver already resolved for its own logic, so it cannot disagree with what a press
+would do, and it can never point at nothing.
+
+**What it is made of.** An opaque unlit tube. Translucent and additive both compiled clean, reported no
+errors and rendered nothing at all on the beam mesh, while a plain opaque material on the very same
+component drew immediately — and raising emissive to 60 did not bring the additive version back, so it was
+never exposure. A pointer reads as a solid emissive tube in every shipping VR title regardless. An opaque
+beam cannot fade its opacity, so **the fade is geometric**: the beam thins to nothing and the cursor scales
+with it, which on a tube this narrow reads as retracting rather than dissolving.
+
+`Ray Width` is honest centimetres — the scale comes from the mesh's own bounds, so 1.5 cm is 1.5 cm whether
+the tube was authored at radius 1 or radius 10. Colour and brightness are `RayColor` / `RayIntensity` inside
+`M_FXR_Ray`; keep intensity at or below 1, since unlit emissive above 1 clips after tonemapping and turns a
+cyan beam white. The beam carries no collision at all: it is a picture of a trace, never a participant in
+one.
 
 ### FXR_GripPoint
 "A sticker on the object: hands go here, shaped like this."
@@ -242,26 +304,49 @@ BP_Door
 Known limitation (deliberately unsolved): a shared point carries **one** pose. If two owners need different poses at the same location, fall back to Case B. No per-owner pose override until a real case demands it.
 
 ### FXR_Highlight *(optional)*
-Every interactable already gets the default highlight automatically (Outline, bright yellow) — this component exists only to customize further:
+Every interactable already gets the default highlight automatically (Outline, neutral white on hover) — this component exists only to customize further:
 
 ```
 ├─ Per-state style overrides   (Hover / Guidance / Selected → any style)
 ├─ Color, intensity, pulse rate
-└─ Scope:  Everything ▾   (Everything / Parent Only)
+└─ Scope:  Everything ▾   (Everything / Target Mesh)
 ```
 
 - **Everything** *(default)* — all primitives on the actor + attached children glow as one object (extinguisher incl. pin, handle, hose). Hand meshes and other actors auto-excluded.
-- **Parent Only** — only the driven/parent mesh: "look at this *part*" (SOP guidance on just the safety pin).
+- **Target Mesh** — only the driven mesh: "look at this *part*" (SOP guidance on just the safety pin).
+
+**No highlight fields on `UFXR_InteractableBase`.** Defaults come from project settings and this component is
+the single place to override them. Putting Style/Color/Sweep on the base would grow every Grab, Latch, Press
+and Socket panel with fields they do not need, and would give colour two homes that can disagree. The cost —
+recolouring one object means adding a component rather than typing in a field — is the right trade for a rare
+case, and it sets the pattern for optional presentation components generally.
 
 **Three highlight styles**, each bound to a semantic state so training and games speak the same language:
 
 | Style | Effect | Default state mapping |
 |---|---|---|
-| **Outline** | Silhouette edge glow, bright yellow | Hover — "you can interact with this" *(framework default style)* |
+| **Outline** | Silhouette edge glow; colour comes from the state, not the object (see §9) | Hover — "you can interact with this" *(framework default style)* |
 | **Inner Blink** | Whole-mesh emissive pulse | Guidance — "interact with this NOW" (SOP attention) |
 | **Sweep** | Gradient band travels across the object (direction configurable) | Selected/confirm, scan effects, "correct item" feedback |
 
 State→style mapping lives in project settings; FXR_Training only ever says "highlight the pin, Guidance state" — never hardcoding visuals.
+
+**Outline has two implementations, and `Highlight Tier` picks between them.** This is exactly what naming a
+style for what it *says* buys: the same silhouette, two entirely different costs, and no gameplay or training
+code that has to know which one ran.
+
+| Tier | How | Cost | Trade |
+|---|---|---|---|
+| **Post Process** | Custom depth + stencil, one full-screen pass | Constant, paid per pixel whether or not anything is highlighted | Exact edges, constant *pixel* width at any distance. Needs `r.CustomDepth=3` |
+| **Mesh Hull** | The mesh drawn again through its overlay slot, pushed along its vertex normals, front faces masked away by `TwoSidedSign` | One draw call per highlighted mesh | No post-process chain, no custom depth. Width is world-space, so a distant object's outline thins the way the object does |
+
+`Auto` *(default)* resolves on **feature level, not platform** — so the editor's mobile preview reports the
+Quest path and it can be looked at without a Quest. On the hull tier no blendable is ever installed and
+nothing is written to the stencil: a mobile project pays for neither, which is most of the point.
+
+The hull's fade is its **thickness**, because a masked material has no opacity to fade. At zero the shell
+sits exactly on the surface and the mesh's own front faces hide it, so it disappears cleanly instead of
+flashing a black silhouette the way a faded emissive would.
 
 ### FXR_Locomotion *(pawn component)*
 
@@ -495,6 +580,36 @@ locomotion. Checked against interactor state each frame; no locomotion input is 
 
 ---
 
+### 5.9 Motion design — `UFXR_MotionSettings`
+
+**A document is not enforced, so the spec is settings the components read.** The framework proved the
+point: highlights faded over 0.15 s, the far-ray beam over 0.12, the guidance arrow over 0.20 — three
+numbers nobody chose against each other, each picked in isolation by whoever wrote that system. They
+accumulated. Written down in a doc, the fourth system would have accumulated too.
+
+| Setting | Governs |
+|---|---|
+| `Fade Duration` *(0.15 s)* | Highlights, the socket ghost, the far-ray beam, the guidance arrow |
+| `FFXR_Motion::EaseFade` | `SmoothStep`, so an edge swells in rather than ramping linearly |
+
+**It lives in `FXR_Core`, not `FXR_UI` where this document originally filed it.** `FXR_Interaction`,
+`FXR_UI` and `FXR_Locomotion` all need these values, and Core is the only module beneath all three.
+Motion is a vocabulary, and vocabulary belongs at the bottom.
+
+**Deliberately out of scope**, because sharing a number is not the same as sharing a meaning:
+
+- **Travel** — a socket seating an object (0.25 s), a distance grab crossing a room (0.3 s). These
+  cover a distance; they are not appearances, and one duration would be wrong for both.
+- **Teleport fade** — comfort, tuned per project and sometimes per player. It stays on
+  `FXR_Locomotion` where a designer goes looking for it.
+- **Haptics** — one call site today. A spec governing a single caller is ceremony; it moves here when
+  there is a second one to disagree with it.
+
+The per-component fade properties are **gone**, not defaulted — `Ray Fade Time`, `Ghost Fade Time`,
+`Highlight Fade Time` and the arrow's own. A per-object override would have re-created the drift the
+setting exists to remove, and "these two things fade differently" is a change to the spec, not to one
+component.
+
 ## 6. Hand Pose Authoring — three tiers of effort
 
 | Tier | Workflow | Time |
@@ -581,6 +696,8 @@ No interaction may ever assume a specific input device; capability detection sel
 - **Forward renderer + MSAA** baseline; scalability tiers on one codebase: *PCVR high tier* (Lumen permitted, budgeted) and *Quest tier* (baked lighting, mobile feature set, strict draw-call/shader budgets).
 - **Highlight rendering, two implementations behind one API:**
   - *Outline* — PCVR: custom depth + post-process material (crisp). Quest: auto-swaps to inverted-hull outline mesh (full-screen post-process is a Quest frame-budget killer).
+    **The stencil carries the highlight *state*, not the style** (1 Hover, 2 Guidance, 3 Selected). One full-screen pass serves every outlined object, so it can never read a per-object colour; state is the only axis it can vary along, and encoding it there is what lets hover and guidance differ — and lets a project outline all three states in three colours. A replacement material only has to honour that contract.
+    The pass is attached to the view target's camera component (found via the player camera manager), so outlines need no post-process volume and work with any project's pawn. Requires `r.CustomDepth=3` — at `1` the stencil is not written anywhere readable.
   - *Inner Blink & Sweep* — UE5 per-mesh **Overlay Material** slot (cheap on both tiers); Sweep = moving gradient mask in the overlay shader, direction is a vector parameter.
 - 90 fps discipline as a framework value: per-tier frame budgets documented; Unreal Insights profiling from Phase 2, not as an afterthought.
 - Solver, detection pipeline, and hand pipeline allocation-free per frame; registry queries are sphere-vs-spatial-hash (no physics broadphase churn); hand meshes instanced where possible.
@@ -717,6 +834,142 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.14 — Motion design**
+- New §5.9 and `UFXR_MotionSettings`: the motion spec is settings the components read, not a document
+  they are meant to honour. Fades were 0.12 / 0.15 / 0.20 across the beam, the highlight and the arrow —
+  three numbers nobody chose against each other. One `Fade Duration` now governs highlights, the socket
+  ghost, the beam and the arrow, and `FFXR_Motion::EaseFade` gives them one curve.
+- **It lives in `FXR_Core`, not `FXR_UI` where §3.3 filed it.** `FXR_Interaction`, `FXR_UI` and
+  `FXR_Locomotion` all read it, and Core is the only module beneath all three.
+- Per-component fade properties are removed rather than defaulted. An override would re-create the drift
+  the setting exists to remove.
+- Travel (socket seat, distance-grab flight), the teleport comfort fade and haptics are deliberately out
+  of scope, for reasons recorded in §5.9.
+- A grab no longer writes scale. A grip point is attached beneath the mesh, so it inherits the mesh's
+  scale, and `GripPose.GetRelativeTransform(Held)` divides that scale by itself — leaving a unit-scale
+  offset that overwrote whatever the object was authored at. A cube built at 0.2 became a 1.0 cube on
+  pickup. Fixed once in `SetHeldTransform`, where snap, smooth, two-hand, the flight and a socket's seat
+  all land.
+- A grip point's rail length now scales with the object; its activation radius still does not. The radius
+  is hand ergonomics — a hand is a hand — while the rail is geometry, so a rifle scaled to a fifth kept a
+  full-length foregrip and the hand slid off the mesh.
+
+**v0.13 — Highlight tiers**
+- The Outline style gains its **Mesh Hull** implementation, which §4 has promised since v0.2. The mesh is
+  drawn again through its overlay slot, pushed along its vertex normals, with front faces masked away by
+  `TwoSidedSign` so only the shell survives — a draw call per highlighted mesh instead of a full-screen
+  pass. On a tiler post-processing forces a resolve and costs every pixel whether or not anything is
+  highlighted, which is the wrong shape entirely.
+- `Highlight Tier` (Auto / Post Process / Mesh Hull) resolves on **feature level rather than platform**, so
+  the editor's mobile preview reports the Quest path and the tier can be compared without a Quest. On the
+  hull tier no blendable is installed and nothing is written to the stencil.
+- The hull's fade is its thickness, since a masked material has no opacity to fade. At zero the shell sits on
+  the surface and the mesh's own front faces hide it — a faded emissive would have flashed a black
+  silhouette instead.
+- Overlay instances now remember their parent material. Hull, Inner Blink and Sweep share one overlay slot
+  per mesh, so a mesh remapping from Outline to Guidance would otherwise have kept pushing hull parameters at
+  a material that never heard of them.
+
+**v0.12 — Far-ray pointer**
+- New §4 *Far-ray pointer*: the beam belongs to the interaction driver, not to `FXR_RayTarget` and not to the
+  interactor. Near and far have to be arbitrated in one place, or a hand that can reach something also points
+  past it.
+- `Left Ray` / `Right Ray` (`UFXR_RayOrigin`) join the pawn — the beam is aimed by dragging a component, not
+  by typing offsets. One per hand, not per interactor, and read as an offset from the tracked pose rather
+  than as a world transform: a tracked hand's pose comes from joint data, so a world read would not follow
+  the hand. A plain SceneComponent rather than an ArrowComponent, which would have drawn its own arrow for
+  free — Epic guards those behind `WITH_EDITORONLY_DATA`, so the offset would exist in the editor and vanish
+  from a packaged build.
+- `Ray Visibility` (Never / On Target / Always) replaces a `Show Ray` bool, defaulting to **On Target**. An
+  always-on beam says nothing and reads as a menu cursor. Affordable because far targets already hover
+  through the focus subsystem, so the beam was duplicating information the highlight already carried.
+- **The beam is opaque.** Translucent and additive both compiled clean and rendered nothing on the beam mesh
+  while opaque drew immediately; emissive at 60 did not recover the additive version, so it was never
+  exposure. The fade moved into the geometry — the beam thins to nothing instead of fading its opacity.
+- Emissive intensity capped at 1: above that, unlit emissive clips after tonemapping and the cyan beam turns
+  white. The same trap the highlight overlay hit at v0.8.
+- Distance grab now selects the grip point **for the hand that claimed it**. It reused the near-grab
+  selection, which requires the point inside the hand's grab sphere — never true across a room, so no point
+  was returned and the object flew to its own origin regardless of which hand had pointed.
+- `Tools/regen_fxr_materials.py` deletes and recreates rather than clearing in place:
+  `delete_all_material_expressions` leaves nodes behind, so every rebuild stacked a fresh graph on the
+  survivors while the material's inputs stayed wired to the stale chain. Materials grew duplicate
+  parameters and edits appeared to do nothing. Safe only because every reference to these assets is now soft.
+
+**v0.11 — Object structure**
+- New §4 note: a grab moves its driven mesh and whatever is attached beneath it. One rule governs both the
+  carry and the fall, because that set is exactly what physics treats as one body. A `Grab Scope` enum
+  briefly existed to move the whole actor instead; it was removed. With a correctly structured object it
+  is identical to driving the driven mesh, and with a badly structured one it made things worse — the
+  object carried perfectly and then came apart on release, which reads as a physics bug rather than a
+  hierarchy error. Matching the standard (Unity requires a Rigidbody; VRExpansion roots the mesh) and
+  letting a bad hierarchy fail visibly is the better trade.
+- Driven-component resolution gained a last resort: an interactable under a bare `DefaultSceneRoot`
+  previously resolved to nothing and silently did nothing at all.
+- A hold now parks *every* simulating body it carries, not just the driven one, and re-places them on
+  release — a parked body stops following its parent by attachment, so it was snapping back to the
+  pickup point the instant simulation resumed.
+
+**v0.10 — Motion**
+- Nothing pops. Highlights fade over `Highlight Fade Time`, sockets ease objects into the seat pose, and
+  the ghost fades in and out. Beyond feel, the fade fixes a real flicker: on the edge of a hover the
+  hand is never quite still, so a binary highlight strobes there.
+- **The outline stencil packs state *and* fade**: `State + Level * 4`, two bits of state and six of
+  level. A full-screen pass can read nothing per object but that byte, and it needs both.
+- **Proximity ramp instead of always-on highlighting.** Interactables glow as a hand approaches and
+  reach full strength only at grab range. Lighting every interactable permanently was rejected: it
+  reads as a tutorial level, and in a training sim it removes the competency being tested — a trainee
+  who never has to *find* the extinguisher has not been assessed on finding it. Proximity stays a
+  separate channel from Hover, because Hover means "you can take this" and the far-ray suppression
+  leans on that.
+- Socket seat pose takes the socket's position and facing but the object's own scale; taking the
+  socket's scale resized whatever docked.
+- Plugin materials are generated by `Tools/regen_fxr_materials.py`, which is now their source of truth.
+
+**v0.9 — Sockets**
+- `FXR_Socket` ships. The socket's own transform is the seat pose, filtering is by actor tag rather than
+  gameplay tags (no new module dependency for a short list of names), and the nearest accepting socket
+  wins so adjacent mounts resolve sensibly. Driven by the interaction driver alongside the poke pass,
+  so sockets never tick per object.
+- Parked-physics hand-off (`NotifyParkedPhysics`): anything that parks an object kinematic — a socket
+  seating it, a distance-grab flight — tells the object what its physics were beforehand. Without it a
+  later grab reads the parked body, concludes it never simulated, and the object can never fall again.
+- Object-side socket events deferred: they would grow `FXR_Grab`'s panel for a case most objects never use.
+
+**v0.8 — Highlight rendering & far ray**
+- The Outline stencil carries the highlight *state* (1 Hover, 2 Guidance, 3 Selected), not the style. One
+  full-screen pass serves every outlined object, so it can never read a per-object colour; state is the only
+  axis it can vary along, and this also lets a project outline all three states in three colours. Requires
+  `r.CustomDepth=3`, and the pass attaches to the view target's camera component so no post-process volume
+  or FlexXR-specific pawn is needed. Per-object colour therefore applies to Inner Blink and Sweep only.
+- Outline and overlay carry separate intensities: the overlay draws unlit, so a shared multiplier above 1
+  clipped every colour to white and made Highlight Color decorative.
+- `FXR_RayTarget` ships: far-ray focus and selection, traced on the `FXR_Interaction` channel per ADR-002.
+  Far yields to near, arbitrated in the interaction driver because only it sees both.
+- Distance grab is a **checkbox on `FXR_Grab`**, not a second component and not a project policy. The Far
+  Interaction Policy is dropped: the tick already says it, and a global setting that changes how one object
+  behaves between projects is worse than the tick that made it so. Off by default. The flight runs on a fixed
+  duration and is interpolated from elapsed time and the live hand pose, so it stays deterministic for SOP
+  replay — a physics impulse toward the hand would not be (ADR-001).
+
+**v0.7 — Presentation config**
+- Highlight configuration lives only on the optional `FXR_Highlight`; the shared base panel no longer carries
+  Style/Color/Sweep Direction. Defaults come from project settings, so colour has one home rather than two that
+  can disagree. Sets the pattern for optional presentation components.
+- Scope enum `Parent Only` → `Target Mesh`: the old name described the attach hierarchy, the new one the intent.
+
+**v0.6 — Per-hand locomotion & climbing**
+- §4 `FXR_Locomotion` rewritten: the panel describes each hand, not each mode (ADR-008). Presets removed;
+  `Transition` filed under Teleport beside the Fade Duration it governs; Movement renamed Smooth Move.
+- `Blink` dropped from `EFXR_TeleportTransition` — it was Fade with a hardcoded constant, not a distinct
+  mechanism. A short Fade Duration is the blink comfort option.
+- New `FXR_ClimbHold` (§4) and ADR-009: an ordinary interactable marks the hold, the locomotion arbiter does the
+  moving, the hand is the fixed point, and gravity is scoped to the fall after letting go.
+- New `IFXR_Interactor::GetNavigateValue()` — the middle-finger pinch, so hand-tracking locomotion and grabbing
+  are never the same gesture.
+- Aim visuals ship as plugin content wired to C++ defaults: reticle ring, arc tube, valid/invalid materials,
+  vignette post-process.
 
 **v0.4 — Locomotion**
 - New module `FXR_Locomotion` (§3.5), sibling to FXR_UI, depending on FXR_Interaction.
