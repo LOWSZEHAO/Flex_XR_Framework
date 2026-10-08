@@ -221,11 +221,41 @@ UPrimitiveComponent* UFXR_InteractableBase::ResolveDrivenComponent() const
 	{
 		return AttachPrimitive;
 	}
-	if (const AActor* OwnerActor = GetOwner())
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
 	{
-		return Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
+		return nullptr;
 	}
-	return nullptr;
+
+	if (UPrimitiveComponent* RootPrimitive = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent()))
+	{
+		return RootPrimitive;
+	}
+
+	// Neither the attach parent nor the root is a primitive — the ordinary case of a component
+	// dropped straight under a bare DefaultSceneRoot. Fall back to the actor's own body rather than
+	// resolving to nothing, which would silently make the interactable do nothing at all. A
+	// simulating primitive wins, since that is the object's physical body and what a throw acts on.
+	TArray<UPrimitiveComponent*> Primitives;
+	OwnerActor->GetComponents<UPrimitiveComponent>(Primitives);
+
+	UPrimitiveComponent* Fallback = nullptr;
+	for (UPrimitiveComponent* Primitive : Primitives)
+	{
+		if (!Primitive)
+		{
+			continue;
+		}
+		if (Primitive->IsSimulatingPhysics())
+		{
+			return Primitive;
+		}
+		if (!Fallback)
+		{
+			Fallback = Primitive;
+		}
+	}
+	return Fallback;
 }
 
 void UFXR_InteractableBase::BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor)
@@ -244,4 +274,52 @@ void UFXR_InteractableBase::BroadcastInteractionEvent(EFXR_InteractionPhase Phas
 		Event.Instigator = GetOwner();
 		EventBus->Broadcast(Event);
 	}
+}
+
+#if WITH_EDITOR
+bool UFXR_InteractableBase::CanEditChange(const FProperty* InProperty) const
+{
+	if (!Super::CanEditChange(InProperty) || !InProperty)
+	{
+		return Super::CanEditChange(InProperty);
+	}
+
+	const FName Name = InProperty->GetFName();
+
+	// Greyed rather than removed: the setting is real and inherited, it simply has no bearing on this
+	// subclass, and seeing it disabled answers "why does my socket have a held policy?" on the spot.
+	if (Name == GET_MEMBER_NAME_CHECKED(UFXR_InteractableBase, AlreadyHeldPolicy))
+	{
+		return CanEverBeHeld();
+	}
+	if (Name == GET_MEMBER_NAME_CHECKED(UFXR_InteractableBase, ActivationRadius))
+	{
+		return IsGrabTarget();
+	}
+	return true;
+}
+#endif
+
+UFXR_GripPoint* UFXR_InteractableBase::SelectGripPointForHand(EFXR_HandSide Side) const
+{
+	// Hand filter and priority only. Reach is deliberately not consulted: this exists for claims made
+	// from across the room, where no grip point overlaps anything and the proximity test that serves
+	// a normal grab would reject all of them and leave the object flying to its own origin instead.
+	UFXR_GripPoint* Best = nullptr;
+	int32 BestPriority = TNumericLimits<int32>::Min();
+
+	for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
+	{
+		UFXR_GripPoint* Point = WeakPoint.Get();
+		if (!Point || !Point->AcceptsHand(Side))
+		{
+			continue;
+		}
+		if (Point->GetPriority() > BestPriority)
+		{
+			Best = Point;
+			BestPriority = Point->GetPriority();
+		}
+	}
+	return Best;
 }

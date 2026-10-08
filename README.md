@@ -4,7 +4,8 @@
 
 C++ core · OpenXR · hand tracking + controller parity · PCVR-first, Quest-capable · MR-ready
 
-> 🚧 **Status:** Phase 2 — Interaction core **complete**. Next: Phase 2.5 — FXR_Locomotion. See [Roadmap](#roadmap).
+> **Status:** Phase 3 — UI & presentation, in progress. Phases 1, 2 and 2.5 complete and verified in-headset.
+> Current state, next steps and known gaps: [`Docs/PROJECT_STATUS.md`](Docs/PROJECT_STATUS.md).
 
 ---
 
@@ -49,6 +50,7 @@ The architectural bet: **one interaction layer, two products.** Training modules
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Current status & handoff:** [`Docs/PROJECT_STATUS.md`](Docs/PROJECT_STATUS.md)
 **Full design document:** [`Docs/FlexXR_Architecture.md`](Docs/FlexXR_Architecture.md)
 **Decision records:** [`Docs/adr/`](Docs/adr/)
 **Coding standards:** [`CODING_STANDARDS.md`](CODING_STANDARDS.md)
@@ -89,8 +91,8 @@ Right-click `FlexXR.uproject` → **Generate Visual Studio project files** → o
 
 - [x] **Phase 1 — FXR_Core** · pawn/rig, `IFXR_Interactor`, input mapping, capability detection, event bus, MR flags
 - [x] **Phase 2 — Interaction core** · registry detection, deterministic constraint solver (+ automation tests), Grab (two-hand, use events) / Latch (states, value events) / Press (fingertip probes), grip points + hand poses, editor gizmos
-- [ ] **Phase 2.5 — FXR_Locomotion** · teleport (arc + validation, room-scale origin), smooth move, snap/smooth turn, comfort vignette, anchors + blockers
-- [ ] **Phase 3 — FXR_UI** · spatial UI kit, ray targeting + focus manager, sockets, highlight system
+- [x] **Phase 2.5 — FXR_Locomotion** · teleport (arc + validation, room-scale origin), smooth move, snap/smooth turn, comfort vignette, anchors + blockers, climbing
+- [ ] **Phase 3 — FXR_UI + presentation** · focus manager, highlight system (three styles, two render tiers), ray targeting, sockets, far-ray pointer, distance grab, guidance arrow, motion-design spec — *spatial UI kit and validation panel remaining*
 - [ ] **Phase 4 — FXR_Training** · SOP step graph, modes, reporting + fire safety demo
 - [ ] **Phase 5 — Optimization** · Quest standalone build, Unreal Insights performance case study
 - [ ] **Phase 6 — MR + game demo** · passthrough, planes, anchors + action game demo

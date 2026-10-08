@@ -236,28 +236,33 @@ protected:
 	int32 InputPriority = 0;
 
 	//~ Visuals (all optional; the arc and reticle fall back to debug lines).
+	//~
+	//~ Held softly rather than as hard defaults. A hard reference from this CDO loads the asset at
+	//~ startup for every project whether or not it teleports, and — the part that actually bites —
+	//~ roots it, so tooling cannot rebuild it: MaterialEditingLibrary asserts on !IsRooted() and takes
+	//~ the editor down. Resolved at the point of use instead.
 	/**
 	 * Mesh placed at the teleport target while aiming, replacing the debug circle. It is rotated to
 	 * the landing facing, so a directional mesh shows which way you will end up looking. Build it
 	 * lying in the XY plane with +X forward.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UStaticMesh> ReticleMesh;
+	TSoftObjectPtr<UStaticMesh> ReticleMesh;
 
 	/** Material on the reticle when the target is teleportable. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UMaterialInterface> ValidMaterial;
+	TSoftObjectPtr<UMaterialInterface> ValidMaterial;
 
 	/** Material on the reticle when the target is rejected — off-nav, too steep, or blocked. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UMaterialInterface> InvalidMaterial;
+	TSoftObjectPtr<UMaterialInterface> InvalidMaterial;
 
 	/**
 	 * Mesh swept along the aim arc, one span per arc segment. Author it along +X, one metre long,
 	 * starting at the origin. Leave unset and the arc stays debug lines.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UStaticMesh> ArcMesh;
+	TSoftObjectPtr<UStaticMesh> ArcMesh;
 
 	/** Arc thickness (cm radius). Thin reads as a beam; thick reads as a tube. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.05"))
@@ -265,11 +270,11 @@ protected:
 
 	/** Arc material when the target is valid. Falls back to Valid Material, so the arc and reticle match unless you split them. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UMaterialInterface> ArcValidMaterial;
+	TSoftObjectPtr<UMaterialInterface> ArcValidMaterial;
 
 	/** Arc material when the target is rejected. Falls back to Invalid Material. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UMaterialInterface> ArcInvalidMaterial;
+	TSoftObjectPtr<UMaterialInterface> ArcInvalidMaterial;
 
 	/**
 	 * Nudge along the surface normal (cm). The reticle already sits on the traced surface rather
@@ -290,7 +295,7 @@ protected:
 	 * to your own overlay.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
-	TObjectPtr<UMaterialInterface> VignetteMaterial;
+	TSoftObjectPtr<UMaterialInterface> VignetteMaterial;
 
 	/** Scalar parameter on the vignette material that receives the 0..1 intensity. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
@@ -384,12 +389,17 @@ private:
 	/** Place/hide the reticle mesh for this frame's target. No-op until a Reticle Mesh is assigned. */
 	void UpdateReticle(bool bVisible) const;
 	/** The reticle's material for this frame's validity. */
-	UMaterialInterface* GetAimMaterial() const { return bTargetValid ? ValidMaterial : InvalidMaterial; }
+	UMaterialInterface* GetAimMaterial() const
+	{
+		// Resolved here rather than cached: both of these are called once a frame while aiming, and a
+		// soft pointer that is already loaded costs a path lookup, not a load.
+		return bTargetValid ? ValidMaterial.LoadSynchronous() : InvalidMaterial.LoadSynchronous();
+	}
 
 	/** The arc's material for this frame's validity, falling back to the reticle's when unset. */
 	UMaterialInterface* GetArcMaterial() const
 	{
-		UMaterialInterface* Override = bTargetValid ? ArcValidMaterial : ArcInvalidMaterial;
+		UMaterialInterface* Override = bTargetValid ? ArcValidMaterial.LoadSynchronous() : ArcInvalidMaterial.LoadSynchronous();
 		return Override ? Override : GetAimMaterial();
 	}
 

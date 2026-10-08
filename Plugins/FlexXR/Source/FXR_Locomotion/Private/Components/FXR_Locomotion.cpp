@@ -23,7 +23,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
-#include "UObject/ConstructorHelpers.h"
 #include "DrawDebugHelpers.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -54,32 +53,15 @@ UFXR_Locomotion::UFXR_Locomotion()
 
 	// Enabled and automatic by default (design principle 2): comfort and the aim reticle ship with
 	// assets, so both work on a bare component instead of quietly needing content authored first.
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultVignette(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultReticle(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultArc(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultValid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Valid.M_FXR_Reticle_Valid"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultInvalid(TEXT("/FlexXR/Materials/M_FXR_Reticle_Invalid.M_FXR_Reticle_Invalid"));
-
-	if (DefaultVignette.Succeeded())
-	{
-		VignetteMaterial = DefaultVignette.Object;
-	}
-	if (DefaultReticle.Succeeded())
-	{
-		ReticleMesh = DefaultReticle.Object;
-	}
-	if (DefaultArc.Succeeded())
-	{
-		ArcMesh = DefaultArc.Object;
-	}
-	if (DefaultValid.Succeeded())
-	{
-		ValidMaterial = DefaultValid.Object;
-	}
-	if (DefaultInvalid.Succeeded())
-	{
-		InvalidMaterial = DefaultInvalid.Object;
-	}
+	// Referenced by path rather than loaded here. A hard default pulls teleport art into memory at
+	// startup for every project whether or not it ever teleports, and — the part that actually bites
+	// — roots the asset, so tooling cannot rebuild it: MaterialEditingLibrary asserts on !IsRooted()
+	// and takes the editor down with it.
+	VignetteMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette")));
+	ReticleMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle")));
+	ArcMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment")));
+	ValidMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Reticle_Valid.M_FXR_Reticle_Valid")));
+	InvalidMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Reticle_Invalid.M_FXR_Reticle_Invalid")));
 }
 
 void UFXR_Locomotion::BeginPlay()
@@ -105,13 +87,13 @@ void UFXR_Locomotion::BeginPlay()
 
 	// Reticle is opt-in: no mesh assigned means the debug circle stays the only marker, and no
 	// component is created at all.
-	if (ReticleMesh)
+	if (UStaticMesh* Reticle = ReticleMesh.LoadSynchronous())
 	{
 		if (AActor* Owner = GetOwner())
 		{
 			ReticleComponent = NewObject<UStaticMeshComponent>(Owner, TEXT("FXR_TeleportReticle"));
 			ReticleComponent->SetupAttachment(Owner->GetRootComponent());
-			ReticleComponent->SetStaticMesh(ReticleMesh);
+			ReticleComponent->SetStaticMesh(Reticle);
 			ReticleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			ReticleComponent->SetGenerateOverlapEvents(false);
 			ReticleComponent->SetCastShadow(false);
@@ -691,17 +673,20 @@ void UFXR_Locomotion::UpdateVignette(float DeltaTime)
 
 void UFXR_Locomotion::ApplyVignetteToMaterial()
 {
-	if (!VignetteMaterial)
-	{
-		return; // no material assigned — the game binds Get Vignette Intensity to its own overlay instead
-	}
-
 	if (!bVignetteBlendableAdded)
 	{
+		// Resolved only until the blendable exists, so the per-frame path never touches the soft
+		// pointer again once the instance is built.
+		UMaterialInterface* Source = VignetteMaterial.LoadSynchronous();
+		if (!Source)
+		{
+			return; // no material assigned — the game binds Get Vignette Intensity to its own overlay instead
+		}
+
 		const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
 		if (UCameraComponent* Camera = LocOwner ? Cast<UCameraComponent>(LocOwner->GetHMDComponent()) : nullptr)
 		{
-			VignetteMID = UMaterialInstanceDynamic::Create(VignetteMaterial, this);
+			VignetteMID = UMaterialInstanceDynamic::Create(Source, this);
 			Camera->PostProcessSettings.AddBlendable(VignetteMID, 1.f);
 			bVignetteBlendableAdded = true;
 		}
@@ -1182,7 +1167,9 @@ void UFXR_Locomotion::DrawAim()
 	const FColor Color = bTargetValid ? FColor::Green : FColor::Red;
 
 	// Debug lines are the fallback, so an assigned Arc Mesh replaces them rather than doubling up.
-	if (!ArcMesh)
+	// Tested by path, not by loading: this runs every frame while aiming and only needs to know
+	// whether a mesh was assigned at all.
+	if (ArcMesh.IsNull())
 	{
 		for (int32 Index = 1; Index < ArcPoints.Num(); ++Index)
 		{
@@ -1199,7 +1186,10 @@ void UFXR_Locomotion::DrawAim()
 
 void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 {
-	const int32 SpanCount = (bVisible && ArcMesh) ? FMath::Max(ArcPoints.Num() - 1, 0) : 0;
+	// Resolved once per call rather than per segment: an already-loaded soft pointer is a lookup,
+	// but doing it inside the span loop would be pointless work every frame while aiming.
+	UStaticMesh* Mesh = ArcMesh.LoadSynchronous();
+	const int32 SpanCount = (bVisible && Mesh) ? FMath::Max(ArcPoints.Num() - 1, 0) : 0;
 
 	AActor* Owner = GetOwner();
 	while (Owner && ArcSegments.Num() < SpanCount)
@@ -1211,7 +1201,7 @@ void UFXR_Locomotion::UpdateArcMesh(bool bVisible)
 		Segment->SetGenerateOverlapEvents(false);
 		Segment->SetCastShadow(false);
 		Segment->SetAbsolute(true, true, true); // spans are world points, not carried by the rig
-		Segment->SetStaticMesh(ArcMesh);
+		Segment->SetStaticMesh(Mesh);
 		Segment->SetHiddenInGame(true);
 		Segment->RegisterComponent();
 		ArcSegments.Add(Segment);

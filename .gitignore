@@ -3,6 +3,8 @@ Binaries/
 DerivedDataCache/
 Intermediate/
 Saved/
+# Packaged build output (BuildCookRun -archivedirectory)
+Builds/
 Build/
 .vs/
 .vscode/

@@ -70,6 +70,9 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
+	/** The primitive this interactable moves/affects — the highlight subsystem's Target Mesh scope. */
+	UPrimitiveComponent* GetDrivenComponent() const { return ResolveDrivenComponent(); }
+
 	/** Whether any debug draw / viewport gizmo is enabled. */
 	bool IsDrawDebugEnabled() const { return DebugDraw != EFXR_DebugDraw::Off; }
 
@@ -100,6 +103,17 @@ public:
 	virtual bool IsGrabTarget() const { return true; }
 
 	/**
+	 * Whether a hand can ever hold this. Sockets receive and ray targets are pointed at; neither is
+	 * ever held, which makes some inherited settings meaningless on them.
+	 */
+	virtual bool CanEverBeHeld() const { return true; }
+
+#if WITH_EDITOR
+	/** Greys out inherited settings that cannot apply to this particular subclass. */
+	virtual bool CanEditChange(const FProperty* InProperty) const override;
+#endif
+
+	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
 	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).
@@ -112,6 +126,12 @@ protected:
 
 	/** Best owned grip point for this interactor's hand (highest priority, then nearest overlapping), or null. */
 	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
+
+	/**
+	 * Best grip point for a hand, ignoring reach — for claims made from range, where the object is
+	 * metres away, nothing overlaps, and the usual proximity test rejects every point.
+	 */
+	UFXR_GripPoint* SelectGripPointForHand(EFXR_HandSide Side) const;
 
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);

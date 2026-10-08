@@ -15,9 +15,12 @@ jobs:
 
       - name: No raw new/delete in framework source
         run: |
+          # Comment lines are dropped before matching. "new" and "delete" turn up in ordinary
+          # prose often enough that this check was only ever reporting its own false positives.
           if grep -rnE '\b(new|delete)\s' --include='*.cpp' --include='*.h' Plugins/FlexXR/Source 2>/dev/null \
+             | grep -vE '^[^:]+:[0-9]+:[[:blank:]]*(//|\*|/\*)' \
              | grep -vE 'NewObject|delete\[\]\s*//|// allowed'; then
-            echo "::error::Raw new/delete found — see CODING_STANDARDS.md §2"; exit 1
+            echo "::error::Raw new/delete found - see CODING_STANDARDS.md section 2"; exit 1
           fi
 
       - name: Naming convention (FXR_ prefix on public types)

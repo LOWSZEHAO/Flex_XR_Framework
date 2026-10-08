@@ -82,7 +82,9 @@ FVector UFXR_GripPoint::GetClosestPointTo(const FVector& WorldLocation) const
 	// Clamp the hand onto the rail segment: local X, centred on the component.
 	const FVector Centre = Transform.GetLocation();
 	const FVector Axis = Transform.GetUnitAxis(EAxis::X);
-	const float HalfLength = RailLength * 0.5f;
+	// Through the accessor, so the runtime clamp and the editor gizmo cannot disagree about how long
+	// the rail is on a scaled object.
+	const float HalfLength = GetRailLength() * 0.5f;
 	const float Along = FMath::Clamp(static_cast<float>(FVector::DotProduct(WorldLocation - Centre, Axis)), -HalfLength, HalfLength);
 	return Centre + Axis * Along;
 }
