@@ -295,6 +295,38 @@ Small and recorded so they are not rediscovered as mysteries.
   keeps it inside the plugin: subscribe to `UE::Cook::FDelegates::ModifyCook` from a module's
   `StartupModule`, or give the plugin an asset-manager rule, so enabling it is enough. Worth doing
   before any 1.0 claim.
+- **Black tearing/ghosting at the outer edge of the right eye on Quest.** Reported 2026-10-08, small,
+  at the extreme periphery. Unresolved. The leading suspect is foveated rendering, because the
+  project's own setting is being silently overridden: `DefaultEngine.ini` sets
+  `xr.VRS.FoveationLevel=0` and `xr.VRS.DynamicFoveation=False`, both are applied, and then the
+  `Meta_Quest_3` device profile pushes `xr.VRS.DynamicFoveation 0 → 1`, `r.Vulkan.AllowFDMOffset
+  0 → 1` and `r.Vulkan.VRSFormat 0 → 3`. The RHI then reports *"Image-based Variable Rate Shading
+  supported via EXTFragmentDensityMap extension. Selected VRS tile size 16 by 16 pixels per VRS image
+  texel."* So foveation is live on device against the project's wishes, at coarse granularity, in
+  exactly the region where the artifact appears. **That override is worth fixing regardless of
+  whether it causes this.** Other suspects if it is not: the 4x MSAA resolve under mobile multi-view,
+  and the render target being marginally smaller than the compositor's distortion samples.
+  To A/B it without repackaging, push a one-line command-line override to the device — note it
+  **replaces** the whole command line, so it must carry `-project`, and `ForceDPCVars=` applies at
+  command-line priority, above the device profile:
+  ```
+  adb push UECommandLine.txt /sdcard/Android/data/com.LowSzeHao.FlexXR/files/UnrealGame/FlexXR/UECommandLine.txt
+  ```
+  ```
+  -project="../../../FlexXR/FlexXR.uproject" -ForceDPCVars=xr.VRS.DynamicFoveation=0,r.Vulkan.AllowFDMOffset=0
+  ```
+  With `UseExternalFilesDir=True` that external-files path is the one the engine reads; `adb install`
+  does not remove it, but the generated install bat does. Confirm it took by looking for
+  `Using override commandline file:` and `Setting CommandLine Device Profile CVar:` in the log.
+- **PC and Quest brightness will not match, and level editing cannot fix it.** Attempted once and
+  reverted (`5713778`). The cause is the renderer and post-process stack, not the level: mobile
+  forward plus the mobile tonemapper, and the `Meta_Quest_3` profile dropping post-process, GI,
+  reflection and effects quality to 1, shadows to 2, and disabling `r.LocalExposure` — while the
+  project configures local exposure contrast at 0.8, so that tuning only ever applies on PC. The sun
+  is *not* the culprit: it is an atmosphere light, but `GetTransmittanceAtGroundLevel` is pure CPU
+  maths with no LUT, so its colour is identical on both platforms. If the device needs to be
+  brighter, tune it for the device in `Config/Android/AndroidEngine.ini` and leave PC alone. Chasing
+  parity is the wrong goal.
 
 ---
 
