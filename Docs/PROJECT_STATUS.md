@@ -42,6 +42,10 @@ only observes it; games simply never load it. That separation is enforced mechan
 | 5 — Optimization + Quest standalone | ⬜ Not started | — |
 | 6 — MR pass + game demo | ⬜ Not started | — |
 
+As of 2026-10-08 the framework also **runs on Quest standalone** — built, packaged, installed and
+confirmed in-headset (§6). That is the Phase 5 target platform reached early, which de-risks it:
+Phase 5 is now optimisation on a device that already runs, not a port.
+
 Full roadmap with time estimates: architecture doc §13.
 
 ---
@@ -141,36 +145,34 @@ not simply widen the enum. Locomotion modes are closed by ADR-005 and need a sup
 
 ---
 
-## 6. Quest smoke test — on device, needs to be worn
+## 6. Quest smoke test — PASSED 2026-10-08
 
 The standing rule is that a Quest build closes every phase from 2 onward. It had never been run,
-because the project carried **no Android configuration at all**. That is now fixed, and the build is
-installed on the headset.
+because the project carried no Android configuration at all. It has now run end to end on a Quest 3
+(Android 14 / SDK 34) and **interaction was confirmed working and smooth in-headset**.
 
-**What is proven:**
-- ✅ Android toolchain present (SDK, NDK 27.2, JDK, `adb`).
-- ✅ Project configured for Quest: Vulkan only, arm64 only, SDK 32, Package for Meta Quest. ES3.1 is
-  deliberately **off** — shipping it would double shader compilation and cook time for a backend the
-  device never uses.
-- ✅ **The whole framework compiles for arm64.** First time ever.
-- ✅ **Cooks and packages end to end** — a 118 MB APK at `Binaries/Android/FlexXR-arm64.apk`.
-- ✅ **Installed and launches on a Quest 3** (Android 14 / SDK 34, 2026-10-08). The app starts,
-  mounts its OBB, reports `Vulkan version: 1.1.0` and `OpenXR_APL Found OpenXR Oculus Mobile mode`,
-  and logs no errors.
+Getting there took two fixes, both invisible on PC and neither producing an error. Both are recorded
+as gotchas in §7 and are the clearest argument yet for the device-build-per-phase rule:
 
-**What is not done:** nobody has worn it. The app is suspended by the proximity sensor the moment it
-launches with the headset off a head — `onPause → onStop → App in background`, with
-`Oculus: Ignoring APP_CMD_PAUSE command before APP_CMD_INIT_WINDOW`, i.e. the XR session never
-starts. That is the device behaving normally, not a fault. Put the headset on and launch **FlexXR**
-from Unknown Sources in the library.
+1. **Stereo was collapsed** — an identical image in both eyes. Multi-view was fine
+   (`bMobileMultiViewEnabled = 1`); the project was on the mobile **deferred** shading path, whose
+   lighting pass never sets `RenderTargets.MultiViewCount`. Now `r.Mobile.ShadingPath=0`.
+2. **None of FlexXR's own content shipped** — every material and mesh is addressed by a hardcoded
+   `FSoftObjectPath` in C++, which leaves the cooker no dependency to follow. All 11 assets were
+   absent from the first APK, so the Mesh Hull highlight tier could not have worked on device either.
+   Now named in `DirectoriesToAlwaysCook`.
+
+**Known cosmetic difference, not a fault:** the scene reads as sunset on device and midday on PCVR.
+That is the template sky stack meeting Android's platform defaults — see §7. It is a property of the
+test level's lighting, not of the framework.
 
 ### Installing the build — the APK alone is not enough
 
-The package is split: a 124 MB APK and a **78 MB OBB** holding the cooked content. `adb install` by
+The package is split: a ~124 MB APK and an ~84 MB OBB holding the cooked content. `adb install` by
 itself gives you an app with no content. The full sequence (paths relative to `Binaries/Android`):
 
 ```
-adb install FlexXR-arm64.apk
+adb install -r FlexXR-arm64.apk
 adb shell rm -r /sdcard/UnrealGame/FlexXR
 adb shell rm -r /sdcard/Android/obb/com.LowSzeHao.FlexXR
 "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/DotNET/Android/UnrealAndroidFileTool/win-x64/UnrealAndroidFileTool.exe" ^
@@ -178,25 +180,32 @@ adb shell rm -r /sdcard/Android/obb/com.LowSzeHao.FlexXR
 ```
 
 UE generates `Install_FlexXR-arm64.bat` to do exactly this, but it invokes the file tool as
-`.\win-x64\UnrealAndroidFileTool.exe` — **a folder that is not deployed next to the APK**, so the bat
-fails at the OBB step. Either copy the engine's `win-x64` folder in beside the APK or call the tool
-by absolute path as above. The `-k` key is per-package and is printed in the generated bat.
+`.\win-x64\UnrealAndroidFileTool.exe` — **a folder that is not deployed next to the APK** — so the bat
+fails at the OBB step. Call the tool by absolute path as above. The `-k` key is per-package and is
+printed in the generated bat.
+
+Rebuild and repackage with:
+
+```
+RunUAT.bat -ScriptsForProject="G:\Flex_XR_Framework\FlexXR.uproject" BuildCookRun ^
+  -project="G:\Flex_XR_Framework\FlexXR.uproject" -nop4 -utf8output -nocompileeditor -skipbuildeditor ^
+  -platform=Android -cookflavor=ASTC -clientconfig=Development -build -cook -stage -package -pak -iostore -compressed
+```
+
+About 6–7 minutes from clean config. Verify afterwards without a headset: `UnrealPak <utoc> -List`
+should list all 11 `/FlexXR/` assets, and extracting `*Engine.ini` from the pak shows the renderer
+settings that actually shipped.
 
 Under Git Bash, prefix adb shell commands with `MSYS_NO_PATHCONV=1` or a device path like `/sdcard/...`
-is rewritten into a Windows path and the command fails on a nonsense directory.
+is rewritten into a Windows path. `adb pull` needs a **Windows** destination path.
 
-**A rebuild is only needed when source or content is newer than the APK.** Compare timestamps before
-assuming — as of 2026-10-08 the installed APK still matches the tree.
-
-**The first Android compile immediately found a real portability bug** the editor could never
-surface: `UFXR_Socket` called `SetIsVisualizationComponent`, which only exists under
-`WITH_EDITORONLY_DATA`. It compiled against the editor for weeks and broke the moment a device build
-was attempted. Now guarded. This is the smoke-test rule earning its keep on its first run — expect
-more of this class of bug on device.
+**A headless launch proves nothing about rendering.** With the headset off a head the proximity sensor
+suspends the app before the renderer initialises — the log stops around 120 lines, well short of any
+stereo or asset-load information. `adb shell am broadcast -a com.oculus.vrpowermanagement.prox_close`
+makes the device behave as if worn, if a full runtime log is needed without wearing it.
 
 **Watch for on device:** `Highlight Tier = Auto` resolves to **Mesh Hull** on Quest, not the
-post-process outline used on PC. If highlights look wrong on device but right on PC, that is the
-first place to look.
+post-process outline used on PC. If highlights look wrong on device but right on PC, start there.
 
 ---
 
@@ -247,6 +256,20 @@ Each of these cost real time. They are not obvious from the code.
   folders are named in `DirectoriesToAlwaysCook` in `DefaultGame.ini`. Add any new plugin content
   folder there. Symptom on device: `LogStreaming: Warning: SkipPackage: /FlexXR/... does not exist on
   disk or in the loader`.
+- **PC and Quest will never agree on the UE5 default sky, and it is not a bug.** `FlexXR_Development`
+  is lit by the template stack — SkyAtmosphere, VolumetricCloud, a real-time-capture SkyLight,
+  directional light and height fog. On Android the engine disables volumetric clouds outright
+  (`r.VolumetricCloud.Support=0`, `BaseAndroidEngine.ini`) and clamps SkyAtmosphere to the cheap path
+  at **every** quality level — `[EffectsQuality@0]` through `@3` in `AndroidScalability.ini` all set
+  `FastSkyLUT=1`, a 96×50 LUT, 1–8 samples, aerial perspective at one sample per slice. Undersampled
+  scattering underestimates transmittance, so the sky comes out warmer and dimmer. Because the
+  SkyLight captures in real time, it then feeds that sky back as ambient on **every surface**, which
+  is why the whole scene reads as sunset on device while PCVR looks like midday. Raising scalability
+  cannot fix it; the Android values are identical at all four levels.
+  The fix is to stop lighting a Quest target from a live desktop sky: capture the SkyLight to a fixed
+  cubemap, drop the cloud component (it only ever renders on PC, so it actively misleads), and bake
+  the demo level. Do **not** raise the Android sky cvars to chase parity — that spends GPU on a
+  90 fps target for a sky the training demo does not care about.
 - **Editor file locks:** the editor holds `Content/*.uasset` open. `git checkout` of a content file
   fails with `unable to unlink ... Invalid argument` while it is running, and a branch switch can
   abort half-applied. Close the editor first. **Never `git clean -fd` in this repo.**
@@ -277,16 +300,16 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Wear the Quest and run the installed build** — the APK and its OBB are on the headset and the
-   app launches cleanly; only the in-headset pass is left. Confirm the OpenXR session comes up, hands
-   or controllers track, grab / press / latch behave, and the far ray appears on a `FXR_RayTarget`.
-   This closes standing debt and exercises the **Mesh Hull** highlight tier for the first time. See §6.
-2. **Test the guidance arrow** — it has never been seen rendering. `BP_FXR_Pawn` already carries the
-   component; drive it from PIE with `Point To Component` against a test interactable.
-3. **Close Phase 3** — PR into `main`, tag `v0.4-ui`.
-4. **Phase 4 — `FXR_Training`** — the SOP step graph (ADR-004) and the fire-safety demo. Build the
+1. **Test the guidance arrow** — the last piece of Phase 3 that has never been seen rendering. Its
+   material now ships on device (it did not before), but nothing has confirmed it draws on either
+   platform. `BP_FXR_Pawn` already carries the component; drive it from PIE with `Point To Component`
+   against a test interactable.
+2. **Close Phase 3** — PR into `main`, tag `v0.4-ui`.
+3. **Phase 4 — `FXR_Training`** — the SOP step graph (ADR-004) and the fire-safety demo. Build the
    validation panel and spatial UI kit *inside* this phase, where a real consumer defines what they
-   need.
+   need. Light that level for the device from the start rather than with the desktop template sky (§7).
+
+Done: the Quest smoke test (§6) — installed, launched and confirmed in-headset on 2026-10-08.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
