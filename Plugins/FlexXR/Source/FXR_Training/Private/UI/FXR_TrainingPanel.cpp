@@ -3,6 +3,8 @@
 #include "UI/FXR_TrainingPanel.h"
 
 #include "Components/FXR_TrainingSession.h"
+#include "Components/ProgressBar.h"
+#include "Components/TextBlock.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -21,6 +23,11 @@ void UFXR_TrainingPanel::NativeConstruct()
 	if (!Session.IsValid())
 	{
 		BindToSession(FindSessionInWorld());
+	}
+	else
+	{
+		// Already bound, so BindToSession will not run and the widgets have never been written.
+		Refresh();
 	}
 }
 
@@ -52,6 +59,7 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 
 	if (!InSession)
 	{
+		Refresh();
 		return;
 	}
 
@@ -73,6 +81,8 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 
 		OnStepChanged(StepId, Instruction, InSession->GetStepsCompleted() + 1, InSession->GetStepTotal());
 	}
+
+	Refresh();
 }
 
 FText UFXR_TrainingPanel::GetProgressText() const
@@ -83,7 +93,7 @@ FText UFXR_TrainingPanel::GetProgressText() const
 		return FText::GetEmpty();
 	}
 
-	return FText::Format(NSLOCTEXT("FlexXR", "PanelProgress", "{0} / {1}"),
+	return FText::Format(NSLOCTEXT("FlexXR", "PanelProgress", "Step {0} / {1}"),
 		FText::AsNumber(Current->GetStepsCompleted()),
 		FText::AsNumber(Current->GetStepTotal()));
 }
@@ -115,12 +125,15 @@ void UFXR_TrainingPanel::HandleStepActivated(FName InStepId, FText InInstruction
 	// has no single current step, and what a trainee reads here is how far through they are.
 	const int32 Number = Current ? Current->GetStepsCompleted() + 1 : 0;
 
+	Refresh();
 	OnStepChanged(StepId, Instruction, Number, Total);
 }
 
 void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
 {
 	MistakeText = Mistake.Message.IsEmpty() ? DefaultMistakeMessage : Mistake.Message;
+
+	Refresh();
 	OnMistakeShown(Mistake, MistakeText);
 
 	UWorld* World = GetWorld();
@@ -143,6 +156,7 @@ void UFXR_TrainingPanel::HandleFinished(FFXR_SessionReport InReport)
 	StepId = NAME_None;
 	ClearMistake();
 
+	Refresh();
 	OnSessionComplete(Report);
 }
 
@@ -161,7 +175,73 @@ void UFXR_TrainingPanel::ClearMistake()
 	}
 
 	MistakeText = FText::GetEmpty();
+
+	Refresh();
 	OnMistakeCleared();
+}
+
+void UFXR_TrainingPanel::Refresh()
+{
+	// Every widget is optional, so each one is its own question. A designer's layout that keeps only
+	// the instruction is a valid layout.
+	if (InstructionLabel)
+	{
+		InstructionLabel->SetText(Instruction);
+	}
+
+	if (ProgressLabel)
+	{
+		ProgressLabel->SetText(GetProgressText());
+	}
+
+	if (ProgressFill)
+	{
+		ProgressFill->SetPercent(GetProgressFraction());
+	}
+
+	if (MistakeLabel)
+	{
+		MistakeLabel->SetText(MistakeText);
+	}
+
+	// Collapsed rather than Hidden: a hidden widget still takes its space, which leaves a hole where
+	// the complaint was and moves everything below it.
+	if (MistakeCard)
+	{
+		MistakeCard->SetVisibility(HasMistake() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	if (ScoreLabel)
+	{
+		ScoreLabel->SetText(FText::AsNumber(FMath::RoundToInt(Report.Score)));
+	}
+
+	if (SummaryLabel)
+	{
+		SummaryLabel->SetText(BuildSummaryText());
+	}
+
+	if (CompletionCard)
+	{
+		CompletionCard->SetVisibility(bFinished ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+}
+
+FText UFXR_TrainingPanel::BuildSummaryText() const
+{
+	const int32 Minutes = FMath::FloorToInt(Report.DurationSeconds / 60.f);
+	const int32 Seconds = FMath::FloorToInt(Report.DurationSeconds) % 60;
+
+	FNumberFormattingOptions Padded;
+	Padded.MinimumIntegralDigits = 2;
+
+	return FText::Format(
+		NSLOCTEXT("FlexXR", "PanelSummary", "{0} of {1} steps     {2} mistakes     {3}:{4}"),
+		FText::AsNumber(Report.StepsCompleted),
+		FText::AsNumber(Report.StepsTotal),
+		FText::AsNumber(Report.Mistakes.Num()),
+		FText::AsNumber(Minutes),
+		FText::AsNumber(Seconds, &Padded));
 }
 
 UFXR_TrainingSession* UFXR_TrainingPanel::FindSessionInWorld() const

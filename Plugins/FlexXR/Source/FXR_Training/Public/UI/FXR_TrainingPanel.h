@@ -9,6 +9,9 @@
 #include "FXR_TrainingPanel.generated.h"
 
 class UFXR_TrainingSession;
+class UProgressBar;
+class UTextBlock;
+class UWidget;
 
 /**
  * UFXR_TrainingPanel — the in-world surface that says what to do and what went wrong.
@@ -98,6 +101,46 @@ public:
 	void OnSessionComplete(const FFXR_SessionReport& InReport);
 
 protected:
+	/**
+	 * Widgets this class drives directly, found by name.
+	 *
+	 * Name a widget in your Blueprint after one of these and it is filled in and kept current with
+	 * no event graph at all, which is what keeps framework logic out of Blueprint. Leave any of them
+	 * out and that part simply does not exist: **Optional** rather than required, because this is a
+	 * base class for layouts nobody has designed yet, and one that refuses to compile without a
+	 * widget named `SummaryLabel` would be a base class people work around.
+	 *
+	 * Prefer these to property bindings. A bound getter runs every frame per widget whether anything
+	 * changed or not; these are written when something does.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> InstructionLabel;
+
+	/** "Step 2 / 7". */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ProgressLabel;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UProgressBar> ProgressFill;
+
+	/** Shown only while there is a complaint. Anything: a border, a box, an image. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> MistakeCard;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> MistakeLabel;
+
+	/** Shown only once the run has finished. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> CompletionCard;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ScoreLabel;
+
+	/** Steps, mistakes and elapsed time, on one line. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SummaryLabel;
+
 	/** How long a complaint stays up. Zero leaves it up until the next one; see the class comment. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
 	float MistakeDwellSeconds = 4.f;
@@ -117,6 +160,12 @@ private:
 	void HandleFinished(FFXR_SessionReport InReport);
 
 	void ClearMistake();
+
+	/** Push the current state into whichever of the bound widgets exist. */
+	void Refresh();
+
+	/** Steps, mistakes and elapsed time for the completion card. */
+	FText BuildSummaryText() const;
 
 	/** The only session in the level, or null. Warns rather than picking when there are several. */
 	UFXR_TrainingSession* FindSessionInWorld() const;
