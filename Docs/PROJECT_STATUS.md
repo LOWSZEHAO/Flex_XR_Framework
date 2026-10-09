@@ -1,7 +1,7 @@
 # FlexXR - Project Status & Handoff
 
 **Last updated:** 2026-10-09 · **Last active development:** 2026-10-09
-**Current branch:** `phase-4-training` · **Architecture doc version:** 0.14
+**Current branch:** `phase-4-training` · **Architecture doc version:** 0.15
 
 This document is the single place to find *where the project actually is*. The architecture
 document says what FlexXR is and why; this says what is built, what is half-built, what was
@@ -109,14 +109,41 @@ except where noted in §4.
 
 ---
 
-## 4. Phase 3 - what remains
+## 4. Phase 4 - what is built
 
-| Item | Notes |
-|---|---|
-| **Guidance arrow** | Working, confirmed in-headset 2026-10-09. Takes a custom mesh or a Blueprint, see §3 |
-| **Spatial UI kit** | Panels, buttons, sliders, keypads, auto ray-targetable. Explicitly wanted **last** |
-| **Validation panel** | An in-world "you did this wrong" surface. Recommend building it in Phase 4, where the step graph defines what it must show, rather than guessing now |
-| **Ghost-hand guidance** | **Deliberately dropped** - see §5 |
+On branch `phase-4-training`, unpushed. Builds clean. **None of it has been run yet** - no graph has
+been authored and no session played, in a headset or in PIE. Phase 3's two deferred items landed
+here, as planned, so a real consumer would define them.
+
+**The SOP runtime (ADR-004)**
+- `FFXR_StepRunner` - the judge. No UObject, no world, no tick group: fed events and a delta time, it
+  answers with outcomes, which is what makes a run reproducible and testable without an engine
+  running. It deliberately cannot reach the world, because a procedure a trainee cannot fail measures
+  nothing.
+- `UFXR_StepGraph` - the authoring DataAsset, compiled down to the runner's step array. Authoring and
+  runtime are separate by ADR-004, so a CSV import or a node editor later compiles to the same
+  contract.
+- `UFXR_TrainingSession` - the part that *can* reach the world. Subscribes to the interaction event
+  bus, drives the Guidance highlight on the open step's target, and applies the opt-in hard-lock
+  interlock for steps that must gate.
+- `FFXR_SessionReport` - per-step timings, mistakes, hints and a weighted score. Built before cleanup
+  so it describes the run and not the teardown, and safe to call mid-session for a live panel.
+
+**The spatial UI kit**
+- `UFXR_Panel` - world-space UMG surface. Sized in centimetres, optional face-the-player, fades on
+  the framework's one fade duration, ray-targetable with no collision setup.
+- `UFXR_WidgetPointer` - one per hand on the pawn. Slate's own pointer, fed from the rig's cached far
+  hit and from the fingertip inside poke range, and yielding to interaction like locomotion does.
+- `UFXR_TrainingPanel` - the validation panel. A `UUserWidget` base to reparent a Widget Blueprint
+  to; it reads the session and never drives it.
+- **No buttons, sliders or keypads.** Those are Slate's and work inside a panel unchanged - see the
+  architecture doc's v0.15 entry for why that reverses §3.3's original line.
+
+**Still to come:** the fire-safety demo scenario. Deliberately last; the framework gets finished
+first.
+
+Phase 3 leftovers: the guidance arrow is done and confirmed in-headset (§3). Ghost-hand guidance was
+**deliberately dropped** - see §5.
 
 ---
 
@@ -286,6 +313,21 @@ Each of these cost real time. They are not obvious from the code.
 
 Small and recorded so they are not rediscovered as mysteries.
 
+- **Nothing in §4 has been executed.** The SOP runtime, the spatial UI kit and the validation panel
+  all build clean and the logic has been read, but no graph has been authored, no session played and
+  no panel put in a level. Treat every behaviour described in §4 as designed, not demonstrated.
+- **The pointer beam over a panel is unverified, and so is the hover highlight.** `FXR_Panel` adds an
+  `FXR_RayTarget` at BeginPlay, because the rig only lights its beam for something that will answer
+  and a laser you cannot see is one you cannot aim. That also makes the panel an interactable, so the
+  highlight system may put a hover outline on it. If that looks wrong in a headset, clear
+  `Pointer Beam` on the panel - the pointer itself does not need it.
+- **A curved panel cannot be poked.** `UFXR_Panel::TracePoke` refuses Cylinder geometry mode and says
+  so; ray pointing still works on one. Flattening a fingertip onto a cylinder is a different
+  calculation and there was no case for it yet.
+- **The validation panel's step number is "completed + 1", not an index.** A procedure that allows
+  steps in any order has no single current step, so a fan-out reads as fewer steps than are open. It
+  is the right number for a trainee reading how far through they are and the wrong one for anything
+  that needs the graph position.
 - **`UFXR_ScoringPolicy` is marked `Blueprintable` but `ScoreCandidate` is a plain C++ virtual**, not
   a `UFUNCTION`. A Blueprint subclass compiles and its override is never called - worse than not
   being Blueprintable at all. Should either drop `Blueprintable` (matching ADR-010, which says
@@ -354,13 +396,17 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Close Phase 3** - PR into `main`, tag `v0.4-ui`. Everything in §3 is built and verified; what
-   remains in §4 is deliberately deferred into Phase 4.
-2. **Phase 4 - `FXR_Training`** - the SOP step graph (ADR-004) and the fire-safety demo. Build the
-   validation panel and spatial UI kit *inside* this phase, where a real consumer defines what they
-   need. Light that level for the device from the start rather than with the desktop template sky (§7).
+1. **Author a graph and run it.** Nothing in §4 has executed. Tick Expose to Training and set an
+   Interaction Id on a handful of interactables, make a `UFXR_StepGraph`, drop a session on a manager
+   actor, and watch it in PIE before putting a headset on.
+2. **Put a panel in the level.** A Widget Blueprint reparented to `FXR_TrainingPanel`, inside an
+   `FXR_Panel`, with one `FXR_WidgetPointer` per hand on the pawn. This is the first real exercise of
+   the kit: the ray path, the poke path and the beam over UI are all unverified (§8).
+3. **The fire-safety demo.** Only after the above. Light that level for the device from the start
+   rather than with the desktop template sky (§7).
 
-Done: the Quest smoke test (§6), and the guidance arrow, confirmed working in-headset 2026-10-09.
+Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
+confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the validation panel (§4).
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.

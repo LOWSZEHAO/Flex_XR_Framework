@@ -66,7 +66,9 @@ One plugin, five modules, **strictly one-way dependencies**:
 User-facing components (§4), the internal systems powering them (§5), the detection/focus pipeline, and the highlight system.
 
 ### 3.3 FXR_UI — where the premium feel lives
-- Spatial UI kit: panels, buttons, sliders, keypads (auto ray-targetable).
+- Spatial UI kit: `FXR_Panel`, a world-space surface a laser can hit and a finger can push, plus one
+  `FXR_WidgetPointer` per hand. **The widgets inside it are ordinary UMG** — buttons, sliders and keypads
+  are Slate's, not FlexXR's. See the v0.15 changelog entry for why that reverses the original line here.
 - **One motion-design spec** — see below. It lives in **FXR_Core**, not here, for dependency reasons.
 - Diegetic guidance primitives: ghost-hand demonstrations, directional arrows (consumed by FXR_Training, usable by games).
 
@@ -834,6 +836,34 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.15 — Spatial UI**
+- `UFXR_Panel` and `UFXR_WidgetPointer`: the spatial UI kit §3.3 promised, less the widgets themselves.
+- **Buttons, sliders and keypads are Slate's and stay Slate's.** §3.3 listed them as FlexXR items and
+  that was wrong. A 3D framework that rewrote them would ship worse ones no designer recognises, and
+  they already work inside a world panel unchanged. What UMG has no answer for is the surface — a thing
+  in the world a laser can hit and a finger can push, measured in centimetres rather than pixels, that
+  turns to face the player and fades instead of appearing. That is what the kit is.
+- The pointer subclasses the engine's widget interaction component to keep Slate's pointer plumbing and
+  replaces only the part that is wrong for XR: where the pointer is. The engine traces from its own
+  transform, which would be a second ray aimed slightly differently from the one the rig already casts
+  and draws. It reads the rig's cached far hit instead, so the beam and the press cannot disagree.
+  `UFXR_InteractionDriver::GetAimHit` publishes that hit for any consumer that wants the surface rather
+  than the interactable.
+- A fingertip beats the laser inside Poke Range — the same near-over-far arbitration the driver makes,
+  for the same reason. A press is only allowed from the front: the finger must be seen outside the glass
+  before it goes through, or a hand reaching behind a floating panel would press what is on it.
+- Panels are found for poking through a module-local registry rather than a physics sweep. A level has a
+  handful, poke range is a few centimetres, and a linear pass needs none of the collision tuning a sweep
+  would.
+- `UFXR_TrainingPanel` is the "you did this wrong" surface, built in Phase 4 as planned so the step graph
+  could define what it must show rather than it being guessed at in Phase 3. It reads the session and
+  never drives it, so deleting a panel cannot change what a procedure does or what it scores. It owns one
+  decision the graph cannot express: **a complaint has to leave on its own.** The runner records a mistake
+  as a fact at a moment in time, which is right for a report and useless on a wall.
+- Panel size is authored in centimetres and driven into the component's scale. Draw Size stays what it
+  actually is, the widget's resolution; at scale 1 a 600-pixel widget is six metres across, which is why
+  every VR project ends up with a hand-tuned 0.06-something.
 
 **v0.14 — Motion design**
 - New §5.9 and `UFXR_MotionSettings`: the motion spec is settings the components read, not a document
