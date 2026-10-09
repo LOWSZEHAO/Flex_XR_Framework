@@ -17,7 +17,10 @@ public class FXR_Training : ModuleRules
 			"Engine",
 			"FXR_Core",
 			"FXR_Interaction",
-			"FXR_UI"
+			"FXR_UI",
+			// UUserWidget, for the validation panel. FXR_UI already depends on UMG publicly, but a
+			// transitive dep gives headers and still fails to link.
+			"UMG"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
