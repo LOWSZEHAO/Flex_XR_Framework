@@ -864,6 +864,24 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 - Panel size is authored in centimetres and driven into the component's scale. Draw Size stays what it
   actually is, the widget's resolution; at scale 1 a 600-pixel widget is six metres across, which is why
   every VR project ends up with a hand-tuned 0.06-something.
+- `UFXR_TrainingPanel` drives its widgets through `meta = (BindWidgetOptional)` rather than UMG property
+  bindings. A bound getter runs every frame per widget whether anything changed or not; this writes when
+  something does, and it keeps the logic in C++ where §15 requires it. Optional rather than required,
+  because a base class that will not compile without a widget named `SummaryLabel` is one people work
+  around.
+- **New module `FXR_TrainingEditor`**, the second editor-only module, holding `UFXR_PanelBuilder`: it
+  generates `WBP_FXR_TrainingPanel` so the framework ships a readable panel instead of a parent class
+  and instructions. Above `FXR_Training` rather than inside `FXR_InteractionEditor`, which must not learn
+  that training exists either.
+- The generated panel's layout is C++ and not a Python tool like the material generator, because it
+  cannot be one: `UWidgetBlueprint::WidgetTree` and `UWidgetTree::RootWidget` are both bare
+  `UPROPERTY()`s with no edit or blueprint flag, so neither is exported to script, `UWidgetTree` has no
+  `UFUNCTION` at all, and `ConstructWidget` is a template. Python can create the asset and then do
+  nothing with it.
+- Its type scale is derived rather than picked. VR text is governed by **angular size**, so the panel is
+  authored at 20 px per centimetre against a 60 cm width, which puts the scale between 19 and 60 dmm at
+  a 1.5 m reading distance, inside the band reading studies on Quest-class hardware report. Contrast is
+  held at or above 7:1. The consequence an author needs: **an instruction has about 40 characters.**
 
 **v0.14 — Motion design**
 - New §5.9 and `UFXR_MotionSettings`: the motion spec is settings the components read, not a document

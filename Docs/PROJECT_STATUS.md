@@ -106,6 +106,9 @@ except where noted in §4.
 **Tooling**
 - `Tools/regen_fxr_materials.py` is the source of truth for every plugin material. **Run it from the
   editor console, never unattended** - see §7.
+- `Tools/make_fxr_training_panel.py` generates the default validation panel (§4). Unlike the material
+  tool it *is* safe unattended, because it rebuilds in place and never deletes - the two reasons the
+  material tool half-succeeds headlessly. The layout lives in `UFXR_PanelBuilder`, not in the script.
 
 ---
 
@@ -135,9 +138,21 @@ here, as planned, so a real consumer would define them.
 - `UFXR_WidgetPointer` - one per hand on the pawn. Slate's own pointer, fed from the rig's cached far
   hit and from the fingertip inside poke range, and yielding to interaction like locomotion does.
 - `UFXR_TrainingPanel` - the validation panel. A `UUserWidget` base to reparent a Widget Blueprint
-  to; it reads the session and never drives it.
+  to; it reads the session and never drives it. It drives its own widgets through
+  `meta = (BindWidgetOptional)`, so a panel needs no event graph and no property bindings: name a
+  widget `InstructionLabel` or `ProgressFill` and it is found and kept current.
+- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the default panel, generated. Authored at 20 px per
+  centimetre against a 60 cm width, because VR text is governed by angular size; the type scale
+  lands between 19 and 60 dmm at a 1.5 m reading distance. **An instruction has about 40
+  characters** before it clips, which is the thing to know before writing a step graph.
 - **No buttons, sliders or keypads.** Those are Slate's and work inside a panel unchanged - see the
   architecture doc's v0.15 entry for why that reverses §3.3's original line.
+
+**New module: `FXR_TrainingEditor`** - the second editor-only module. Holds `UFXR_PanelBuilder`,
+which writes the panel above. It has to be C++: `UWidgetBlueprint::WidgetTree` and
+`UWidgetTree::RootWidget` are bare `UPROPERTY()`s and so are not exported to script, `UWidgetTree`
+has no `UFUNCTION` at all, and `ConstructWidget` is a template. Python can create the asset and then
+do nothing with it, which is why `Tools/make_fxr_training_panel.py` is a three-line wrapper.
 
 **Still to come:** the fire-safety demo scenario. Deliberately last; the framework gets finished
 first.
@@ -316,6 +331,14 @@ Small and recorded so they are not rediscovered as mysteries.
 - **Nothing in §4 has been executed.** The SOP runtime, the spatial UI kit and the validation panel
   all build clean and the logic has been read, but no graph has been authored, no session played and
   no panel put in a level. Treat every behaviour described in §4 as designed, not demonstrated.
+- **The generated panel has been verified as structure, not as a picture.** All eleven widgets are
+  present with the right classes and the asset is parented to `UFXR_TrainingPanel`, checked by
+  loading it back. Nobody has looked at it: not in the designer, not in PIE, not in a headset. The
+  type sizes come from reading studies rather than from this panel at this distance, and the first
+  thing to check on device is whether 96 px instruction text is too large rather than too small.
+- **The `BindWidgetOptional` pointers are inferred to resolve, not observed to.** UMG matches them by
+  name, the names were verified to match, and the properties compile - but an optional binding that
+  fails to resolve is silent by design, so a typo would look like a panel that never updates.
 - **The pointer beam over a panel is unverified, and so is the hover highlight.** `FXR_Panel` adds an
   `FXR_RayTarget` at BeginPlay, because the rig only lights its beam for something that will answer
   and a laser you cannot see is one you cannot aim. That also makes the panel an interactable, so the
@@ -399,9 +422,10 @@ Small and recorded so they are not rediscovered as mysteries.
 1. **Author a graph and run it.** Nothing in §4 has executed. Tick Expose to Training and set an
    Interaction Id on a handful of interactables, make a `UFXR_StepGraph`, drop a session on a manager
    actor, and watch it in PIE before putting a headset on.
-2. **Put a panel in the level.** A Widget Blueprint reparented to `FXR_TrainingPanel`, inside an
-   `FXR_Panel`, with one `FXR_WidgetPointer` per hand on the pawn. This is the first real exercise of
-   the kit: the ray path, the poke path and the beam over UI are all unverified (§8).
+2. **Put the panel in the level.** `WBP_FXR_TrainingPanel` inside an `FXR_Panel` with Panel Width 60,
+   and one `FXR_WidgetPointer` per hand on the pawn. This is the first real exercise of the kit: the
+   ray path, the poke path, the beam over UI and the panel's own type sizes are all unverified (§8).
+   Open it in the designer first - it has never been looked at.
 3. **The fire-safety demo.** Only after the above. Light that level for the device from the start
    rather than with the desktop template sky (§7).
 
