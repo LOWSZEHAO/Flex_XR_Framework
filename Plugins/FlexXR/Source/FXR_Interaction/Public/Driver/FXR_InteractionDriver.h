@@ -47,6 +47,13 @@ public:
 	/** The ray target the given hand is currently pointing at, or null. */
 	UFXR_RayTarget* GetAimedRayTarget(EFXR_HandSide Side) const;
 
+	/**
+	 * What this hand's far ray is resting on this frame, whatever it is — a ray target, a spatial
+	 * panel, or plain world geometry. Published from the one trace the rig casts, so a consumer
+	 * that wants the surface rather than the interactable never casts a second one.
+	 */
+	bool GetAimHit(EFXR_HandSide Side, FHitResult& OutHit) const { return GetFarHit(Side, OutHit); }
+
 protected:
 	/** Select value at or above which a grab is claimed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))
