@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlexXR training panel — 900 × 870</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 500/600/800 only. Montserrat ships no Regular, so 500 is the floor and the
+     450/650 weights the Explain spec asks for do not exist. -->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page:   #0b0c0e;
+    --page-2: #15171b;
+    --ink:    #f2f3f5;
+    --ink-2:  rgba(242,243,245,0.62);
+    --ink-3:  rgba(242,243,245,0.38);
+    --rule:   rgba(255,255,255,0.08);
+    --font:   'Montserrat', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--page); }
+  body {
+    margin: 0; font-family: var(--font); font-weight: 500; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── page chrome ───────────────────────────────────────────────── */
+  header { padding: 56px 40px 0; max-width: 1480px; margin: 0 auto; }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3); display: flex; align-items: center; gap: 9px;
+  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: #0a84ff; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.022em; margin: 14px 0 0; line-height: 1.14; }
+  .lede { margin: 14px 0 0; font-size: 16px; line-height: 1.65; color: var(--ink-2); max-width: 760px; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  code {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em;
+    background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 5px;
+  }
+
+  .zoom { display: inline-flex; gap: 2px; padding: 3px; margin-top: 26px;
+          background: rgba(255,255,255,0.06); border-radius: 999px; }
+  .zoom button {
+    border: none; cursor: pointer; font-family: var(--font); font-size: 13px; font-weight: 600;
+    padding: 9px 18px; border-radius: 999px; background: transparent; color: var(--ink-2);
+  }
+  .zoom button.on { background: rgba(255,255,255,0.14); color: var(--ink); }
+
+  main { max-width: 1480px; margin: 0 auto; padding: 40px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 36px; }
+  section { margin-top: 56px; }
+  section > h2 {
+    font-size: 13px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 20px; padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+  }
+  .note { font-size: 15px; line-height: 1.7; color: var(--ink-2); max-width: 800px; margin: 0 0 24px; }
+
+  /* ── the scene each panel floats in ────────────────────────────── */
+  .scene {
+    position: relative; border-radius: 18px; overflow: hidden; flex: none;
+    background:
+      radial-gradient(120% 90% at 72% 6%,  rgba(126,158,198,0.30) 0%, rgba(0,0,0,0) 58%),
+      radial-gradient(90%  70% at 10% 96%, rgba(196,146,94,0.20)  0%, rgba(0,0,0,0) 62%),
+      linear-gradient(168deg, #2b2f37 0%, #191c21 48%, #0e1014 100%);
+    display: flex; align-items: center; justify-content: center; padding: 34px;
+  }
+  .scene::after {
+    content: ''; position: absolute; inset: auto 0 0 0; height: 20%;
+    background: linear-gradient(180deg, rgba(150,110,72,0) 0%, rgba(150,110,72,0.24) 60%, rgba(120,86,55,0.40) 100%);
+    pointer-events: none;
+  }
+  .scene-label {
+    position: absolute; top: 14px; left: 16px; z-index: 6;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(255,255,255,0.42);
+  }
+  /* The boards are drawn at 900 × 870 and shrunk by transform only — never by
+     changing type sizes, which would throw away the point of looking at them. */
+  .fit { position: relative; z-index: 3; }
+  .fit > .w { transform-origin: top left; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     THE PANEL — 900 × 870 px at component scale 0.1 = 90 × 87 cm.
+     1 px = 1 mm. Every number below can be typed into UMG as written.
+     ══════════════════════════════════════════════════════════════════ */
+  .w {
+    --t:    #fff;
+    --t2:   rgba(235,235,245,0.68);
+    --t3:   rgba(235,235,245,0.46);
+    --t4:   rgba(235,235,245,0.26);
+    --div:  rgba(255,255,255,0.09);
+    --fill: rgba(120,120,128,0.20);
+    --fill2:rgba(120,120,128,0.13);
+    --track:rgba(120,120,128,0.26);
+    --blue: #0a84ff;  --onAccent:#04223d;
+    --green:#30d158;  --onGreen: #05261a;
+    --red:  #ff453a;  --danger:  #ff8a80;
+    --amber:#ff9f0a;  --explain: #ffcf70;
+
+    width: 900px; height: 870px; border-radius: 42px;
+    position: relative; color: var(--t); font-family: var(--font); font-weight: 500;
+    background: rgba(28,28,30,0.78);
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    /* Inner ring + top highlight only. No drop shadow: nothing behind a floating
+       panel catches one, and in stereo it reads as a sticker. */
+    box-shadow:
+      inset 0 0 0 2px rgba(255,255,255,0.13),
+      inset 0 3px 0 0 rgba(255,255,255,0.10);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Explanation ────────────────────────────────────────────────── */
+  .gp-body { flex: 1; padding: 56px 52px; display: flex; flex-direction: column; min-height: 0; }
+  .gp-kind {
+    display: inline-flex; align-items: center; gap: 14px; align-self: flex-start;
+    font-size: 24px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--explain);
+  }
+  .gp-kind .pip {
+    width: 16px; height: 16px; border-radius: 50%; flex: none;
+    background: var(--amber); box-shadow: 0 0 14px rgba(255,159,10,0.75);
+  }
+  .gp-kind .pip--quiet { box-shadow: none; background: var(--t4); }
+  .gp-text { margin-top: 34px; font-size: 40px; line-height: 1.52; color: var(--t); font-weight: 500; }
+  .gp-text p { margin: 0; }
+  .gp-text p + p { margin-top: 26px; }
+  .gp-text .dim { color: var(--t4); }
+
+  .gp-foot { flex: none; padding: 0 52px 52px; }
+  .gp-btn {
+    position: relative; width: 100%; height: 122px; border-radius: 999px; border: none;
+    font-family: var(--font); font-size: 34px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--t); background: var(--fill); box-shadow: inset 0 0 0 3px var(--div);
+    display: flex; align-items: center; justify-content: center; gap: 18px; cursor: pointer;
+  }
+  .gp-btn--go { background: var(--blue); color: var(--onAccent); box-shadow: none; }
+  .gp-audio { display: flex; align-items: center; gap: 22px; }
+  .gp-wave { flex: 1; height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .gp-wave i { display: block; height: 100%; width: 42%; background: var(--t2); border-radius: 999px; }
+  .gp-time { font-size: 26px; color: var(--t3); font-variant-numeric: tabular-nums; }
+
+  /* ── board chrome ───────────────────────────────────────────────── */
+  .bar {
+    flex: none; display: flex; align-items: center; gap: 12px; padding: 0 52px; height: 104px;
+    border-bottom: 3px solid var(--div);
+  }
+  .crumb { font-size: 24px; font-weight: 600; color: var(--t2); display: flex; gap: 11px;
+           align-items: center; min-width: 0; }
+  .crumb .now { color: var(--t); } .crumb .sep { color: var(--t4); }
+  .crumb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { margin-left: auto; font-size: 22px; font-weight: 500; color: var(--t2);
+            display: flex; align-items: center; gap: 11px; flex: none; font-variant-numeric: tabular-nums; }
+  .status .pip { width: 14px; height: 14px; border-radius: 50%; background: var(--green); flex: none; }
+  .status .pip--idle { background: var(--t4); }
+
+  /* The meter rides directly under the bar instead of costing a block. */
+  .meter { flex: none; display: flex; gap: 3px; }
+  .meter i { flex: 1; height: 6px; background: var(--track); }
+  .meter i.on  { background: var(--green); }
+  .meter i.now { background: var(--blue); }
+
+  .body { flex: 1; padding: 36px 52px 0; display: flex; flex-direction: column; min-height: 0; }
+  .eyeb { font-size: 20px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); }
+  .h1 { font-size: 56px; font-weight: 800; letter-spacing: -0.028em; line-height: 1.06; margin: 14px 0 0; }
+  .h2 { font-size: 40px; font-weight: 800; letter-spacing: -0.024em; line-height: 1.1; margin: 10px 0 0; }
+  /* Why the run ended. Only the failed report has one — a pass needs no excuse. */
+  .reason { margin: 14px 0 0; font-size: 24px; line-height: 1.4; color: var(--t2); }
+
+  .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; margin-top: 26px; }
+  .scroll::after {
+    content: ''; position: absolute; inset: auto 0 0 0; height: 44px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(28,28,30,0) 0%, rgba(28,28,30,0.85) 100%);
+  }
+  .rail { position: absolute; right: 0; top: 6px; bottom: 6px; width: 4px; border-radius: 999px; background: var(--track); }
+  .rail i { position: absolute; left: 0; width: 4px; border-radius: 999px; background: var(--t3); }
+
+  .list { background: var(--fill2); border-radius: 22px; overflow: hidden; box-shadow: inset 0 0 0 2px var(--div);
+          margin-right: 18px; }
+  /* Read, not pressed — so these rows are allowed below the 80 px laser floor.
+     Every row is one clipped line EXCEPT the active one, which opens to its
+     full text. The trainee is on step 3; step 3 is what must be readable. */
+  .item { display: flex; align-items: center; gap: 16px; padding: 10px 18px; min-height: 60px; }
+  .item + .item { border-top: 3px solid var(--div); }
+  .item--now { min-height: 96px; background: rgba(10,132,255,0.10); }
+  .n {
+    flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 20px; font-weight: 600; color: var(--t3); box-shadow: inset 0 0 0 3px var(--div);
+    font-variant-numeric: tabular-nums;
+  }
+  .n--now  { background: var(--blue);  color: var(--onAccent); box-shadow: none; }
+  .n--done { background: var(--green); color: var(--onGreen);  box-shadow: none; }
+  .it { font-size: 21px; font-weight: 500; line-height: 1.3; overflow: hidden;
+        display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  .item--now .it { font-size: 24px; font-weight: 600; -webkit-line-clamp: 4; line-height: 1.26; }
+  .it--done { color: var(--t2); }
+
+  /* ── foot: status, or the complaint ─────────────────────────────── */
+  .foot {
+    flex: none; height: 134px; padding: 0 52px; display: flex; align-items: center; gap: 16px;
+    border-top: 3px solid var(--div);
+  }
+  .foot .k { font-size: 22px; color: var(--t3); font-variant-numeric: tabular-nums; }
+  .foot .k + .k { margin-left: auto; }
+  .foot--bad {
+    background: rgba(255,69,58,0.13);
+    border-top: 3px solid rgba(255,69,58,0.40);
+  }
+  .foot--bad .dot {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--red); flex: none;
+    box-shadow: 0 0 16px rgba(255,69,58,0.7);
+  }
+  .foot--bad .msg { font-size: 30px; font-weight: 600; color: var(--danger); line-height: 1.2; }
+
+  /* ── complete ───────────────────────────────────────────────────── */
+  .done-body { flex: 1; padding: 52px; display: flex; flex-direction: column; align-items: center;
+               text-align: center; min-height: 0; }
+  .ring { position: relative; width: 200px; height: 200px; flex: none; }
+  .ring .num {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: 64px; font-weight: 800; letter-spacing: -0.03em; color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+  .defs { width: 100%; margin-top: 30px; display: flex; flex-direction: column; }
+  .def { display: flex; align-items: baseline; gap: 16px; padding: 17px 0; }
+  .def + .def { border-top: 3px solid var(--div); }
+  .def dt { font-size: 24px; color: var(--t2); }
+  .def dd { margin-left: auto; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 0; }
+  .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow"><span class="dot"></span> FlexXR &middot; FXR_Training</div>
+  <h1>The training panel, at 900 &times; 870</h1>
+  <p class="lede">
+    Both panels at <b>900 &times; 870 px, component scale 0.1 &mdash; 90 &times; 87 cm</b>, so one px is one
+    millimetre and every number on this page types straight into UMG. Drawn at full size and shrunk by
+    transform only; the type sizes are the real ones. Set the zoom to 100% to judge legibility.
+  </p>
+  <div class="zoom" id="zoom">
+    <button data-s="0.46">46%</button>
+    <button data-s="0.62" class="on">62%</button>
+    <button data-s="1">100%</button>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <h2>Start</h2>
+    <p class="note">
+      What the panel is before anything has happened. The mode is stated, not chosen &mdash; a trainee who
+      can pick Guided on the way into an exam is not sitting an exam. It is read off the session component,
+      so an instructor sets it in the level and the panel reports it.
+    </p>
+    <div class="grid">
+
+      <div class="scene">
+        <span class="scene-label">Start</span>
+        <div class="fit"><div class="w">
+          <div class="bar">
+            <div class="crumb"><span class="now">Fire safety</span></div>
+            <div class="status"><span class="pip pip--idle"></span> Not started</div>
+          </div>
+          <div class="body">
+            <div class="eyeb">Training procedure</div>
+            <h1 class="h1">Extinguisher<br>drill</h1>
+            <dl class="defs" style="margin-top:34px;">
+              <div class="def"><dt>Steps</dt><dd>5</dd></div>
+              <div class="def"><dt>Mode</dt><dd>Exam</dd></div>
+            </dl>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <button class="gp-btn gp-btn--go"><span>Begin</span></button>
+          </div>
+        </div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Explanation &mdash; three states</h2>
+    <p class="note">
+      The eyebrow is a dot and a word in the type colour, not a yellow highlighter: the dot is the element
+      bound to the highlight pulse, so the thing that names the panel is the thing that ties it to its
+      object. Audio is a transport &mdash; pause, a thin track, elapsed time in tabular figures &mdash;
+      rather than a fill creeping under text you are trying to read.
+    </p>
+    <div class="grid">
+
+      <div class="scene">
+        <span class="scene-label">Explanation &middot; idle</span>
+        <div class="fit"><div class="w">
+          <div class="gp-body">
+            <div class="gp-kind"><span class="pip"></span> Explanation</div>
+            <div class="gp-text">
+              <p>A fire has started in the waste bin beside the workbench.</p>
+              <p>Collect the extinguisher from the wall bracket before the smoke reaches the ceiling.</p>
+            </div>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <button class="gp-btn">
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
+                   stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7z"/></svg>
+              <span>Play audio</span>
+            </button>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="scene">
+        <span class="scene-label">Explanation &middot; playing</span>
+        <div class="fit"><div class="w">
+          <div class="gp-body">
+            <div class="gp-kind"><span class="pip"></span> Explanation</div>
+            <div class="gp-text">
+              <p>A fire has started in the waste bin beside the workbench.</p>
+              <p class="dim">Collect the extinguisher from the wall bracket before the smoke reaches the ceiling.</p>
+            </div>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <div class="gp-audio">
+              <button class="gp-btn" style="width:122px; flex:none; gap:0;">
+                <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round"><path d="M9 5v14M15 5v14"/></svg>
+              </button>
+              <div class="gp-wave"><i></i></div>
+              <span class="gp-time">0:12</span>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="scene">
+        <span class="scene-label">Explanation &middot; read</span>
+        <div class="fit"><div class="w">
+          <div class="gp-body">
+            <div class="gp-kind"><span class="pip pip--quiet"></span> Explanation</div>
+            <div class="gp-text">
+              <p>A fire has started in the waste bin beside the workbench.</p>
+              <p>Collect the extinguisher from the wall bracket before the smoke reaches the ceiling.</p>
+            </div>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <button class="gp-btn gp-btn--go">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor"
+                   stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>
+              <span>Got it</span>
+            </button>
+          </div>
+        </div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Procedure &mdash; the validation panel</h2>
+    <p class="note">
+      The CSM board's procedure screen, mapped onto what FlexXR actually has: the meter is one bar per step
+      in the compiled graph, the list is those same steps, and the active row is the only one that opens to
+      its full text. The foot carries the run's own facts &mdash; and gives up its space to a mistake when
+      there is one, rather than pushing the instruction off the panel.
+    </p>
+    <div class="grid">
+
+      <div class="scene">
+        <span class="scene-label">Procedure</span>
+        <div class="fit"><div class="w">
+          <div class="bar">
+            <div class="crumb"><span>Fire safety</span><span class="sep">/</span><span class="now">Extinguisher</span></div>
+            <div class="status"><span class="pip"></span> 2 / 5</div>
+          </div>
+          <div class="meter"><i class="on"></i><i class="on"></i><i class="now"></i><i></i><i></i></div>
+          <div class="body">
+            <div class="eyeb">Current step</div>
+            <h2 class="h2">Pull the safety pin</h2>
+            <div class="scroll">
+              <div class="list">
+                <div class="item"><span class="n n--done">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3"
+                       stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span class="it it--done">Lift the extinguisher from its bracket</span></div>
+                <div class="item"><span class="n n--done">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3"
+                       stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span class="it it--done">Carry it to within two metres of the fire</span></div>
+                <div class="item item--now"><span class="n n--now">3</span>
+                  <span class="it" style="flex:1;">Grip the safety pin and pull it free of the handle</span>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t4)" stroke-width="2"
+                       stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M9 6l6 6-6 6"/></svg></div>
+                <div class="item"><span class="n">4</span><span class="it">Aim the nozzle at the base of the flames</span></div>
+                <div class="item"><span class="n">5</span><span class="it">Squeeze the handle and sweep side to side</span></div>
+              </div>
+              <div class="rail"><i style="top:14%; height:58%;"></i></div>
+            </div>
+          </div>
+          <div class="foot">
+            <span class="k">Guided</span>
+            <span class="k">1:46</span>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="scene">
+        <span class="scene-label">Procedure &middot; mistake</span>
+        <div class="fit"><div class="w">
+          <div class="bar">
+            <div class="crumb"><span>Fire safety</span><span class="sep">/</span><span class="now">Extinguisher</span></div>
+            <div class="status"><span class="pip"></span> 2 / 5</div>
+          </div>
+          <div class="meter"><i class="on"></i><i class="on"></i><i class="now"></i><i></i><i></i></div>
+          <div class="body">
+            <div class="eyeb">Current step</div>
+            <h2 class="h2">Pull the safety pin</h2>
+            <div class="scroll">
+              <div class="list">
+                <div class="item"><span class="n n--done">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3"
+                       stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span class="it it--done">Lift the extinguisher from its bracket</span></div>
+                <div class="item"><span class="n n--done">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3"
+                       stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span class="it it--done">Carry it to within two metres of the fire</span></div>
+                <div class="item item--now"><span class="n n--now">3</span>
+                  <span class="it" style="flex:1;">Grip the safety pin and pull it free of the handle</span>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t4)" stroke-width="2"
+                       stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M9 6l6 6-6 6"/></svg></div>
+                <div class="item"><span class="n">4</span><span class="it">Aim the nozzle at the base of the flames</span></div>
+                <div class="item"><span class="n">5</span><span class="it">Squeeze the handle and sweep side to side</span></div>
+              </div>
+              <div class="rail"><i style="top:14%; height:58%;"></i></div>
+            </div>
+          </div>
+          <div class="foot foot--bad">
+            <span class="dot"></span>
+            <span class="msg">Pin first &mdash; the handle will not move.</span>
+          </div>
+        </div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Complete &mdash; the session report</h2>
+    <p class="note">
+      The one moment of a long session anyone remembers, and unlike the CSM board this one has real numbers
+      to show: <code>FFXR_SessionReport</code> carries the score, the step count, every mistake, the hints
+      taken and the elapsed time. The score goes in the ring because the ring was already going to be there.
+    </p>
+    <p class="note">
+      Same panel either way. The ring always means the score, so colour and the eyebrow carry the verdict and
+      nothing has to be re-learned &mdash; and a failed run gets one line that a passed run does not need,
+      saying why it ended. In <b>Exam</b>, a step running past its <code>Timeout Seconds</code> ends the run
+      here rather than escalating a hint, which is what makes the mode mean anything: Guided and Practice
+      spend a timeout on help, and Exam spends it on the verdict.
+    </p>
+    <div class="grid">
+
+      <div class="scene">
+        <span class="scene-label">Complete</span>
+        <div class="fit"><div class="w">
+          <div class="done-body">
+            <div class="ring">
+              <svg width="200" height="200" viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(120,120,128,0.26)" stroke-width="12"/>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="#30d158" stroke-width="12"
+                        stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="44"
+                        transform="rotate(-90 100 100)"/>
+              </svg>
+              <div class="num">92</div>
+            </div>
+            <div class="eyeb" style="margin-top:24px; color:var(--green);">Procedure complete</div>
+            <h2 class="h2" style="margin-top:12px;">Extinguisher drill</h2>
+            <dl class="defs">
+              <div class="def"><dt>Steps</dt><dd>5 of 5</dd></div>
+              <div class="def"><dt>Mistakes</dt><dd>2</dd></div>
+              <div class="def"><dt>Hints taken</dt><dd>1</dd></div>
+              <div class="def"><dt>Time</dt><dd>3:41</dd></div>
+            </dl>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <button class="gp-btn gp-btn--go"><span>Done</span></button>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="scene">
+        <span class="scene-label">Complete &middot; failed</span>
+        <div class="fit"><div class="w">
+          <div class="done-body">
+            <div class="ring">
+              <svg width="200" height="200" viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(120,120,128,0.26)" stroke-width="12"/>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="#ff453a" stroke-width="12"
+                        stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="254"
+                        transform="rotate(-90 100 100)"/>
+              </svg>
+              <div class="num" style="color:var(--danger);">54</div>
+            </div>
+            <div class="eyeb" style="margin-top:24px; color:var(--danger);">Procedure failed</div>
+            <h2 class="h2" style="margin-top:12px;">Extinguisher drill</h2>
+            <p class="reason">Ran out of time on &ldquo;Pull the safety pin&rdquo;.</p>
+            <dl class="defs" style="margin-top:22px;">
+              <div class="def"><dt>Steps</dt><dd>2 of 5</dd></div>
+              <div class="def"><dt>Mistakes</dt><dd>3</dd></div>
+              <div class="def"><dt>Hints taken</dt><dd>0</dd></div>
+              <div class="def"><dt>Time</dt><dd>2:10</dd></div>
+            </dl>
+            <div class="spacer"></div>
+          </div>
+          <div class="gp-foot">
+            <button class="gp-btn gp-btn--go"><span>Try again</span></button>
+          </div>
+        </div></div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* Scale by transform only. Changing type sizes to fit would throw away the
+   one thing this page is for. */
+function setScale(s) {
+  document.querySelectorAll('.fit').forEach(fit => {
+    const w = fit.querySelector('.w');
+    w.style.transform = 'scale(' + s + ')';
+    fit.style.width  = (900 * s) + 'px';
+    fit.style.height = (870 * s) + 'px';
+  });
+}
+document.getElementById('zoom').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('#zoom button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  setScale(parseFloat(b.dataset.s));
+});
+setScale(0.62);
+</script>
+</body>
+</html>
