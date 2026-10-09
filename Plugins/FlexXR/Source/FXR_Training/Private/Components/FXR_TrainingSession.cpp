@@ -263,6 +263,38 @@ void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
 	Runner.HandleEvent(Event);
 }
 
+int32 UFXR_TrainingSession::GetStepsCompleted() const
+{
+	int32 Completed = 0;
+	const int32 Total = Runner.GetSteps().Num();
+	for (int32 Index = 0; Index < Total; ++Index)
+	{
+		if (Runner.GetStatus(Index) == EFXR_StepStatus::Complete)
+		{
+			++Completed;
+		}
+	}
+	return Completed;
+}
+
+FText UFXR_TrainingSession::GetActiveInstruction() const
+{
+	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
+	const TArray<int32>& Active = Runner.GetActiveSteps();
+	if (!Graph || Active.IsEmpty() || !Steps.IsValidIndex(Active[0]))
+	{
+		return FText::GetEmpty();
+	}
+
+	// Instructions live with the authoring, not the runtime, so they are looked up by name here for
+	// the same reason the report reads display names back out.
+	const FName StepId = Steps[Active[0]].StepId;
+	const FFXR_StepDefinition* Authored = Graph->Steps.FindByPredicate(
+		[StepId](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == StepId; });
+
+	return Authored ? Authored->Instruction : FText::GetEmpty();
+}
+
 FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 {
 	FFXR_SessionReport Report;

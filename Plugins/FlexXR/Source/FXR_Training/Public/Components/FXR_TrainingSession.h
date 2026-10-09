@@ -61,6 +61,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	TArray<FFXR_Mistake> GetMistakes() const { return Runner.GetMistakes(); }
 
+	/** How many steps the running procedure has. Zero when nothing is running. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	int32 GetStepTotal() const { return Runner.GetSteps().Num(); }
+
+	/** How many of them are done. Cheap, for a panel; BuildReport is the whole picture. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	int32 GetStepsCompleted() const;
+
+	/**
+	 * The instruction for the first step currently open, read back out of the authoring graph.
+	 * For a panel that appears part-way through a run, which otherwise has nothing to show until
+	 * the next step opens.
+	 */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FText GetActiveInstruction() const;
+
 	/**
 	 * Everything the run produced, built on demand. Safe to call mid-session for a live panel
 	 * and after it for the record; a step still open simply has no close time.
