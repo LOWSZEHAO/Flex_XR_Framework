@@ -23,6 +23,8 @@ public class FXR_UI : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// EKeys::LeftMouseButton, which is how a hand's press reaches Slate.
+			"InputCore",
 			"Slate",
 			"SlateCore"
 		});
