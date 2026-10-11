@@ -30,6 +30,22 @@ UFXR_Panel::UFXR_Panel()
 	// is about 2.4 pixels per millimetre, which holds body text without a shimmer.
 	DrawSize = FIntPoint(600, 400);
 
+	/**
+	 * Never draw at the desired size, and the reason is worth the comment because the symptom
+	 * looks like nothing to do with this flag.
+	 *
+	 * A widget authored at 900 x 870 with a Canvas Panel root does not report 900 x 870. The
+	 * designer's Width/Height is DesignTimeSize, which lives inside WITH_EDITORONLY_DATA
+	 * (UserWidget.h:1528) and never reaches runtime, and SConstraintCanvas::ComputeDesiredSize
+	 * (SConstraintCanvas.cpp:356) returns the largest of its children's slot offsets rather than
+	 * the canvas's own size. With this flag set, that becomes CurrentDrawSize
+	 * (WidgetComponent.cpp:1432) — so the panel renders into a render target of roughly the size
+	 * of its contents and is then magnified onto the quad. Everything is soft and nothing explains
+	 * why. The engine default is already false; it is set here so that a tick in a details panel
+	 * reads as the change it is.
+	 */
+	bDrawAtDesiredSize = false;
+
 	// A world panel that takes Slate focus takes it from the viewport, and the pawn stops hearing
 	// input. Nothing on a panel needs it: a keypad's digits are buttons, not a text field.
 	bWindowFocusable = false;
