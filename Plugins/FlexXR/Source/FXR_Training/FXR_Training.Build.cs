@@ -20,7 +20,16 @@ public class FXR_Training : ModuleRules
 			"FXR_UI",
 			// UUserWidget, for the validation panel. FXR_UI already depends on UMG publicly, but a
 			// transitive dep gives headers and still fails to link.
-			"UMG"
+			"UMG",
+			// URadialSlider, which is the panel's score ring. An engine module rather than a
+			// plugin, and the reason the ring needs no material of its own: SRadialSlider already
+			// draws an arc, and UMG has no other way to draw one.
+			"AdvancedWidgets",
+			// FXR_PanelStyle.h builds FSlateBrush and FSlateFontInfo inline in a public header, so
+			// the constructors are linked here and not merely declared. UMG above gives the headers
+			// and still fails to link - the same transitive-dependency trap as always.
+			"Slate",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
