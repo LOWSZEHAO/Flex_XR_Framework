@@ -37,6 +37,30 @@ enum class EFXR_MistakeKind : uint8
 	Timeout
 };
 
+/**
+ * How a run ended.
+ *
+ * This replaces a bool, which could not tell a failure from an abandonment - and that difference is
+ * the whole of what Exam mode means. A trainee who ran out of time and an instructor who closed the
+ * level are not the same finding, and a report that calls both "did not reach the end" is useless
+ * for the one question a training product is bought to answer.
+ */
+UENUM(BlueprintType)
+enum class EFXR_SessionOutcome : uint8
+{
+	/** Still running, or never started. A mid-session report is allowed to say so. */
+	InProgress,
+
+	/** Ran to an end: a transition with nowhere left to go fired. */
+	Completed,
+
+	/** Ended against the trainee. Today that means an Exam step ran past its timeout. */
+	Failed,
+
+	/** Stopped from outside - StopSession, end of play, a level change. Not a verdict. */
+	Stopped
+};
+
 /** Where a step sits in the run. */
 UENUM(BlueprintType)
 enum class EFXR_StepStatus : uint8

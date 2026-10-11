@@ -16,6 +16,8 @@ void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryInde
 	Elapsed = 0.f;
 	bAnyMistakeYet = false;
 	bReachedEnd = false;
+	bFailed = false;
+	FailedStep = INDEX_NONE;
 
 	const int32 Count = Steps.Num();
 	Status.Init(EFXR_StepStatus::Pending, Count);
@@ -242,6 +244,10 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	Elapsed += DeltaSeconds;
 
+	// Acted on after the loop rather than inside it: failing the run empties ActiveSteps, and this
+	// is iterating ActiveSteps.
+	int32 ExpiredInExam = INDEX_NONE;
+
 	for (const int32 StepIndex : ActiveSteps)
 	{
 		const FFXR_CompiledStep& Step = Steps[StepIndex];
@@ -263,6 +269,15 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 			if (WantedLevel == 1)
 			{
 				RecordMistake(Step.StepId, NAME_None, EFXR_MistakeKind::Timeout, FText::GetEmpty());
+
+				// Exam spends a timeout on the verdict; the other two spend it on help. Breaking
+				// here rather than escalating is the point: there is nothing to escalate to, and
+				// an escalation event immediately followed by a finish is noise.
+				if (Mode == EFXR_DeliveryMode::Exam)
+				{
+					ExpiredInExam = StepIndex;
+					break;
+				}
 			}
 
 			if (OnHintEscalated)
@@ -270,5 +285,30 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 				OnHintEscalated(StepIndex, WantedLevel);
 			}
 		}
+	}
+
+	if (ExpiredInExam != INDEX_NONE)
+	{
+		Fail(ExpiredInExam);
+	}
+}
+
+void FFXR_StepRunner::Fail(int32 StepIndex)
+{
+	bRunning = false;
+	bFailed = true;
+	FailedStep = StepIndex;
+
+	// Closed, but not Complete. The step is left Active because that is what it was - open, and
+	// never finished - while the close time is recorded because the run did end on it, and the
+	// seconds it was open are the whole finding.
+	if (ClosedAt.IsValidIndex(StepIndex))
+	{
+		ClosedAt[StepIndex] = Elapsed;
+	}
+
+	if (OnFinished)
+	{
+		OnFinished();
 	}
 }

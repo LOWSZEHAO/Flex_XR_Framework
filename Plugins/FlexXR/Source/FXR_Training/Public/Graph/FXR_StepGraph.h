@@ -99,6 +99,21 @@ class FXR_TRAINING_API UFXR_StepGraph : public UDataAsset
 	GENERATED_BODY()
 
 public:
+	/**
+	 * What this procedure is called, for the panel and the report - "Extinguisher drill".
+	 *
+	 * Falls back to the asset's own name when left empty, so a graph is never nameless on a wall.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	FText DisplayName;
+
+	/**
+	 * The course or topic this procedure belongs to - "Fire safety". Shown as the first crumb, and
+	 * optional: a standalone procedure has no course and the panel simply shows one name.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	FText CourseName;
+
 	/** Where the procedure starts. Must name one of the steps below. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName EntryStep;
