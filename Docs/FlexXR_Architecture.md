@@ -837,6 +837,47 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 
 ## Changelog
 
+**v0.16 — The training panel, and what Exam mode costs**
+- The panel is **four screens in one asset** — Start, Explanation, Procedure, Complete — as children
+  of one Widget Switcher, and **the screen is derived rather than set**. There is no state machine to
+  keep in step with the session: a finished run shows the report, a running one shows the procedure,
+  and anything else shows Start. An explanation is the single exception, because it is the only one
+  of the four the runner has no opinion about, and that is the seam for whoever owns briefing content
+  — a chapter intro, a cutscene beat — without the runner learning about any of it.
+- **The step list and the progress meter are built in C++ at runtime.** Their length is the compiled
+  graph's length, so nothing authored in a designer can know it. Built once when a run starts and
+  restyled on change rather than rebuilt, because the count cannot change during a run.
+- **`FXR_PanelStyle.h` is the design system as code**, read by both the runtime panel and the editor
+  builder. The runtime builds rows; the builder builds everything else; a token defined in two places
+  would eventually disagree with itself, and a row that does not match the list it sits in is the
+  most visible kind of wrong. It also carries the one identity the design rests on: 900 x 870 px at a
+  90 cm panel width makes one pixel one millimetre, which is what lets every number in the design be
+  typed in as written.
+- **The panel reads the session; it reaches back in exactly one place and switchably.**
+  `Buttons Drive Session` lets Begin and Try again call `StartSession`, because a component dropped
+  into a level has to work (§non-negotiable 7), and a Start screen whose only button does nothing is
+  not a working component. The request delegates fire either way, so a project that owns its own flow
+  clears the flag and loses nothing.
+- **Exam mode auto-fails on a step timeout**, and this is the entry that matters most. Before it,
+  `ShouldShowHints()` already refused to show a hint in Exam, so a timeout there stacked a mistake
+  and said nothing at all — the worst of both. Guided and Practice spend a timeout on help; Exam
+  spends it on the verdict, and that is what makes the mode mean anything.
+  This forced a type change worth recording: `FFXR_SessionReport::bReachedEnd` could not tell a
+  failure from an abandonment, and that difference is the whole question a training product is bought
+  to answer. It became `EFXR_SessionOutcome { InProgress, Completed, Failed, Stopped }` with
+  `FailedStepId` and `FailedStepName`, so the report names the step that ran out of time and a
+  mid-session report is allowed to say it is mid-session.
+  **A step with `Timeout Seconds` at zero still never times out**, so choosing Exam does not by
+  itself make a graph time-limited. Kept explicit rather than letting the mode impose a limit nobody
+  authored.
+- `UFXR_StepGraph` gains `DisplayName` and `CourseName`; `FFXR_StepRecord` gains `Instruction`. The
+  panel needed a procedure name, a course name and per-step instructions, and the asset had none of
+  them — a finding needs the question as well as the answer.
+- The builder **proves its own work**: it checks every `BindWidgetOptional` against the tree it just
+  built, by name and by class, the way UMG does, and logs the result. An optional binding that fails
+  to resolve is silent by design, and the symptom is a panel that comes up looking right and never
+  updates; the generator is the thing that chose those names, so it is the right place to catch it.
+
 **v0.15 — Spatial UI**
 - `UFXR_Panel` and `UFXR_WidgetPointer`: the spatial UI kit §3.3 promised, less the widgets themselves.
 - **Buttons, sliders and keypads are Slate's and stay Slate's.** §3.3 listed them as FlexXR items and

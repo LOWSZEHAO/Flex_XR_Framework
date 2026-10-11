@@ -137,20 +137,37 @@ here, as planned, so a real consumer would define them.
   the framework's one fade duration, ray-targetable with no collision setup.
 - `UFXR_WidgetPointer` - one per hand on the pawn. Slate's own pointer, fed from the rig's cached far
   hit and from the fingertip inside poke range, and yielding to interaction like locomotion does.
-- `UFXR_TrainingPanel` - the validation panel. A `UUserWidget` base to reparent a Widget Blueprint
-  to; it reads the session and never drives it. It drives its own widgets through
-  `meta = (BindWidgetOptional)`, so a panel needs no event graph and no property bindings: name a
-  widget `InstructionLabel` or `ProgressFill` and it is found and kept current.
-- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the default panel, generated. **Its look was rejected
-  and is being rebuilt** (§9.1), and the asset on this branch renders every glyph as a missing-glyph
-  box (§8). The geometry under it is sound, so what lands is a restyle, not a rewrite.
-- `UI_Design/panel.html` - **the approved design** (2026-10-09), and the spec the rebuild follows.
+- `UFXR_TrainingPanel` - the panel. A `UUserWidget` base to reparent a Widget Blueprint to; it
+  reads the session and never computes anything about the procedure. It drives its own widgets
+  through `meta = (BindWidgetOptional)`, so a panel needs no event graph and no property bindings:
+  name a widget `StatusLabel` or `ScoreRing` and it is found and kept current. **Four screens, one
+  asset** - Start, Explanation, Procedure and Complete are the children of one Widget Switcher, and
+  **the screen is derived rather than set**: a finished run shows the report, a running one shows
+  the procedure, anything else shows Start. An explanation is the one exception, because it is the
+  one thing the runner has no opinion about.
+  The step list and the progress meter are built in C++ at runtime, one row and one segment per
+  compiled step, because their length is the graph's length and nothing else can know it.
+  It reaches back into the session in exactly one place, and switchably: `Buttons Drive Session`
+  lets Begin and Try again call `StartSession`, which is what makes a dropped-in panel work on its
+  own. The request delegates fire either way.
+- `UI_Design/panel.html` - **the approved design** (2026-10-09) and the spec the panel is built to.
   Eight boards at 900 x 870 px, which is 90 x 87 cm at component scale 0.1 - so **1 px is 1 mm** and
-  every number in the CSS can be typed straight into UMG. The page draws them full size and shrinks
-  them with a CSS transform only, never by changing type sizes, which would throw away the point of
-  checking legibility at true proportions. It supersedes the 60 cm / 20-px-per-cm scale the generated
-  asset was built to. The eight: a start board, Explanation idle / playing / read, Procedure normal /
-  mistake, and the report passed / failed.
+  every number in the CSS types straight into UMG. If the page and the code disagree, the page is
+  right.
+- `FXR_PanelStyle.h` - the design system as code: every colour, size, type style and brush in one
+  public header, read by both the runtime panel and the editor builder. A token defined twice is a
+  token that will disagree with itself, and a runtime-built row that does not match the list it sits
+  in is the most visible kind of wrong.
+- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the generated panel, 119 widgets. The builder proves its
+  own work: it checks every `BindWidgetOptional` against the tree by name **and class**, the way UMG
+  does, and logs the result rather than leaving it to be inferred. Last run: *39 resolve, 5 declared
+  names unused by this layout, 119 widgets*. Those five are deliberate - `InstructionLabel`,
+  `ProgressLabel`, `ProgressFill`, `SummaryLabel` and `CompletionCard` exist for simpler layouts
+  somebody else builds.
+- `F_Montserrat` at `/FlexXR/UI/Fonts` - a composite font over three `UFontFace` assets, Medium,
+  SemiBold and ExtraBold, with the face data embedded. Three faces and no italics because that is
+  what the design uses and an unused face is still a cooked megabyte. Sources and the SIL Open Font
+  License live in `Plugins/FlexXR/Resources/Fonts`; they are needed only to reimport.
 - **No buttons, sliders or keypads.** Those are Slate's and work inside a panel unchanged - see the
   architecture doc's v0.15 entry for why that reverses §3.3's original line.
 
@@ -178,6 +195,20 @@ point in the right pose - so a ghost hand would demonstrate something that happe
 repeats the always-on-highlight mistake one level deeper: a trainee *shown* the exact grip has not
 been assessed on knowing it. Revisit only if the Phase 4 demo surfaces a real case, most likely a
 two-handed safety control where both hands must be placed specifically.
+
+**Four things the approved design asks for that the panel does not do.** Each was checked, not
+assumed, and each has a one-line reason:
+- *Frosted glass.* `backdrop-filter: blur(30px)` has no equivalent for a world-space widget - there
+  is no scene colour behind the quad to blur. The translucent fill and the bright inner ring carry
+  the look without it.
+- *The check mark on a finished step.* Montserrat contains no U+2713. That is read off the font's
+  own cmap table rather than guessed, so a completed step is its number on a green disc. A
+  missing-glyph box would be worse than no tick. `U+25B6` (play) and `U+203A` (chevron) **are**
+  present in all three faces and are used.
+- *The list's bottom fade.* A gradient needs a texture or a material; the list card's ring already
+  gives the list an edge.
+- *Line clamping.* UMG has no `line-clamp`. A closed row is one line that ellipses and the open row
+  wraps freely, so a very long instruction grows its row rather than being cut at four lines.
 
 **Candidate-selection hysteresis.** Architecture §5.4 describes a sticky-best score bonus. It is
 **documented but never implemented**. All hysteresis in the codebase is on input thresholds (grab
@@ -324,6 +355,21 @@ Each of these cost real time. They are not obvious from the code.
   cubemap, drop the cloud component (it only ever renders on PC, so it actively misleads), and bake
   the demo level. Do **not** raise the Android sky cvars to chase parity - that spends GPU on a
   90 fps target for a sky the training demo doesn't care about.
+- **Rebuilding a Widget Blueprint in place crashes unless the old widgets are renamed away.**
+  `UWidgetTree::RemoveWidget` detaches a widget from the tree and leaves the object outered to the
+  tree under its own name. Constructing a new `MistakeCard` when the old one was a different class
+  is then a fatal error in `UObject` creation - *"Cannot replace existing object of a different
+  class"* - not a tidy failure. Walk `GetAllWidgets` and `Rename` each one into the transient
+  package first.
+- **Empty `WidgetVariableNameToGuidMap` when you rebuild a tree in code**, or the widget compiler
+  ensures once per widget: *"Widget [X] was added but did not get a GUID"* - 125 of them, each with
+  a symbolised callstack, which turned an 84 ms build into 14 seconds and looked like a hang.
+  `FWidgetBlueprintCompilerContext::ValidateAndFixUpVariableGuids` populates the map
+  **deterministically** when it is empty and self-heals noisily when it is stale, and the
+  determinism is the point: those GUIDs are how an external reference to a widget survives a
+  rename. Resetting the map is the whole fix.
+- **`UWidget` has a member called `Slot`**, so a local named `Slot` inside any widget method is
+  C4458 and therefore a build error here. Name slot locals something else.
 - **`bDrawAtDesiredSize` must be off for a world panel with a Canvas Panel root**, with `DrawSize`
   set explicitly. The designer's Width/Height is `DesignTimeSize`, which lives inside
   `#if WITH_EDITORONLY_DATA` (`UserWidget.h:1528`) and never reaches runtime, and
@@ -349,19 +395,23 @@ Small and recorded so they are not rediscovered as mysteries.
 - **Nothing in §4 has been executed.** The SOP runtime, the spatial UI kit and the validation panel
   all build clean and the logic has been read, but no graph has been authored, no session played and
   no panel put in a level. Treat every behaviour described in §4 as designed, not demonstrated.
-- **The generated panel renders no readable text at all.** Every glyph comes out as a missing-glyph
-  box showing its Unicode block name. `UFXR_PanelBuilder::MakeLabel` takes its font from
-  `FCoreStyle::GetDefaultFontStyle`, which returns the **Slate editor style** font rather than a UMG
-  font object, so the `FSlateFontInfo` has no typeface to resolve against. The geometry underneath is
-  correct - only the font is wrong. Left unpatched on purpose, so the font object and the real
-  typeface land in one pass with the approved design (§9.1).
-- **The generated panel has been verified as structure, not as a picture.** All eleven widgets are
-  present with the right classes and the asset is parented to `UFXR_TrainingPanel`, checked by
-  loading it back. Past the font above, nobody has looked at it: not in the designer, not in PIE, not
-  in a headset.
-- **The `BindWidgetOptional` pointers are inferred to resolve, not observed to.** UMG matches them by
-  name, the names were verified to match, and the properties compile - but an optional binding that
-  fails to resolve is silent by design, so a typo would look like a panel that never updates.
+- **Nobody has looked at the panel.** This is the big one. It is verified as structure and never as
+  a picture: not in the designer, not in PIE, not in a headset. What *is* established, by loading the
+  asset back and by the builder's own checks: 119 widgets, the generated class is a
+  `UFXR_TrainingPanel`, all 39 used bindings resolve by name and class, the font is a Runtime-cached
+  composite over three real TrueType faces, and the build and the asset generation are both clean
+  with no ensures. None of that says it *looks* right, and several things can only be judged by eye -
+  see the next three.
+- **The score ring's start angle is unverified.** `URadialSlider` is configured 0 to 360 degrees with
+  no handle, and which direction and clock position its zero sits at was taken from the design's
+  intent rather than from seeing it draw. If the arc starts at 3 o'clock or runs anticlockwise,
+  `AngularOffset` is the dial to turn.
+- **Row heights are left to content rather than enforced.** The design gives a closed row a 60 px
+  minimum and an open one 96 px. The numeral disc is 42 px and the padding brings a closed row to
+  about 62, and an open row's wrapped text exceeds 96 on its own, so no `SizeBox` was spent on it -
+  but a one-word instruction in a large graph is the case that would show a short row.
+- **The scroll rail is the engine's, not the design's.** `UScrollBox` draws its own bar; the design
+  draws a 4 px pill. The list is inset 18 px to keep clear of it, which is the part that mattered.
 - **The pointer beam over a panel is unverified, and so is the hover highlight.** `FXR_Panel` adds an
   `FXR_RayTarget` at BeginPlay, because the rig only lights its beam for something that will answer
   and a laser you cannot see is one you cannot aim. That also makes the panel an interactable, so the
@@ -442,45 +492,32 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Build the approved design into the panel.** `UI_Design/panel.html` is signed off and is the
-   spec. Four pieces, one pass: import Montserrat 500/600/800 to `/FlexXR/UI/Fonts` and add the
-   folder to `DirectoriesToAlwaysCook`; hand `MakeLabel` that font object, which is also the fix for
-   §8's missing-glyph bug; rewrite `UFXR_PanelBuilder` to the eight boards at 900 x 870 with Rounded
-   Box brushes and per-corner `FVector4` radii; and set `bDrawAtDesiredSize = false` with
-   `DrawSize = (900, 870)` on the panel component (§7).
-   Two things that will bite otherwise. The design's colours are **sRGB and `FLinearColor` is
-   linear** - convert, or the panel comes out washed out and too bright
-   (`FLinearColor::FromSRGBColor` does it in code). And Montserrat as it ships in the source design
-   carries **only weights 500, 600 and 800** - there is no Regular, so any 450 or 650 in the spec
-   resolves to 500 and 600.
-2. **Exam mode auto-fails on a step timeout.** Decided 2026-10-09, not built. Today
-   `FFXR_StepRunner::Tick` escalates a hint on each elapsed multiple of `Timeout Seconds` and logs a
-   `Timeout` mistake - but `ShouldShowHints()` already returns false in Exam, so an Exam timeout
-   stacks mistakes silently and shows nothing, which is the worst of both. In Exam the first timeout
-   on an open step should end the run, failed, and show the report. Guided and Practice spend a
-   timeout on help; Exam spends it on the verdict, which is what makes the mode mean anything.
-   It needs one type change. `FFXR_SessionReport::bReachedEnd` conflates a failure with someone
-   calling `StopSession`, so it becomes `EFXR_SessionOutcome { Completed, Failed, Stopped }` plus a
-   `FailedStepId`, which is what lets the failed board name the step it ran out of time on.
-   `OnSessionFinished` already carries the report, so this needs no new hook.
-   **A step with `Timeout Seconds = 0` never times out, and so can never auto-fail.** Choosing Exam
-   does not by itself make a graph time-limited - the steps that should be timed need timeouts set.
-   Kept explicit rather than letting Exam impose a default nobody chose.
-   A timeout is the only thing specified as fatal. Whether a **wrong action** should also end an Exam
-   run is open: it was raised and not answered, and today it scores as a mistake and the run goes on.
-3. **Author a graph and run it.** Nothing in §4 has executed. Tick Expose to Training and set an
-   Interaction Id on a handful of interactables, make a `UFXR_StepGraph`, drop a session on a manager
-   actor, and watch it in PIE before putting a headset on.
-4. **Put the panel in the level.** The rebuilt `WBP_FXR_TrainingPanel` inside an `FXR_Panel` at 90 cm
-   wide, and one `FXR_WidgetPointer` per hand on the pawn. This is the first real exercise of the
-   kit: the ray path, the poke path, the beam over UI and the panel's own type sizes are all
-   unverified (§8).
-5. **The fire-safety demo.** Only after the above. Light that level for the device from the start
+1. **Look at the panel.** It has never been seen (§8), and that is now the only thing standing
+   between the design and a verdict on it. Open `WBP_FXR_TrainingPanel` in the designer and step the
+   Widget Switcher through its four screens. Three things can only be settled by eye: the score
+   ring's start angle, whether a closed row is tall enough, and whether 40 px body text reads as too
+   large rather than too small at 1.5 m.
+2. **Author a graph and run it.** Nothing in §4 has executed. Tick Expose to Training and set an
+   Interaction Id on a handful of interactables, make a `UFXR_StepGraph` — it now takes a
+   `Display Name` and a `Course Name`, which are what the panel's title and crumb read — drop a
+   session on a manager actor, and watch it in PIE before putting a headset on. Set a
+   `Timeout Seconds` on at least one step and run it in **Exam** to exercise the auto-fail.
+3. **Put the panel in the level.** `WBP_FXR_TrainingPanel` inside an `FXR_Panel` with
+   **Draw Size (900, 870) and Panel Width 90**, plus one `FXR_WidgetPointer` per hand on the pawn.
+   That pairing is the whole design's foundation — it is what makes one pixel one millimetre — and
+   §7 explains why `bDrawAtDesiredSize` must stay off. This is also the first real exercise of the
+   kit: the ray path, the poke path and the beam over UI are all unverified (§8).
+4. **The fire-safety demo.** Only after the above. Light that level for the device from the start
    rather than with the desktop template sky (§7).
 
+**One question left open on purpose.** A timeout is the only thing that fails an Exam run. Whether a
+**wrong action** should also end one was raised and not answered, so today it scores as a mistake and
+the run continues. It is one flag in `FFXR_StepRunner` whenever that gets decided.
+
 Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
-confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the validation panel (§4);
-the panel design, approved 2026-10-09.
+confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
+design, approved 2026-10-09; the approved design built, the font bug fixed and Exam auto-fail
+implemented, 2026-10-11.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
