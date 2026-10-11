@@ -100,6 +100,16 @@ struct FXR_TRAINING_API FFXR_StepRunner
 	/** True when a transition with no next steps ran out, rather than the session being stopped. */
 	bool ReachedEnd() const { return bReachedEnd; }
 
+	/**
+	 * True when the run ended against the trainee: an Exam step ran past its timeout.
+	 *
+	 * Mutually exclusive with ReachedEnd. A run that is neither was stopped from outside.
+	 */
+	bool Failed() const { return bFailed; }
+
+	/** The step that ended the run, or INDEX_NONE. Only meaningful once Failed is true. */
+	int32 GetFailedStep() const { return FailedStep; }
+
 	/** Hints are suppressed entirely in Exam, and held back until a mistake in Practice. */
 	bool ShouldShowHints() const;
 
@@ -112,6 +122,16 @@ struct FXR_TRAINING_API FFXR_StepRunner
 
 private:
 	void Activate(int32 StepIndex);
+
+	/**
+	 * End the run against the trainee, on the step that ran out of time.
+	 *
+	 * Only Exam gets here. Guided and Practice spend a timeout on help, which is the difference
+	 * between the modes: a timeout that produces a louder hint is teaching, and one that produces a
+	 * verdict is assessment. Without this, Exam was the worst of both - ShouldShowHints already
+	 * refuses to show the hint, so the timeout stacked a mistake and then said nothing at all.
+	 */
+	void Fail(int32 StepIndex);
 	void Complete(int32 StepIndex, const FFXR_CompiledTransition& Via);
 	void RecordMistake(FName StepId, FName InteractionId, EFXR_MistakeKind Kind, const FText& Message);
 	bool Matches(const FFXR_CompiledTransition& Transition, const FFXR_InteractionEvent& Event) const;
@@ -136,4 +156,9 @@ private:
 
 	/** Distinguishes a procedure that finished from one that was stopped. */
 	bool bReachedEnd = false;
+
+	/** Set when Exam ends a run on a timeout. See Fail(). */
+	bool bFailed = false;
+
+	int32 FailedStep = INDEX_NONE;
 };

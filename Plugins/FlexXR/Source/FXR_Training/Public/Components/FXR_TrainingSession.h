@@ -54,6 +54,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	float GetElapsedSeconds() const { return Runner.GetElapsedSeconds(); }
 
+	/** How much help this run gives. A panel states the mode; it never offers to change it. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	EFXR_DeliveryMode GetMode() const { return Mode; }
+
+	/** The procedure's name, falling back to the asset's own so it is never nameless on a wall. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FText GetProcedureName() const;
+
+	/** The course this procedure belongs to, or empty for a standalone one. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FText GetCourseName() const;
+
 	/** Every step currently open. More than one means the procedure allows them in any order. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	TArray<FName> GetActiveStepIds() const;

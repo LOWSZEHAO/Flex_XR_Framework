@@ -18,6 +18,14 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText DisplayName;
 
+	/**
+	 * What the trainee was asked to do. Carried into the report because a finding needs the
+	 * question as well as the answer: "four of twelve reached for the handle first" only means
+	 * something next to the instruction they were given.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText Instruction;
+
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_StepStatus Status = EFXR_StepStatus::Pending;
 
@@ -87,12 +95,36 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName GraphName;
 
+	/**
+	 * The procedure and course as a person would read them.
+	 *
+	 * Carried on the report rather than looked up from the graph, so a finished run describes
+	 * itself: a report that outlives its session - saved, exported, shown on a panel after the
+	 * level changed - still knows what it was a report of.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText ProcedureName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText CourseName;
+
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Guided;
 
-	/** True when the procedure ran to an end, false when it was stopped or abandoned. */
+	/** What the run amounted to. See EFXR_SessionOutcome for why this is not a bool. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
-	bool bReachedEnd = false;
+	EFXR_SessionOutcome Outcome = EFXR_SessionOutcome::InProgress;
+
+	/** The step that ended the run, when Outcome is Failed. None otherwise. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FName FailedStepId;
+
+	/** That step's label, so a panel can name it without holding the graph. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText FailedStepName;
+
+	/** Ran to an end rather than being stopped or failed. Kept as the convenience it reads as. */
+	bool ReachedEnd() const { return Outcome == EFXR_SessionOutcome::Completed; }
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float DurationSeconds = 0.f;

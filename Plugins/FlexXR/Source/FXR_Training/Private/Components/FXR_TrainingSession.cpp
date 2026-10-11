@@ -295,14 +295,51 @@ FText UFXR_TrainingSession::GetActiveInstruction() const
 	return Authored ? Authored->Instruction : FText::GetEmpty();
 }
 
+FText UFXR_TrainingSession::GetProcedureName() const
+{
+	if (!Graph)
+	{
+		return FText::GetEmpty();
+	}
+
+	// An unnamed graph is far more likely to be unfinished authoring than a deliberate choice, and
+	// a blank title on a wall reads as a bug. The asset name is a poor title and a useful one.
+	return Graph->DisplayName.IsEmpty() ? FText::FromName(Graph->GetFName()) : Graph->DisplayName;
+}
+
+FText UFXR_TrainingSession::GetCourseName() const
+{
+	return Graph ? Graph->CourseName : FText::GetEmpty();
+}
+
 FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 {
 	FFXR_SessionReport Report;
 	Report.GraphName = Graph ? Graph->GetFName() : NAME_None;
+	Report.ProcedureName = GetProcedureName();
+	Report.CourseName = GetCourseName();
 	Report.Mode = Runner.GetMode();
-	Report.bReachedEnd = Runner.ReachedEnd();
 	Report.DurationSeconds = Runner.GetElapsedSeconds();
 	Report.Mistakes = Runner.GetMistakes();
+
+	// Ordered so the sharper answer wins: a failed run has also not reached the end, and a report
+	// taken mid-session is neither. A run with no steps never started.
+	if (Runner.Failed())
+	{
+		Report.Outcome = EFXR_SessionOutcome::Failed;
+	}
+	else if (Runner.ReachedEnd())
+	{
+		Report.Outcome = EFXR_SessionOutcome::Completed;
+	}
+	else if (Runner.IsRunning() || Runner.GetSteps().IsEmpty())
+	{
+		Report.Outcome = EFXR_SessionOutcome::InProgress;
+	}
+	else
+	{
+		Report.Outcome = EFXR_SessionOutcome::Stopped;
+	}
 
 	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
 	Report.StepsTotal = Steps.Num();
@@ -330,6 +367,7 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 				[&Record](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == Record.StepId; }))
 			{
 				Record.DisplayName = Authored->DisplayName;
+				Record.Instruction = Authored->Instruction;
 			}
 		}
 
@@ -360,6 +398,17 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 
 	Score -= Scoring.PerHint * static_cast<float>(Report.HintsUsed);
 	Report.Score = FMath::Max(0.f, Score);
+
+	// Named after the step records exist, so the failed step's label comes from the same lookup
+	// rather than a second pass over the graph.
+	if (Report.Outcome == EFXR_SessionOutcome::Failed && Report.Steps.IsValidIndex(Runner.GetFailedStep()))
+	{
+		const FFXR_StepRecord& Failed = Report.Steps[Runner.GetFailedStep()];
+		Report.FailedStepId = Failed.StepId;
+		Report.FailedStepName = Failed.DisplayName.IsEmpty()
+			? FText::FromName(Failed.StepId)
+			: Failed.DisplayName;
+	}
 
 	return Report;
 }
