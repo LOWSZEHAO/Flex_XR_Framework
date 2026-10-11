@@ -42,3 +42,7 @@
 *.ini text
 *.uplugin text
 *.uproject text
+
+# Fonts (source for the font-face assets; the uassets embed the data)
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text

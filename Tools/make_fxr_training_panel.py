@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Low Sze Hao. All rights reserved.
 #
-# Generates WBP_FXR_TrainingPanel, the framework's default validation panel, so FlexXR ships a
+# Generates WBP_FXR_TrainingPanel, the framework's default training panel, so FlexXR ships a
 # readable panel instead of an empty parent class and a paragraph telling you to build one.
 #
 # Run from the editor console:  py "G:/Flex_XR_Framework/Tools/make_fxr_training_panel.py"
@@ -21,7 +21,7 @@ import unreal
 OVERWRITE = False
 
 if unreal.FXR_PanelBuilder.build_default_training_panel(OVERWRITE):
-    unreal.log_warning('FXR_PANEL: built. Drop it in an FXR_Panel with Panel Width 60.')
+    unreal.log_warning('FXR_PANEL: built. Drop it in an FXR_Panel with Draw Size 900x870 and Panel Width 90.')
 else:
     # Already present, or the builder logged why not. Said twice on purpose: a console that scrolls
     # is a console where "nothing happened" and "nothing needed to happen" look identical.

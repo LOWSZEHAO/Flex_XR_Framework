@@ -26,8 +26,11 @@ public class FXR_TrainingEditor : ModuleRules
 			"UMGEditor",       // UWidgetBlueprint and its factory
 			"Slate",
 			"SlateCore",       // FSlateFontInfo, FSlateRoundedBoxBrush
+			"AdvancedWidgets", // URadialSlider, the score ring
+			"AssetRegistry",   // so a generated asset appears without a rescan
+			"Projects",        // IPluginManager, to find the font sources in Resources/Fonts
 			"FXR_Core",        // LogFXR
-			"FXR_Training"     // UFXR_TrainingPanel, the generated panel's parent
+			"FXR_Training"     // UFXR_TrainingPanel and FXR_PanelStyle
 		});
 	}
 }
