@@ -174,15 +174,27 @@ namespace FXR_PanelStyle
 	}
 
 	/**
-	 * A font at a size and a weight.
+	 * **The design's sizes are CSS pixels. UMG's are points.**
+	 *
+	 * Slate draws a glyph at (RenderDPI / 72) x Size, with RenderDPI fixed at 96 (FontCache.cpp), so
+	 * a UMG font size is in points and a point is 4/3 of a pixel. Typing the design's 24 px in as 24
+	 * draws it at 32 - every line on the panel a third too big, which is what was still pushing the
+	 * report's last two rows off the bottom after both layout fixes. The tokens below stay in the
+	 * design's pixels, so they can be read against the page, and are converted exactly once, here.
+	 */
+	constexpr float PxToPt = 72.f / 96.f;
+
+	/**
+	 * A font at a size in pixels and a weight.
 	 *
 	 * Letter spacing is in thousandths of an em, so the design's 0.14em is 140 and its -0.028em is
-	 * -28. Negative tracking on a large heading is not a flourish: at 56 px the default gaps read
-	 * as loose, and closing them is what makes a title look set rather than typed.
+	 * -28 - relative to the size, so it needs no conversion. Negative tracking on a large heading is
+	 * not a flourish: at 56 px the default gaps read as loose, and closing them is what makes a title
+	 * look set rather than typed.
 	 */
-	inline FSlateFontInfo Type(int32 Size, FName Weight, int32 Tracking = 0)
+	inline FSlateFontInfo Type(float SizePx, FName Weight, int32 Tracking = 0)
 	{
-		FSlateFontInfo Info(Font(), Size, Weight);
+		FSlateFontInfo Info(Font(), SizePx * PxToPt, Weight);
 		Info.LetterSpacing = Tracking;
 		return Info;
 	}
@@ -206,13 +218,25 @@ namespace FXR_PanelStyle
 	inline FSlateFontInfo TypeMistake()    { return Type(30, FontSemiBold()); }
 	inline FSlateFontInfo TypeTime()       { return Type(26, FontMedium()); }
 
-	/** Line heights, as the multiplier UTextBlock wants. */
-	constexpr float LineBody      = 1.52f;
-	constexpr float LineRow       = 1.30f;
-	constexpr float LineRowActive = 1.26f;
-	constexpr float LineReason    = 1.40f;
-	constexpr float LineHeading   = 1.10f;
-	constexpr float LineTitle     = 1.06f;
+	/**
+	 * Montserrat's natural line height: (968 + 251 + 0) / 1000 em from its hhea table, the same in
+	 * all three weights - measured from the files, not assumed.
+	 *
+	 * It matters because the two systems measure line height from different bases. CSS
+	 * `line-height: 1.52` is 1.52 times the font size; UMG's Line Height Percentage multiplies the
+	 * font's natural line instead. Copied across unchanged, every wrapped paragraph comes out about a
+	 * fifth looser than it was drawn.
+	 */
+	constexpr float NaturalLine = 1.219f;
+
+	/** Line heights as the design writes them - multiples of the font size - converted for UMG. */
+	constexpr float LineBody      = 1.52f / NaturalLine;
+	constexpr float LineRow       = 1.30f / NaturalLine;
+	constexpr float LineRowActive = 1.26f / NaturalLine;
+	constexpr float LineReason    = 1.40f / NaturalLine;
+	constexpr float LineMistake   = 1.20f / NaturalLine;
+	constexpr float LineHeading   = 1.10f / NaturalLine;
+	constexpr float LineTitle     = 1.06f / NaturalLine;
 
 	// ── brushes ─────────────────────────────────────────────────────────────────────────────────
 	//

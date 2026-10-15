@@ -368,6 +368,14 @@ Each of these cost real time. They are not obvious from the code.
   **deterministically** when it is empty and self-heals noisily when it is stale, and the
   determinism is the point: those GUIDs are how an external reference to a widget survives a
   rename. Resetting the map is the whole fix.
+- **UMG font sizes are points, not pixels.** Slate draws a glyph at (96 / 72) x Size
+  (`FontCache.cpp`, RenderDPI = 96), so a size typed in from a CSS design draws a third too big:
+  "24" is 32 px. Every line on the panel was oversized until `FXR_PanelStyle::Type` started
+  converting, which is what the report's missing rows actually were. **Line height has a different
+  base too**: CSS `line-height` multiplies the font size, UMG's Line Height Percentage multiplies the
+  font's natural line - 1.219 em for Montserrat, read from its hhea table - so a CSS value copied
+  straight across spaces every paragraph about a fifth too loose. Keep design tokens in the design's
+  pixels and convert both in one place.
 - **`UImage::SetDesiredSizeOverride` stores nothing.** It forwards to the live Slate widget and
   that is all, so on an image that has not been constructed into Slate yet - every image built in
   code, in a tool or at runtime - it is a silent no-op, and the image falls back to its brush's
