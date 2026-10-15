@@ -51,6 +51,137 @@ UFXR_TrainingPanel::UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializ
 	DefaultMistakeMessage = NSLOCTEXT("FlexXR", "PanelDefaultMistake", "Not that one.");
 }
 
+void UFXR_TrainingPanel::NativePreConstruct()
+{
+	Super::NativePreConstruct();
+
+	// The designer only. At runtime the session drives every widget, and the editor never calls
+	// NativeConstruct on a design-time preview, so nothing here can leak into a run.
+	if (IsDesignTime())
+	{
+		FillDesignPreview();
+	}
+}
+
+void UFXR_TrainingPanel::FillDesignPreview()
+{
+	// Whichever screen the switcher is on. Changing its Active Widget Index in the designer rebuilds
+	// the preview, which runs this again.
+	const int32 Index = ScreenSwitcher ? ScreenSwitcher->GetActiveWidgetIndex() : 0;
+	const EFXR_PanelScreen Previewed = static_cast<EFXR_PanelScreen>(FMath::Clamp(Index, 0, 3));
+
+	// The same chrome rule as ApplyScreen, applied without moving the switcher and without firing
+	// OnScreenChanged into a Blueprint graph from inside the editor.
+	SetShown(TopBar, Previewed == EFXR_PanelScreen::Start || Previewed == EFXR_PanelScreen::Procedure);
+	SetShown(StepMeter, Previewed == EFXR_PanelScreen::Procedure);
+
+	// The design page's own sample content, so the preview can be held up against it board for
+	// board. Culture-invariant: a trainee never sees any of this, and none of it should be gathered
+	// for translation.
+	const FText Course = INVTEXT("Fire safety");
+	const FText Procedure = INVTEXT("Extinguisher drill");
+	const bool bRunning = Previewed == EFXR_PanelScreen::Procedure;
+
+	if (CrumbRootLabel) { CrumbRootLabel->SetText(Course); }
+	if (CrumbLeafLabel) { CrumbLeafLabel->SetText(Procedure); }
+	if (StatusLabel) { StatusLabel->SetText(bRunning ? INVTEXT("2 / 5") : INVTEXT("Not started")); }
+	if (StatusPip)
+	{
+		StatusPip->SetBrush(FXR_PanelStyle::Dot(bRunning ? FXR_PanelStyle::Green() : FXR_PanelStyle::Text4(), 14.f));
+	}
+
+	// ── Start ───────────────────────────────────────────────────────────────────────────────────
+	if (StartTitleLabel) { StartTitleLabel->SetText(Procedure); }
+	if (StartStepsValue) { StartStepsValue->SetText(INVTEXT("5")); }
+	if (StartModeValue) { StartModeValue->SetText(INVTEXT("Exam")); }
+
+	// ── Explanation ─────────────────────────────────────────────────────────────────────────────
+	if (ExplanationLabel)
+	{
+		ExplanationLabel->SetText(INVTEXT("A fire has started in the waste bin beside the workbench.\n\n"
+			"Collect the extinguisher from the wall bracket before the smoke reaches the ceiling."));
+	}
+
+	// The foot is left on whichever state the designer chose, and the pip follows it.
+	const bool bPlaying = ExplainFootSwitcher
+		&& ExplainFootSwitcher->GetActiveWidgetIndex() == static_cast<int32>(EFXR_ExplainState::Playing);
+	if (ExplainPip)
+	{
+		ExplainPip->SetBrush(FXR_PanelStyle::Dot(bPlaying ? FXR_PanelStyle::Amber() : FXR_PanelStyle::Text4(), 16.f));
+	}
+	if (ExplainAudioBar) { ExplainAudioBar->SetPercent(0.42f); }
+	if (ExplainTimeLabel) { ExplainTimeLabel->SetText(INVTEXT("0:12")); }
+
+	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
+	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Pull the safety pin")); }
+	if (ModeLabel) { ModeLabel->SetText(INVTEXT("Guided")); }
+	if (ElapsedLabel) { ElapsedLabel->SetText(INVTEXT("1:46")); }
+
+	// Filled whichever foot is showing, so flipping FootSwitcher to the mistake shows a real one.
+	if (MistakeLabel) { MistakeLabel->SetText(INVTEXT("Pin first \u2014 the handle will not move.")); }
+
+	{
+		const TCHAR* Lines[] = {
+			TEXT("Lift the extinguisher from its bracket"),
+			TEXT("Carry it to within two metres of the fire"),
+			TEXT("Grip the safety pin and pull it free of the handle"),
+			TEXT("Aim the nozzle at the base of the flames"),
+			TEXT("Squeeze the handle and sweep side to side"),
+		};
+
+		TArray<FFXR_StepRecord> Sample;
+		for (int32 Line = 0; Line < UE_ARRAY_COUNT(Lines); ++Line)
+		{
+			FFXR_StepRecord& Record = Sample.AddDefaulted_GetRef();
+			Record.Instruction = FText::AsCultureInvariant(Lines[Line]);
+			Record.Status = Line < 2 ? EFXR_StepStatus::Complete
+				: (Line == 2 ? EFXR_StepStatus::Active : EFXR_StepStatus::Pending);
+		}
+
+		// The same two calls a run makes, so what the designer shows is what the code draws.
+		BuildStepWidgets(Sample);
+		RefreshStepWidgets(Sample);
+	}
+
+	// ── Complete ────────────────────────────────────────────────────────────────────────────────
+	{
+		FFXR_SessionReport Sample;
+		Sample.ProcedureName = Procedure;
+		Sample.CourseName = Course;
+		Sample.StepsTotal = 5;
+
+#if WITH_EDITORONLY_DATA
+		const bool bFailed = bPreviewFailedRun;
+#else
+		const bool bFailed = false;
+#endif
+
+		if (bFailed)
+		{
+			Sample.Outcome = EFXR_SessionOutcome::Failed;
+			Sample.Score = 54.f;
+			Sample.StepsCompleted = 2;
+			Sample.HintsUsed = 0;
+			Sample.DurationSeconds = 130.f;
+			Sample.Mistakes.SetNum(3);
+			Sample.FailedStepName = INVTEXT("Pull the safety pin");
+		}
+		else
+		{
+			Sample.Outcome = EFXR_SessionOutcome::Completed;
+			Sample.Score = 92.f;
+			Sample.StepsCompleted = 5;
+			Sample.HintsUsed = 1;
+			Sample.DurationSeconds = 221.f;
+			Sample.Mistakes.SetNum(2);
+		}
+
+		// RefreshComplete reads nothing but the report, so it can draw the sample as it is.
+		Report = Sample;
+		RefreshComplete();
+	}
+}
+
 void UFXR_TrainingPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -564,13 +695,21 @@ void UFXR_TrainingPanel::RefreshProcedure()
 	// The row count is the compiled graph's length, so it is settled the moment a run starts and
 	// never changes during one. Rebuilt only when it disagrees — a new run, or a panel that came
 	// up mid-procedure.
-	const int32 Total = Current ? Current->GetStepTotal() : 0;
-	if (Rows.Num() != Total)
+	if (!Current)
 	{
-		BuildStepWidgets();
+		return;
 	}
 
-	RefreshStepWidgets();
+	// One report for both passes: it carries the step ids, labels, instructions and statuses in
+	// compiled order, which is everything the list and the meter need. Built on change, not per frame.
+	const FFXR_SessionReport Snapshot = Current->BuildReport();
+
+	if (Rows.Num() != Snapshot.Steps.Num())
+	{
+		BuildStepWidgets(Snapshot.Steps);
+	}
+
+	RefreshStepWidgets(Snapshot.Steps);
 }
 
 void UFXR_TrainingPanel::RefreshComplete()
@@ -669,7 +808,7 @@ void UFXR_TrainingPanel::RefreshComplete()
 // The step list and the meter
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 
-void UFXR_TrainingPanel::BuildStepWidgets()
+void UFXR_TrainingPanel::BuildStepWidgets(const TArray<FFXR_StepRecord>& Steps)
 {
 	Rows.Reset();
 	MeterSegments.Reset();
@@ -684,30 +823,25 @@ void UFXR_TrainingPanel::BuildStepWidgets()
 		StepMeter->ClearChildren();
 	}
 
-	const UFXR_TrainingSession* Current = Session.Get();
-	if (!Current || !WidgetTree)
+	if (!WidgetTree)
 	{
 		return;
 	}
 
-	// One call gives the step ids, labels, instructions and statuses in compiled order, which is
-	// everything both the list and the meter need. Built on demand and not per frame.
-	const FFXR_SessionReport Snapshot = Current->BuildReport();
-	const int32 Total = Snapshot.Steps.Num();
+	const int32 Total = Steps.Num();
 
 	for (int32 Index = 0; Index < Total; ++Index)
 	{
-		const FFXR_StepRecord& Step = Snapshot.Steps[Index];
+		const FFXR_StepRecord& Step = Steps[Index];
 
 		// ── the meter ───────────────────────────────────────────────────────────────────────────
 		if (StepMeter)
 		{
+			// The meter's height lives in its segments' brushes. The bound widget is the box itself so
+			// that collapsing it takes the whole meter with it, which leaves nothing else to carry a
+			// height - and SetDesiredSizeOverride cannot, for the reason given on FXR_PanelStyle::Band.
 			UImage* Segment = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-			Segment->SetBrush(FXR_PanelStyle::Band(FXR_PanelStyle::Track()));
-
-			// The meter's height lives on its segments. The bound widget is the box itself so that
-			// collapsing it takes the whole meter with it, which leaves nothing to carry a height.
-			Segment->SetDesiredSizeOverride(FVector2D(0.f, FXR_PanelStyle::MeterH));
+			Segment->SetBrush(FXR_PanelStyle::Band(FXR_PanelStyle::Track(), FXR_PanelStyle::MeterH));
 
 			if (UHorizontalBoxSlot* BoxSlot = Cast<UHorizontalBoxSlot>(StepMeter->AddChild(Segment)))
 			{
@@ -738,7 +872,6 @@ void UFXR_TrainingPanel::BuildStepWidgets()
 		{
 			UImage* Rule = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 			Rule->SetBrush(FXR_PanelStyle::Band(FXR_PanelStyle::Divider()));
-			Rule->SetDesiredSizeOverride(FVector2D(0.f, FXR_PanelStyle::RuleW));
 			StepList->AddChild(Rule);
 		}
 
@@ -802,25 +935,23 @@ void UFXR_TrainingPanel::BuildStepWidgets()
 	}
 }
 
-void UFXR_TrainingPanel::RefreshStepWidgets()
+void UFXR_TrainingPanel::RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps)
 {
-	const UFXR_TrainingSession* Current = Session.Get();
-	if (!Current || Rows.IsEmpty())
+	if (Rows.IsEmpty())
 	{
 		return;
 	}
 
-	const FFXR_SessionReport Snapshot = Current->BuildReport();
 	UWidget* ScrollTo = nullptr;
 
 	for (int32 Index = 0; Index < Rows.Num(); ++Index)
 	{
-		if (!Snapshot.Steps.IsValidIndex(Index))
+		if (!Steps.IsValidIndex(Index))
 		{
 			break;
 		}
 
-		const EFXR_StepStatus Status = Snapshot.Steps[Index].Status;
+		const EFXR_StepStatus Status = Steps[Index].Status;
 		const bool bOpen = Status == EFXR_StepStatus::Active;
 		const bool bDone = Status == EFXR_StepStatus::Complete;
 
@@ -828,7 +959,8 @@ void UFXR_TrainingPanel::RefreshStepWidgets()
 		{
 			MeterSegments[Index]->SetBrush(FXR_PanelStyle::Band(
 				bDone ? FXR_PanelStyle::Green()
-				: (bOpen ? FXR_PanelStyle::Blue() : FXR_PanelStyle::Track())));
+				: (bOpen ? FXR_PanelStyle::Blue() : FXR_PanelStyle::Track()),
+				FXR_PanelStyle::MeterH));
 		}
 
 		const FFXR_PanelStepRow& Entry = Rows[Index];

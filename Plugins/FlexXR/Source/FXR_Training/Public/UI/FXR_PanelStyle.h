@@ -265,12 +265,25 @@ namespace FXR_PanelStyle
 		return Brush;
 	}
 
-	/** A flat band, for dividers and meter segments. */
-	inline FSlateBrush Band(const FLinearColor& Colour)
+	/**
+	 * A flat band, for dividers and meter segments, `Thickness` tall.
+	 *
+	 * **The thickness lives in the brush, and it has to.** `UImage::SetDesiredSizeOverride` looks
+	 * like the way to size an image and is not: it forwards to the live Slate widget and stores
+	 * nothing, so called on an image that has not been constructed yet - which is every image built
+	 * in code - it does nothing at all, and the image falls back to the brush's default 32 x 32. That
+	 * is how every "3 px" rule on this panel came out 32 px tall. `ImageSize` is part of the brush,
+	 * the brush is a property, and a property is saved.
+	 *
+	 * The width is a token 1: every band sits in a slot that fills horizontally. On a Border the
+	 * size is ignored entirely, since a border sizes to its content.
+	 */
+	inline FSlateBrush Band(const FLinearColor& Colour, float Thickness = RuleW)
 	{
 		FSlateBrush Brush;
 		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
 		Brush.TintColor = FSlateColor(Colour);
+		Brush.ImageSize = FVector2D(1.f, Thickness);
 		Brush.OutlineSettings.CornerRadii = FVector4(0.f, 0.f, 0.f, 0.f);
 		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 		return Brush;
