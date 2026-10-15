@@ -114,9 +114,23 @@ except where noted in §4.
 
 ## 4. Phase 4 - what is built
 
-On branch `phase-4-training`, pushed, no PR yet. Builds clean. **None of it has been run yet** - no graph has
-been authored and no session played, in a headset or in PIE. Phase 3's two deferred items landed
-here, as planned, so a real consumer would define them.
+On branch `phase-4-training`, pushed, no PR yet. Builds clean. **The Guided flow has run end to end
+in VR preview** (2026-10-16), on the worked example below: grabs advanced the steps, the manager's
+own events fired, and the panel followed. Exam mode, the Start screen, the report's buttons, poke and
+Quest have not been exercised yet (§8). Phase 3's two deferred items landed here, as planned, so a
+real consumer would define them.
+
+**The worked example - `Content/TrainingExample/`.** Written because the split between graph, session
+and panel was the part that confused a first-time author, and a scene that shows each piece in its
+own place answers that faster than any paragraph. `L_TrainingExample` has three plain
+`BP_Interactable1` props whose only training setup is Expose to Training and an Interaction Id, set
+per placed copy because one Blueprint is used three times; `DA_TrainingExample`, a three-step graph
+with one wrong action and one step that completes on **release** (`Ended`) rather than pick-up;
+`BP_TrainingExampleManager`, which holds the session and shows where a project's own logic goes -
+each session event, a Branch on Step Id, and a custom event per step, one of which turns a lamp on;
+and `BP_TrainingExamplePanel`, which is an `FXR_Panel` and nothing else, because the panel finds the
+session by itself. `BP_FXR_Pawn` now carries one `FXR_WidgetPointer` per hand, which every panel
+needs.
 
 **The SOP runtime (ADR-004)**
 - `FFXR_StepRunner` - the judge. No UObject, no world, no tick group: fed events and a delta time, it
@@ -407,20 +421,17 @@ Each of these cost real time. They are not obvious from the code.
 
 Small and recorded so they are not rediscovered as mysteries.
 
-- **Nothing in §4 has been executed.** The SOP runtime, the spatial UI kit and the validation panel
-  all build clean and the logic has been read, but no graph has been authored, no session played and
-  no panel put in a level. Treat every behaviour described in §4 as designed, not demonstrated.
-- **Nobody has looked at the panel.** This is the big one. It is verified as structure and never as
-  a picture: not in the designer, not in PIE, not in a headset. What *is* established, by loading the
-  asset back and by the builder's own checks: 119 widgets, the generated class is a
-  `UFXR_TrainingPanel`, all 39 used bindings resolve by name and class, the font is a Runtime-cached
-  composite over three real TrueType faces, and the build and the asset generation are both clean
-  with no ensures. None of that says it *looks* right, and several things can only be judged by eye -
-  see the next three.
-- **The score ring's start angle is unverified.** `URadialSlider` is configured 0 to 360 degrees with
-  no handle, and which direction and clock position its zero sits at was taken from the design's
-  intent rather than from seeing it draw. If the arc starts at 3 o'clock or runs anticlockwise,
-  `AngularOffset` is the dial to turn.
+- **Only the Guided path has run.** The worked example ran end to end in VR preview on 2026-10-16 and
+  the owner confirmed it working. It auto-starts, so it never showed the Start screen or pressed
+  Begin; it was never failed, so Exam's timeout ending the run is still designed rather than seen;
+  and nobody has pressed Done or Try again, poked the panel with a finger, or run any of it on Quest.
+  Running the example taught two things reading the code had not: the procedure heading was only ever
+  filled by the designer preview, and one wrong grab was counted as two mistakes. Both are fixed.
+- **The panel has been seen, in the designer and in VR preview, and the type was a third too big
+  until it was.** The fixes are in §7. What still has to be judged by eye is in the next three.
+- **The score ring starts at 6 o'clock; the design starts at 12.** Seen in the designer:
+  `URadialSlider`'s zero is at the bottom and it runs clockwise from there. `AngularOffset = 180` in
+  the builder would match the page. Left alone pending a decision, since it reads well either way.
 - **Row heights are left to content rather than enforced.** The design gives a closed row a 60 px
   minimum and an open one 96 px. The numeral disc is 42 px and the padding brings a closed row to
   about 62, and an open row's wrapped text exceeds 96 on its own, so no `SizeBox` was spent on it -
@@ -513,32 +524,29 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Look at the panel.** It has never been seen (§8), and that is now the only thing standing
-   between the design and a verdict on it. Open `WBP_FXR_TrainingPanel` in the designer and step the
-   Widget Switcher through its four screens. Three things can only be settled by eye: the score
-   ring's start angle, whether a closed row is tall enough, and whether 40 px body text reads as too
-   large rather than too small at 1.5 m.
-2. **Author a graph and run it.** Nothing in §4 has executed. Tick Expose to Training and set an
-   Interaction Id on a handful of interactables, make a `UFXR_StepGraph` — it now takes a
-   `Display Name` and a `Course Name`, which are what the panel's title and crumb read — drop a
-   session on a manager actor, and watch it in PIE before putting a headset on. Set a
-   `Timeout Seconds` on at least one step and run it in **Exam** to exercise the auto-fail.
-3. **Put the panel in the level.** `WBP_FXR_TrainingPanel` inside an `FXR_Panel` with
-   **Draw Size (900, 870) and Panel Width 90**, plus one `FXR_WidgetPointer` per hand on the pawn.
-   That pairing is the whole design's foundation — it is what makes one pixel one millimetre — and
-   §7 explains why `bDrawAtDesiredSize` must stay off. This is also the first real exercise of the
-   kit: the ray path, the poke path and the beam over UI are all unverified (§8).
-4. **The fire-safety demo.** Only after the above. Light that level for the device from the start
+1. **Small tweaks to the example and the panel** - planned for 2026-10-17.
+2. **Four decisions waiting on the owner**, each small once made:
+   - **Exam shows wrong-action messages.** The Message field's own tooltip says it is shown only when
+     the mode allows a hint, and nothing enforces that, so an Exam run tells the trainee what they
+     did wrong - which is a hint. Show nothing in Exam, or only that something was wrong?
+   - **A timeout in Guided or Practice shows "Not that one."** A timeout carries no message, so the
+     panel falls back to its default and tells a slow trainee they did something wrong. It wants its
+     own line, or no line.
+   - **Should a wrong action also end an Exam run?** Only a timeout does today.
+   - **The score ring's start angle** (§8).
+3. **Exercise what the example did not.** Run it in **Exam** with a `Timeout Seconds` on a step and
+   let it fail; clear **Auto Start** and press **Begin** with the laser; press **Done** and
+   **Try again** on the report; poke the panel with a fingertip.
+4. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
+   `Content/TrainingExample/` is the pattern to copy. Light that level for the device from the start
    rather than with the desktop template sky (§7).
-
-**One question left open on purpose.** A timeout is the only thing that fails an Exam run. Whether a
-**wrong action** should also end one was raised and not answered, so today it scores as a mistake and
-the run continues. It is one flag in `FFXR_StepRunner` whenever that gets decided.
+5. **Close the phase.** Quest smoke test (the standing rule from Phase 2 onward), PR into `main`, tag.
 
 Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
 confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
 design, approved 2026-10-09; the approved design built, the font bug fixed and Exam auto-fail
-implemented, 2026-10-11.
+implemented, 2026-10-11; the worked example, and the Guided flow run end to end in VR preview,
+2026-10-16.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
