@@ -206,11 +206,20 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		const FFXR_CompiledStep& Step = Steps[StepIndex];
 		for (const FFXR_CompiledWrongAction& Wrong : Step.WrongActions)
 		{
-			if (Wrong.InteractionId == Event.InteractionId)
+			if (Wrong.InteractionId != Event.InteractionId)
+			{
+				continue;
+			}
+
+			// Once per action. A grab arrives as Began and then Ended, and one wrong grab is one
+			// mistake, not two - matching on the id alone counted every wrong action twice and
+			// charged it twice in the score. The start of the action is the finding; the rest of it
+			// is consumed here rather than falling through to be read again as out of order.
+			if (Event.Phase == EFXR_InteractionPhase::Began)
 			{
 				RecordMistake(Step.StepId, Event.InteractionId, EFXR_MistakeKind::WrongAction, Wrong.Message);
-				return;
 			}
+			return;
 		}
 	}
 
