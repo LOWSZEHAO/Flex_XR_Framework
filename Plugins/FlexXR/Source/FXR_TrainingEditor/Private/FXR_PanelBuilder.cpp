@@ -556,6 +556,10 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 	}
 
 	UVerticalBox* Root = New<UVerticalBox>(Tree);
+	// The last line of defence: nothing draws outside the panel. Slate clips to rectangles, not to
+	// the rounded corners, which is enough because the 52 px gutter keeps all content well clear of
+	// a 42 px corner.
+	Backplate->SetClipping(EWidgetClipping::ClipToBounds);
 	Backplate->AddChild(Root);
 
 	// ── the bar, shared by Start and Procedure ──────────────────────────────────────────────────
@@ -612,7 +616,12 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
 
+		// Every screen's body clips. Its content can grow - a title or a briefing wraps to as
+		// many lines as the author wrote - and without a clip the overflow paints straight over
+		// the foot below it, button and all. In a headset that is text hanging in the air past
+		// the edge of the board. Cut is the better failure: it is visible and it is local.
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
+		Body->SetClipping(EWidgetClipping::ClipToBounds);
 		Stack(Screen, Body, FMargin(Gutter, 36.f, Gutter, 0.f), true);
 
 		Stack(Body, Label(Tree, nullptr, TypeEyebrow(), Text3(),
@@ -648,6 +657,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		Switcher->AddChild(Screen);
 
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
+		Body->SetClipping(EWidgetClipping::ClipToBounds);
 		Stack(Screen, Body, FMargin(Gutter, 56.f, Gutter, 0.f), true);
 
 		UHorizontalBox* Kind = New<UHorizontalBox>(Tree);
@@ -745,6 +755,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		Switcher->AddChild(Screen);
 
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
+		Body->SetClipping(EWidgetClipping::ClipToBounds);
 		Stack(Screen, Body, FMargin(Gutter, 36.f, Gutter, 0.f), true);
 
 		Stack(Body, Label(Tree, nullptr, TypeEyebrow(), Text3(),
@@ -826,7 +837,15 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		Switcher->AddChild(Screen);
 
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
-		Stack(Screen, Body, FMargin(Gutter), true);
+		Body->SetClipping(EWidgetClipping::ClipToBounds);
+
+		// No bottom padding, like the other three screens. The design pads this body on all four
+		// sides and then sits a padded foot under it, which only works in the browser because the
+		// body there is allowed to shrink below its content (`min-height: 0`). A vertical box has no
+		// equivalent: its content overflows instead, and here it overflowed by exactly that 52 px -
+		// a failed run measures 918 against an 870 panel. The spacer and the foot's own padding
+		// already give the gap the bottom padding was for.
+		Stack(Screen, Body, FMargin(Gutter, Gutter, Gutter, 0.f), true);
 
 		USizeBox* RingBox = Fixed(Tree, nullptr, RingSize, RingSize);
 		UOverlay* RingStack = New<UOverlay>(Tree);
