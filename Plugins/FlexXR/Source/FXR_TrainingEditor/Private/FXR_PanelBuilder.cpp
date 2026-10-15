@@ -821,7 +821,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			Line(Row, Pip, FMargin(Gutter, 0.f, 16.f, 0.f));
 
 			Line(Row, Label(Tree, TEXT("MistakeLabel"), TypeMistake(), Danger(),
-				FText::GetEmpty(), 1.2f, true), FMargin(0.f, 0.f, Gutter, 0.f), true);
+				FText::GetEmpty(), LineMistake, true), FMargin(0.f, 0.f, Gutter, 0.f), true);
 
 			Bed->AddChild(Box);
 			Stack(Foot, Bed);
