@@ -704,6 +704,18 @@ void UFXR_TrainingPanel::RefreshProcedure()
 	// compiled order, which is everything the list and the meter need. Built on change, not per frame.
 	const FFXR_SessionReport Snapshot = Current->BuildReport();
 
+	// The heading is the open step's short label. A fan-out has several steps open and one heading,
+	// so it names the first - the same reading the status count takes.
+	if (StepTitleLabel)
+	{
+		const FFXR_StepRecord* Open = Snapshot.Steps.FindByPredicate(
+			[](const FFXR_StepRecord& Step) { return Step.Status == EFXR_StepStatus::Active; });
+
+		StepTitleLabel->SetText(!Open
+			? FText::GetEmpty()
+			: (Open->DisplayName.IsEmpty() ? Open->Instruction : Open->DisplayName));
+	}
+
 	if (Rows.Num() != Snapshot.Steps.Num())
 	{
 		BuildStepWidgets(Snapshot.Steps);
