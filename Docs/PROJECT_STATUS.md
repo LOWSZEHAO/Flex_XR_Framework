@@ -368,6 +368,13 @@ Each of these cost real time. They are not obvious from the code.
   **deterministically** when it is empty and self-heals noisily when it is stale, and the
   determinism is the point: those GUIDs are how an external reference to a widget survives a
   rename. Resetting the map is the whole fix.
+- **`UImage::SetDesiredSizeOverride` stores nothing.** It forwards to the live Slate widget and
+  that is all, so on an image that has not been constructed into Slate yet - every image built in
+  code, in a tool or at runtime - it is a silent no-op, and the image falls back to its brush's
+  default **32 x 32**. Every "3 px" rule on the panel came out 32 px tall, which is what pushed the
+  report's last three rows off the bottom, and the progress meter would have been a 32 px slab in
+  PIE. Size an image through its brush's `ImageSize`: the brush is a property, and a property is
+  saved. `FXR_PanelStyle::Band` takes the thickness for exactly this reason.
 - **`UWidget` has a member called `Slot`**, so a local named `Slot` inside any widget method is
   C4458 and therefore a build error here. Name slot locals something else.
 - **`bDrawAtDesiredSize` must be off for a world panel with a Canvas Panel root**, with `DrawSize`
@@ -410,6 +417,12 @@ Small and recorded so they are not rediscovered as mysteries.
   minimum and an open one 96 px. The numeral disc is 42 px and the padding brings a closed row to
   about 62, and an open row's wrapped text exceeds 96 on its own, so no `SizeBox` was spent on it -
   but a one-word instruction in a large graph is the case that would show a short row.
+- **The designer preview is sample content, not the run.** `NativePreConstruct` fills whichever
+  screen `ScreenSwitcher` is on with the design page's own sample procedure - five steps, the open
+  one third - and hides the bar on the screens that never carry it, so the designer shows what a
+  headset will. Before this it showed a mostly blank layout with the bar on every screen, which
+  made the report look 107 px shorter than it is. Tick **Preview Failed Run** on the root widget to
+  see the taller of the two reports. None of it runs outside the editor.
 - **The scroll rail is the engine's, not the design's.** `UScrollBox` draws its own bar; the design
   draws a 4 px pill. The list is inset 18 px to keep clear of it, which is the part that mattered.
 - **The pointer beam over a panel is unverified, and so is the hover highlight.** `FXR_Panel` adds an

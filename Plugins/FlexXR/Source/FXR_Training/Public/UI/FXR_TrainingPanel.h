@@ -126,6 +126,9 @@ class FXR_TRAINING_API UFXR_TrainingPanel : public UUserWidget
 public:
 	UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializer);
 
+	/** Designer only: fills the four screens with sample content. See FillDesignPreview. */
+	virtual void NativePreConstruct() override;
+
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -439,6 +442,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	bool bButtonsDriveSession = true;
 
+#if WITH_EDITORONLY_DATA
+	/**
+	 * Show the report as a failed run while laying the panel out. The failed report is the taller
+	 * of the two - it has the reason line - so it is the one to check for fit. Editor only: it
+	 * changes the designer preview and nothing a trainee will ever see.
+	 */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
+	bool bPreviewFailedRun = false;
+#endif
+
 private:
 	UFUNCTION()
 	void HandleStepActivated(FName InStepId, FText InInstruction);
@@ -484,11 +497,27 @@ private:
 	/** Move the switcher, collapse the chrome that does not belong, and tell Blueprint. */
 	void ApplyScreen(EFXR_PanelScreen NewScreen);
 
-	/** One meter segment and one list row per compiled step. Called when a run starts. */
-	void BuildStepWidgets();
+	/**
+	 * One meter segment and one list row per step. Called when a run starts.
+	 *
+	 * Takes the steps as data rather than reading the session, so the designer preview can feed it
+	 * the sample procedure and draw the list with the same code a run will use.
+	 */
+	void BuildStepWidgets(const TArray<FFXR_StepRecord>& Steps);
 
-	/** Restyle the rows and segments for the current statuses. Called whenever that changes. */
-	void RefreshStepWidgets();
+	/** Restyle the rows and segments for these statuses. Called whenever they change. */
+	void RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps);
+
+	/**
+	 * Fill whichever screen the designer has the switcher on with the design page's own sample
+	 * content, and collapse the chrome that screen does not have.
+	 *
+	 * Without it the designer shows a mostly blank layout, the step list empty, and the bar on
+	 * screens that never carry it - which made the report look 107 px shorter than it is and the
+	 * Explanation screen look like it had a header. A preview that disagrees with the runtime is a
+	 * preview that sends people chasing bugs that are not there.
+	 */
+	void FillDesignPreview();
 
 	/** Hook the buttons up once, at construction. */
 	void BindButtons();

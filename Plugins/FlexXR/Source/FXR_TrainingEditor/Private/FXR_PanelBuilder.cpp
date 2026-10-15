@@ -165,9 +165,10 @@ namespace
 	/** A flat rule. Three pixels, for the reason given in FXR_PanelStyle. */
 	UImage* Rule(UWidgetTree& Tree, const FLinearColor& Colour, float Thickness = RuleW)
 	{
+		// Sized by its brush. SetDesiredSizeOverride is a no-op on an image that has not been
+		// constructed into Slate yet, which every image built here is - see FXR_PanelStyle::Band.
 		UImage* Image = New<UImage>(Tree);
-		Image->SetBrush(Band(Colour));
-		Image->SetDesiredSizeOverride(FVector2D(0.f, Thickness));
+		Image->SetBrush(Band(Colour, Thickness));
 		return Image;
 	}
 
@@ -714,8 +715,9 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			for (int32 Index = 0; Index < 2; ++Index)
 			{
 				UImage* Bar = New<UImage>(Tree);
-				Bar->SetBrush(FXR_PanelStyle::Box(Text(), 2.f));
-				Bar->SetDesiredSizeOverride(FVector2D(6.f, 32.f));
+				FSlateBrush BarBrush = FXR_PanelStyle::Box(Text(), 2.f);
+				BarBrush.ImageSize = FVector2D(6.f, 32.f);
+				Bar->SetBrush(BarBrush);
 				Line(Bars, Bar, Index == 0 ? FMargin(0.f, 0.f, 6.f, 0.f) : FMargin(0.f));
 			}
 
