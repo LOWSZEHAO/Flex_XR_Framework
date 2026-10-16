@@ -134,22 +134,52 @@ void UFXR_TrainingSession::StartSession()
 	ValidateEvents(Compiled);
 	ReleaseAll();
 
-	// Bound before Start, because Start opens the first step and that callback is what fires it.
-	Runner.OnStepActivated = [this](int32 StepIndex)
+	StepCount = 0;
+	for (int32 Index = 0; Index < Compiled.Num(); ++Index)
 	{
-		FireStepEvents(StepIndex);
-		SetGuidance(StepIndex, true);
+		if (Index == 0 || Compiled[Index - 1].StepIndex != Compiled[Index].StepIndex)
+		{
+			++StepCount;
+		}
+	}
 
-		const FName StepId = Runner.GetSteps()[StepIndex].StepId;
-		const UFXR_TrainingSteps* Steps = GetStepsAsset();
-		const FFXR_StepInfo* Info = Steps ? Steps->FindStep(StepId) : nullptr;
-		OnStepActivated.Broadcast(StepId, Info ? Info->Instruction : FText::GetEmpty());
+	// Bound before Start, because Start opens the first entry and that callback is what fires it.
+	// The step-level broadcasts bracket the sub-step ones: the step opens, then its first sub-step;
+	// its last sub-step is ticked off, then the step completes.
+	Runner.OnEntryActivated = [this](int32 EntryIndex)
+	{
+		FireEntryEvents(EntryIndex);
+		SetGuidance(EntryIndex, true);
+
+		const FFXR_CompiledStep& Entry = Runner.GetEntries()[EntryIndex];
+
+		if (IsFirstOfStep(EntryIndex))
+		{
+			const FFXR_StepInfo* Info = GetStepInfo(Entry);
+			OnStepActivated.Broadcast(Entry.StepId, Info ? Info->Instruction : FText::GetEmpty());
+		}
+
+		if (Entry.IsSubStep())
+		{
+			OnSubStepActivated.Broadcast(Entry.StepId, Entry.SubStepId);
+		}
 	};
 
-	Runner.OnStepCompleted = [this](int32 StepIndex)
+	Runner.OnEntryCompleted = [this](int32 EntryIndex)
 	{
-		SetGuidance(StepIndex, false);
-		OnStepCompleted.Broadcast(Runner.GetSteps()[StepIndex].StepId, FText::GetEmpty());
+		SetGuidance(EntryIndex, false);
+
+		const FFXR_CompiledStep& Entry = Runner.GetEntries()[EntryIndex];
+
+		if (Entry.IsSubStep())
+		{
+			OnSubStepCompleted.Broadcast(Entry.StepId, Entry.SubStepId);
+		}
+
+		if (IsLastOfStep(EntryIndex))
+		{
+			OnStepCompleted.Broadcast(Entry.StepId, FText::GetEmpty());
+		}
 	};
 
 	Runner.OnMistake = [this](const FFXR_Mistake& Mistake)
@@ -196,14 +226,14 @@ void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
 // The GM's events
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 
-void UFXR_TrainingSession::FireStepEvents(int32 StepIndex)
+void UFXR_TrainingSession::FireEntryEvents(int32 EntryIndex)
 {
-	if (!StepEvents.IsValidIndex(StepIndex))
+	if (!StepEvents.IsValidIndex(EntryIndex))
 	{
 		return;
 	}
 
-	for (const FFXR_StepAction& Action : StepEvents[StepIndex])
+	for (const FFXR_StepAction& Action : StepEvents[EntryIndex])
 	{
 		// Already fired when the run began.
 		if (Mode == EFXR_DeliveryMode::Exam && Action.bAutoStartInExam)
@@ -255,15 +285,17 @@ void UFXR_TrainingSession::FireEvent(const FFXR_StepAction& Action) const
 	}
 }
 
-void UFXR_TrainingSession::ValidateEvents(const TArray<FFXR_CompiledStep>& Steps) const
+void UFXR_TrainingSession::ValidateEvents(const TArray<FFXR_CompiledStep>& Entries) const
 {
 	const UWorld* World = GetWorld();
 
-	for (int32 StepIndex = 0; StepIndex < StepEvents.Num(); ++StepIndex)
+	for (int32 EntryIndex = 0; EntryIndex < StepEvents.Num(); ++EntryIndex)
 	{
-		const FString Step = Steps.IsValidIndex(StepIndex) ? Steps[StepIndex].StepId.ToString() : FString::FromInt(StepIndex);
+		const FString Step = Entries.IsValidIndex(EntryIndex)
+			? Entries[EntryIndex].GetCompletionId().ToString()
+			: FString::FromInt(EntryIndex);
 
-		for (const FFXR_StepAction& Action : StepEvents[StepIndex])
+		for (const FFXR_StepAction& Action : StepEvents[EntryIndex])
 		{
 			if (Action.Blueprint.IsNull())
 			{
@@ -321,10 +353,10 @@ void UFXR_TrainingSession::ValidateEvents(const TArray<FFXR_CompiledStep>& Steps
 // Training's highlight
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 
-void UFXR_TrainingSession::SetGuidance(int32 StepIndex, bool bOn)
+void UFXR_TrainingSession::SetGuidance(int32 EntryIndex, bool bOn)
 {
-	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
-	if (!Steps.IsValidIndex(StepIndex))
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	if (!Entries.IsValidIndex(EntryIndex))
 	{
 		return;
 	}
@@ -338,7 +370,7 @@ void UFXR_TrainingSession::SetGuidance(int32 StepIndex, bool bOn)
 	// Exam shows no hints, and the highlight is the loudest one there is.
 	const bool bWant = bOn && bHighlightCurrentStep && Mode == EFXR_DeliveryMode::Training;
 
-	for (const FName Id : Steps[StepIndex].Objects)
+	for (const FName Id : Entries[EntryIndex].Objects)
 	{
 		UFXR_InteractableBase* Target = ResolveTarget(Id);
 		if (!Target)
@@ -381,10 +413,44 @@ void UFXR_TrainingSession::ReleaseAll()
 // Reading the run
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 
+bool UFXR_TrainingSession::IsFirstOfStep(int32 EntryIndex) const
+{
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	return Entries.IsValidIndex(EntryIndex)
+		&& (EntryIndex == 0 || Entries[EntryIndex - 1].StepIndex != Entries[EntryIndex].StepIndex);
+}
+
+bool UFXR_TrainingSession::IsLastOfStep(int32 EntryIndex) const
+{
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	return Entries.IsValidIndex(EntryIndex)
+		&& (EntryIndex == Entries.Num() - 1 || Entries[EntryIndex + 1].StepIndex != Entries[EntryIndex].StepIndex);
+}
+
+const FFXR_StepInfo* UFXR_TrainingSession::GetStepInfo(const FFXR_CompiledStep& Entry) const
+{
+	const UFXR_TrainingSteps* Steps = GetStepsAsset();
+	return Steps && Steps->Steps.IsValidIndex(Entry.StepIndex) ? &Steps->Steps[Entry.StepIndex] : nullptr;
+}
+
+const FFXR_SubStepInfo* UFXR_TrainingSession::GetSubStepInfo(const FFXR_CompiledStep& Entry) const
+{
+	const FFXR_StepInfo* Step = Entry.IsSubStep() ? GetStepInfo(Entry) : nullptr;
+	return Step && Step->SubSteps.IsValidIndex(Entry.SubStepIndex) ? &Step->SubSteps[Entry.SubStepIndex] : nullptr;
+}
+
 FName UFXR_TrainingSession::GetCurrentStepId() const
 {
-	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
-	return Steps.IsValidIndex(Runner.GetCurrentStep()) ? Steps[Runner.GetCurrentStep()].StepId : NAME_None;
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	const int32 Current = Runner.GetCurrentEntry();
+	return Entries.IsValidIndex(Current) ? Entries[Current].StepId : NAME_None;
+}
+
+FName UFXR_TrainingSession::GetCurrentSubStepId() const
+{
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	const int32 Current = Runner.GetCurrentEntry();
+	return Entries.IsValidIndex(Current) ? Entries[Current].SubStepId : NAME_None;
 }
 
 TArray<FName> UFXR_TrainingSession::GetActiveStepIds() const
@@ -398,13 +464,24 @@ TArray<FName> UFXR_TrainingSession::GetActiveStepIds() const
 	return Out;
 }
 
+int32 UFXR_TrainingSession::GetStepTotal() const
+{
+	if (!Runner.GetEntries().IsEmpty())
+	{
+		return StepCount;
+	}
+
+	const UFXR_TrainingSteps* Steps = GetStepsAsset();
+	return Steps ? Steps->Steps.Num() : 0;
+}
+
 int32 UFXR_TrainingSession::GetStepsCompleted() const
 {
 	int32 Completed = 0;
-	const int32 Total = Runner.GetSteps().Num();
+	const int32 Total = Runner.GetEntries().Num();
 	for (int32 Index = 0; Index < Total; ++Index)
 	{
-		if (Runner.GetStatus(Index) == EFXR_StepStatus::Complete)
+		if (Runner.GetStatus(Index) == EFXR_StepStatus::Complete && IsLastOfStep(Index))
 		{
 			++Completed;
 		}
@@ -414,8 +491,9 @@ int32 UFXR_TrainingSession::GetStepsCompleted() const
 
 FText UFXR_TrainingSession::GetActiveInstruction() const
 {
-	const UFXR_TrainingSteps* Steps = GetStepsAsset();
-	const FFXR_StepInfo* Info = Steps ? Steps->FindStep(GetCurrentStepId()) : nullptr;
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	const int32 Current = Runner.GetCurrentEntry();
+	const FFXR_StepInfo* Info = Entries.IsValidIndex(Current) ? GetStepInfo(Entries[Current]) : nullptr;
 	return Info ? Info->Instruction : FText::GetEmpty();
 }
 
@@ -460,7 +538,7 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 	{
 		Report.Outcome = EFXR_SessionOutcome::Completed;
 	}
-	else if (Runner.IsRunning() || Runner.GetSteps().IsEmpty())
+	else if (Runner.IsRunning() || Runner.GetEntries().IsEmpty())
 	{
 		Report.Outcome = EFXR_SessionOutcome::InProgress;
 	}
@@ -469,34 +547,78 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		Report.Outcome = EFXR_SessionOutcome::Stopped;
 	}
 
-	const UFXR_TrainingSteps* StepsAsset = GetStepsAsset();
-	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
-	Report.StepsTotal = Steps.Num();
-	Report.Steps.Reserve(Steps.Num());
+	const TArray<FFXR_CompiledStep>& Entries = Runner.GetEntries();
+	Report.StepsTotal = GetStepTotal();
+	Report.Steps.Reserve(Report.StepsTotal);
 
-	for (int32 Index = 0; Index < Steps.Num(); ++Index)
+	// Entries folded back into steps. A step is complete only when every entry in it is, and it is
+	// as far along as the furthest entry it reached: that entry's close time is the step's, which is
+	// "still open" for a step stopped halfway and the moment of failure for one that failed.
+	bool bAllComplete = true;
+	for (int32 Index = 0; Index < Entries.Num(); ++Index)
 	{
-		FFXR_StepRecord& Record = Report.Steps.AddDefaulted_GetRef();
-		Record.StepId = Steps[Index].StepId;
-		Record.Status = Runner.GetStatus(Index);
-		Record.OpenedAtSeconds = Runner.GetStepOpenedAt(Index);
-		Record.ClosedAtSeconds = Runner.GetStepClosedAt(Index);
-		Record.MistakeCount = Runner.GetStepMistakeCount(Index);
+		const FFXR_CompiledStep& Entry = Entries[Index];
+		const EFXR_StepStatus Status = Runner.GetStatus(Index);
+
+		if (IsFirstOfStep(Index))
+		{
+			FFXR_StepRecord& Fresh = Report.Steps.AddDefaulted_GetRef();
+			Fresh.StepId = Entry.StepId;
+			Fresh.OpenedAtSeconds = Runner.GetOpenedAt(Index);
+
+			if (const FFXR_StepInfo* Info = GetStepInfo(Entry))
+			{
+				Fresh.DisplayName = Info->DisplayName;
+				Fresh.Instruction = Info->Instruction;
+			}
+
+			bAllComplete = true;
+		}
+
+		FFXR_StepRecord& Record = Report.Steps.Last();
+		Record.MistakeCount += Runner.GetMistakeCount(Index);
+		bAllComplete &= Status == EFXR_StepStatus::Complete;
+
+		if (Status != EFXR_StepStatus::Pending)
+		{
+			Record.Status = EFXR_StepStatus::Active;
+			Record.ClosedAtSeconds = Runner.GetClosedAt(Index);
+		}
+
+		if (Entry.IsSubStep())
+		{
+			FFXR_SubStepRecord& Sub = Record.SubSteps.AddDefaulted_GetRef();
+			Sub.SubStepId = Entry.SubStepId;
+			Sub.Status = Status;
+			Sub.OpenedAtSeconds = Runner.GetOpenedAt(Index);
+			Sub.ClosedAtSeconds = Runner.GetClosedAt(Index);
+			Sub.MistakeCount = Runner.GetMistakeCount(Index);
+
+			if (Sub.OpenedAtSeconds >= 0.f && Sub.ClosedAtSeconds >= 0.f)
+			{
+				Sub.DurationSeconds = Sub.ClosedAtSeconds - Sub.OpenedAtSeconds;
+			}
+
+			if (const FFXR_SubStepInfo* Info = GetSubStepInfo(Entry))
+			{
+				Sub.DisplayName = Info->DisplayName;
+			}
+		}
+
+		if (!IsLastOfStep(Index))
+		{
+			continue;
+		}
+
+		if (bAllComplete)
+		{
+			Record.Status = EFXR_StepStatus::Complete;
+			++Report.StepsCompleted;
+		}
 
 		if (Record.OpenedAtSeconds >= 0.f && Record.ClosedAtSeconds >= 0.f)
 		{
 			Record.DurationSeconds = Record.ClosedAtSeconds - Record.OpenedAtSeconds;
-		}
-
-		if (const FFXR_StepInfo* Info = StepsAsset ? StepsAsset->FindStep(Record.StepId) : nullptr)
-		{
-			Record.DisplayName = Info->DisplayName;
-			Record.Instruction = Info->Instruction;
-		}
-
-		if (Record.Status == EFXR_StepStatus::Complete)
-		{
-			++Report.StepsCompleted;
 		}
 	}
 
@@ -525,11 +647,20 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		|| Report.Outcome == EFXR_SessionOutcome::InProgress;
 	Report.Score = bEarned ? FMath::Max(0.f, Score) : 0.f;
 
-	if (Report.Outcome == EFXR_SessionOutcome::Failed && Report.Steps.IsValidIndex(Runner.GetFailedStep()))
+	if (Report.Outcome == EFXR_SessionOutcome::Failed && Entries.IsValidIndex(Runner.GetFailedEntry()))
 	{
-		const FFXR_StepRecord& Failed = Report.Steps[Runner.GetFailedStep()];
+		const FFXR_CompiledStep& Failed = Entries[Runner.GetFailedEntry()];
+
+		const FFXR_StepInfo* Info = GetStepInfo(Failed);
 		Report.FailedStepId = Failed.StepId;
-		Report.FailedStepName = Failed.DisplayName.IsEmpty() ? FText::FromName(Failed.StepId) : Failed.DisplayName;
+		Report.FailedStepName = Info && !Info->DisplayName.IsEmpty() ? Info->DisplayName : FText::FromName(Failed.StepId);
+
+		if (Failed.IsSubStep())
+		{
+			const FFXR_SubStepInfo* Sub = GetSubStepInfo(Failed);
+			Report.FailedSubStepId = Failed.SubStepId;
+			Report.FailedSubStepName = Sub && !Sub->DisplayName.IsEmpty() ? Sub->DisplayName : FText::FromName(Failed.SubStepId);
+		}
 	}
 
 	return Report;

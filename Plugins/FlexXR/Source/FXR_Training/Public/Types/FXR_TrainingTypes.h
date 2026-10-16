@@ -113,6 +113,10 @@ struct FFXR_Mistake
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
+	/** Its sub-step that was open, or None when the step has no sub-steps. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FName SubStepId;
+
 	/** What the trainee actually did. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName InteractionId;

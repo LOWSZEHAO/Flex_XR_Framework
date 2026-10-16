@@ -6,6 +6,37 @@
 #include "Types/FXR_TrainingTypes.h"
 #include "FXR_SessionReport.generated.h"
 
+/** What happened to one sub-step during a run. */
+USTRUCT(BlueprintType)
+struct FFXR_SubStepRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FName SubStepId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	EFXR_StepStatus Status = EFXR_StepStatus::Pending;
+
+	/** Seconds from the start of the session. Negative means it never opened. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	float OpenedAtSeconds = -1.f;
+
+	/** Negative means it never closed. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	float ClosedAtSeconds = -1.f;
+
+	/** Time it was open. Zero when it never opened or never closed. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	float DurationSeconds = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	int32 MistakeCount = 0;
+};
+
 /** What happened to one step during a run. */
 USTRUCT(BlueprintType)
 struct FFXR_StepRecord
@@ -41,10 +72,13 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float DurationSeconds = 0.f;
 
-
-	/** Mistakes made while this step was open. The per-step number is the interesting one. */
+	/** Mistakes made while this step was open, its sub-steps' included. The per-step number is the interesting one. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 MistakeCount = 0;
+
+	/** Its sub-steps, in order. Empty for a step that has none. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	TArray<FFXR_SubStepRecord> SubSteps;
 };
 
 /**
@@ -116,6 +150,14 @@ struct FFXR_SessionReport
 	/** That step's label, so a panel can name it without holding the graph. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText FailedStepName;
+
+	/** The sub-step the run ended on, when the failed step has sub-steps. None otherwise. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FName FailedSubStepId;
+
+	/** That sub-step's label. Empty when FailedSubStepId is None. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	FText FailedSubStepName;
 
 	/** What ended a failed run. None for any other outcome. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")

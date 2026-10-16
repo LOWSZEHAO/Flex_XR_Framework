@@ -42,13 +42,17 @@ struct FXR_TRAINING_API FFXR_StepAction
 	bool bAutoStartInExam = false;
 };
 
-/** Everything that happens at one step. */
+/** Everything that happens at one step, or at one sub-step. */
 USTRUCT(BlueprintType)
 struct FXR_TRAINING_API FFXR_GMStep
 {
 	GENERATED_BODY()
 
-	/** Which step. Picked from the Steps asset, so the two cannot quietly disagree. */
+	/**
+	 * Which step - or, for a step with sub-steps, which sub-step. Such a step is set up through its
+	 * sub-steps, one entry each, because each one opens its own objects in its turn. Picked from the
+	 * Steps asset, so the two cannot quietly disagree.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (GetOptions = "GetStepIdOptions"))
 	FName StepId;
 
@@ -101,23 +105,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TObjectPtr<UFXR_TrainingSteps> Steps;
 
-	/** One entry per step. Each row is titled with its Step Id. */
+	/** One entry per step, or per sub-step where a step has them. Each row is titled with its id. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "StepId"))
 	TArray<FFXR_GMStep> StepSetup;
 
 	/**
-	 * Turn the two assets into what the runner consumes, in the Steps asset's order, plus each
-	 * step's events. Reports every disagreement between the two rather than failing quietly.
+	 * Turn the two assets into what the runner consumes - one entry per sub-step, or per step that
+	 * has none, in the Steps asset's order - plus each entry's events. Reports every disagreement
+	 * between the two rather than failing quietly.
 	 *
 	 * Returns false when there is nothing to run. OutErrors is filled either way.
 	 */
-	bool Compile(TArray<FFXR_CompiledStep>& OutSteps, TArray<TArray<FFXR_StepAction>>& OutEvents,
+	bool Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArray<FFXR_StepAction>>& OutEvents,
 		TArray<FString>& OutErrors) const;
 
-	/** The setup for this step, or null. */
-	const FFXR_GMStep* FindSetup(FName StepId) const;
+	/** The setup for this step or sub-step, or null. */
+	const FFXR_GMStep* FindSetup(FName Id) const;
 
-	/** The Steps asset's ids, for the Step Id dropdown. */
+	/** The ids that can be set up - each step's, or its sub-steps' - for the Step Id dropdown. */
 	UFUNCTION()
 	TArray<FString> GetStepIdOptions() const;
 };
