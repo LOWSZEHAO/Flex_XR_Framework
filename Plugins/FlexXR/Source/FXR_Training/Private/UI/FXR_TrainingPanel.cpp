@@ -173,7 +173,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		if (bFailed)
 		{
 			Sample.Outcome = EFXR_SessionOutcome::Failed;
-			Sample.Score = 54.f;
+			Sample.Score = 0.f;
 			Sample.StepsCompleted = 2;
 			Sample.HintsUsed = 0;
 			Sample.DurationSeconds = 130.f;
@@ -809,7 +809,10 @@ void UFXR_TrainingPanel::RefreshComplete()
 
 	if (ScoreLabel)
 	{
-		ScoreLabel->SetText(FText::AsNumber(FMath::RoundToInt(Report.Score)));
+		// A stopped run was never judged, so it shows no score rather than a zero that reads as one.
+		ScoreLabel->SetText(Report.Outcome == EFXR_SessionOutcome::Stopped
+			? FText::FromString(TEXT("\u2014"))
+			: FText::AsNumber(FMath::RoundToInt(Report.Score)));
 		ScoreLabel->SetColorAndOpacity(FSlateColor(VerdictText));
 	}
 

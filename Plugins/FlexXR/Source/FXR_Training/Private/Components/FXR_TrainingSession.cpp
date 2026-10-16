@@ -399,7 +399,15 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 	}
 
 	Score -= Scoring.PerHint * static_cast<float>(Report.HintsUsed);
-	Report.Score = FMath::Max(0.f, Score);
+
+	// The score is earned by finishing. Penalties alone never asked whether the run was done, so a
+	// run that failed on step one after a single slip scored 98 - and one stopped at once scored 100.
+	// A failed run now scores nothing, since partial credit on a failed exam is a mixed message; a
+	// stopped run is not a verdict and has no score either. A run still going keeps its provisional
+	// score, for anything watching it live.
+	const bool bEarned = Report.Outcome == EFXR_SessionOutcome::Completed
+		|| Report.Outcome == EFXR_SessionOutcome::InProgress;
+	Report.Score = bEarned ? FMath::Max(0.f, Score) : 0.f;
 
 	// Named after the step records exist, so the failed step's label comes from the same lookup
 	// rather than a second pass over the graph.
