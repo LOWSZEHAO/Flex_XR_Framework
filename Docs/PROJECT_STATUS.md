@@ -127,11 +127,13 @@ its own place answers that faster than any paragraph. Rewired to the GM on 2026-
 step, step 2 *Handle the weapon* has two sub-steps, *Pick up the weapon* and *Put the weapon down*.
 `DA_TrainingExample_GM` wires it: step 1 calls *Enable Grab* on the prop tagged `Magazine`; step 2 owns
 the `Weapon` as its Step Object, and its first sub-step calls *Enable Grab* on the prop tagged `Weapon`.
-Both events are marked Auto Start In Exam. `BP_TrainingExampleProp` (a copy of `BP_Interactable1`, so
+Both events are marked Auto Start In Exam, and step 1 also calls *Enable Grab* on the `Decoy` with
+Auto Start and **Exam Only** ticked, so the Decoy is there to get wrong in an Exam and never offered in
+Training. `BP_TrainingExampleProp` (a copy of `BP_Interactable1`, so
 the dev map's props are untouched) starts with its grab **locked**, has *Enable Grab* / *Disable Grab*
 for the GM to call, and two per-copy ids, *Complete On Grab* and *Complete On Release*, which its On
 Grabbed / On Released hand to `Complete Step` when set. `L_TrainingExample` places three of them -
-Magazine (cube), Weapon (cylinder, completes on grab *and* on release) and Decoy (cone, wired to
+Magazine (cube), Weapon (cylinder, completes on grab *and* on release) and Decoy (cone, completes
 nothing) - each with an Actor Tag the GM targets. `BP_TrainingExampleManager` is now only the session,
 debug prints for steps, sub-steps and mistakes, and the lamp, which turns on when the run finishes;
 the old Branch-on-Step-Id chain is gone, because the GM does that job. `BP_TrainingExamplePanel` is an
@@ -140,8 +142,8 @@ the old Branch-on-Step-Id chain is gone, because the GM does that job. `BP_Train
 Checked in PIE without hands, by firing the props' own On Grabbed / On Released handlers: Training opens
 only the Magazine at the start, out-of-turn calls are ignored, the Magazine opens step 2 and its first
 sub-step unlocks the Weapon, the panel turns to step 2's page and ticks its sub-steps off, and the
-release ends the run - Training complete, the ring and tick, the lamp on. In Exam both Auto Start events
-fire at the start and the Decoy stays locked. Not checked: real grabs in a headset, and Exam's judging,
+release ends the run - Training complete, the ring and tick, the lamp on; the Decoy stays locked
+throughout. In Exam the Magazine, the Weapon and the Decoy are all open from the start. Not checked: real grabs in a headset, and Exam's judging,
 which needs a real grab to put an event on the bus.
 
 **The SOP runtime (ADR-004, revised by ADR-011)**
@@ -549,10 +551,8 @@ Small and recorded so they are not rediscovered as mysteries.
    On Grabbed and On Released - added ahead of the rest because a "pick it up" step had nothing else to
    hook to. The owner is preparing the full list for every component; those two fold into it.
 2. **Play the worked example in the headset** (§4), in Training and then Exam: real grabs, Exam judging
-   every exposed object, failing on a Critical step, a timeout and Max Mistakes; the GM's three dropdowns.
-   **Open question:** an object that should be live only in Exam - the example's Decoy - cannot be
-   expressed, because an Auto Start In Exam event also fires in Training when its step arrives. The Decoy
-   is therefore locked in both modes. Candidate fix: an *Exam only* option on GM events.
+   every exposed object (grabbing the Decoy should read as a wrong object), failing on a Critical step, a
+   timeout and Max Mistakes; the GM's three dropdowns.
 3. **The fire-safety demo.** Phase 4's actual deliverable, built on the GM.
 4. **Close the phase.** Quest smoke test, PR into `main`, tag.
 
