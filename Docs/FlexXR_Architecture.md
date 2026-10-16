@@ -644,7 +644,12 @@ Step 3: "Pull the safety pin"
 └─ On complete:    → Step 4
 ```
 
-**Graph, not list:** branching (wrong extinguisher on electrical fire → consequence + re-teach path), parallel steps ("gloves AND goggles, any order"), and modes — *Guided* (full hints) / *Practice* (hints on mistakes) / *Exam* (no hints, scored) — same graph, three dials.
+**Superseded by ADR-011 (v0.20).** The graph above — branching, parallel steps, three modes — was replaced
+once it ran: a procedure is now **two assets**, the steps the trainee reads (`UFXR_TrainingSteps`) and a **GM**
+(`UFXR_TrainingGM`) that fires custom events on Blueprints as each step arrives. Steps run **in order**, finish
+when the project calls **Complete Step**, and run in two modes: **Training** (gated by the GM's events, fully
+hinted, unscored) and **Exam** (open from the start via *Auto Start In Exam*, every exposed object judged,
+failed by a critical step, a timeout or Max Mistakes).
 
 **Opt-in hard-lock** per step (`☑ Hard-lock until reached`) for legally mandated interlocks — implemented via the same `SetInteractionEnabled` API games use. Gating is the exception, never the philosophy.
 
@@ -836,6 +841,26 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.20 — Training gates, Exam judges (ADR-011)**
+- **The step graph is replaced by two assets.** `UFXR_TrainingSteps` holds what the trainee reads - ids,
+  names, instructions, in order. `UFXR_TrainingGM` holds what happens: per step, custom events to fire on
+  Blueprints in the level, the step's objects, wrong-object messages, a timeout and a Critical flag. The GM
+  picks step ids from a dropdown of the Steps asset, and an event's name from a dropdown of the chosen
+  Blueprint's own events, so neither can be mistyped. Compile reports any disagreement between the two.
+- **The project finishes a step**, with a global **Complete Step** node wired to whatever event means "done".
+  This is what lets a valve finish on reaching closed rather than on being let go of. An optional Step Id
+  makes it advance only while that step is open, so On Grabbed can be wired once and trusted.
+- **Two modes.** Guided and Practice let the world run ahead of the procedure - attach the part early and
+  the steps and the world disagree for the rest of the run - which is a finding in an exam and confusion
+  while teaching. **Training** now opens objects step by step through the GM's events, shows every hint and
+  scores nothing; a finished run is a full green ring with a tick. **Exam** opens the events marked *Auto
+  Start In Exam* when the run begins and judges everything, as before.
+- **Critical steps.** In Exam, any mistake made while a Critical step is open fails the run at once.
+- **Removed:** branching and fan-out, transitions and phases, Hard-lock, hint escalation and "Hints taken",
+  Practice's timeout line. "Watch, don't gate" survives as Exam's rule rather than the layer's.
+- Old assets load through CoreRedirects: a step graph becomes a Steps asset with its names and
+  instructions kept, and Guided or Practice becomes Training.
 
 **v0.19 — Every exposed object is judged**
 - **Reverses v0.18's `Always Wrong` and its "no strict mode".** Both answered the wrong question.

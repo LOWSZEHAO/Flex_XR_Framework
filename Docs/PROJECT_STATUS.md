@@ -122,7 +122,9 @@ real consumer would define them.
 
 **The worked example - `Content/TrainingExample/`.** Written because the split between graph, session
 and panel was the part that confused a first-time author, and a scene that shows each piece in its
-own place answers that faster than any paragraph. `L_TrainingExample` has three plain
+own place answers that faster than any paragraph. **It predates the GM and needs rewiring** (§9): its old graph now
+loads as a Steps asset with the names and instructions kept, but its session has no GM yet, so it does
+not run. `L_TrainingExample` has three plain
 `BP_Interactable1` props whose only training setup is Expose to Training and an Interaction Id, set
 per placed copy because one Blueprint is used three times; `DA_TrainingExample`, a three-step graph
 with one wrong action and one step that completes on **release** (`Ended`) rather than pick-up;
@@ -132,19 +134,21 @@ and `BP_TrainingExamplePanel`, which is an `FXR_Panel` and nothing else, because
 session by itself. `BP_FXR_Pawn` now carries one `FXR_WidgetPointer` per hand, which every panel
 needs.
 
-**The SOP runtime (ADR-004)**
-- `FFXR_StepRunner` - the judge. No UObject, no world, no tick group: fed events and a delta time, it
-  answers with outcomes, which is what makes a run reproducible and testable without an engine
-  running. It deliberately cannot reach the world, because a procedure a trainee cannot fail measures
-  nothing.
-- `UFXR_StepGraph` - the authoring DataAsset, compiled down to the runner's step array. Authoring and
-  runtime are separate by ADR-004, so a CSV import or a node editor later compiles to the same
-  contract.
-- `UFXR_TrainingSession` - the part that *can* reach the world. Subscribes to the interaction event
-  bus, drives the Guidance highlight on the open step's target, and applies the opt-in hard-lock
-  interlock for steps that must gate.
-- `FFXR_SessionReport` - per-step timings, mistakes, hints and a weighted score. Built before cleanup
-  so it describes the run and not the teardown, and safe to call mid-session for a live panel.
+**The SOP runtime (ADR-004, revised by ADR-011)**
+- `UFXR_TrainingSteps` - the procedure as the trainee reads it: ids, names, instructions, in order.
+- `UFXR_TrainingGM` - what happens at each step: custom events to fire on Blueprints in the level (picked
+  from a dropdown of each Blueprint's own events), the step's objects, wrong-object messages, a timeout
+  and a Critical flag. Points at the Steps asset and picks its step ids from it.
+- **Complete Step** - a global Blueprint node the project wires to whatever event means "done". An
+  optional Step Id makes it advance only while that step is open.
+- `FFXR_StepRunner` - the judge. No UObject, no world, no tick group. Runs the steps in order, judges every
+  exposed object against them, and in Exam fails the run on a critical step, a timeout or Max Mistakes.
+  It never changes the world and never decides a step is done.
+- `UFXR_TrainingSession` - the part that reaches the world. Fires the GM's events as steps arrive (and, in
+  Exam, the ones marked Auto Start In Exam when the run begins), highlights the step's objects in Training,
+  and checks every event against the level before the run starts.
+- `FFXR_SessionReport` - per-step timings, mistakes, the outcome and why, and a score that is earned by
+  finishing and only shown in Exam.
 
 **The spatial UI kit**
 - `UFXR_Panel` - world-space UMG surface. Sized in centimetres, optional face-the-player, fades on
@@ -524,28 +528,24 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Small tweaks to the example and the panel** - planned for 2026-10-17.
-2. **See the mode rules run.** Decided and built 2026-10-16 (architecture v0.17), never seen in play:
-   in **Exam** the Procedure screen should show only `EXAM IN PROGRESS`, the progress figure and the
-   mistake count, and a mistake should read "Mistake 1 of 3"; set **Max Mistakes** and reach it; put
-   a `Timeout Seconds` on a step and let Exam fail on it; in **Practice** let a step time out and
-   check the new line and the highlight; in **Guided** confirm a timeout does nothing. A failed run
-   should now score **0** with an empty red ring, and a stopped one show "—". Every exposed object is now
-   judged: grab one that isn't the open step's and see **Wrong object.**, re-grab the magazine after
-   step 1 and see nothing, and grab the weapon during step 1 and find it in the report as out of
-   order. Then the paths
-   the example skipped: clear **Auto Start** and press **Begin**, press **Done** and **Try again**,
-   poke the panel with a fingertip.
-3. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
-   `Content/TrainingExample/` is the pattern to copy. Light that level for the device from the start
-   rather than with the desktop template sky (§7).
-4. **Close the phase.** Quest smoke test (the standing rule from Phase 2 onward), PR into `main`, tag.
+1. **Interaction events.** `Complete Step` is wired to an interactable's own events, and `FXR_Grab` has
+   no On Grabbed / On Released - so a "pick it up" step has nothing to hook to except the event bus. The
+   owner is preparing a list of the events every component should expose; it lands as one consistent pass.
+2. **Rewire the worked example to the GM** (`Content/TrainingExample/`). Its Steps asset survived the
+   redirect; it needs a `DA_*_GM`, Enable/Disable custom events on the props, Actor Tags to tell the three
+   `BP_Interactable1` copies apart, and `Complete Step` on their events - which waits on item 1.
+3. **See the new model run**, none of which has been played: Training gating step by step and the green
+   ring with its tick; Exam opening Auto Start events at the start, judging every exposed object, failing on
+   a Critical step, a timeout and Max Mistakes; the GM's two dropdowns; the start-of-run warnings for a bad
+   event name or a Blueprint not in the level.
+4. **The fire-safety demo.** Phase 4's actual deliverable, built on the GM.
+5. **Close the phase.** Quest smoke test, PR into `main`, tag.
 
 Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
 confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
 design, approved 2026-10-09; the approved design built, the font bug fixed and Exam auto-fail
 implemented, 2026-10-11; the worked example, and the Guided flow run end to end in VR preview,
-2026-10-16.
+2026-10-16; the GM redesign (ADR-011), built 2026-10-16.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
