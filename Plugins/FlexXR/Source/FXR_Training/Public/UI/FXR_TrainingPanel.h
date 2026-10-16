@@ -54,6 +54,19 @@ enum class EFXR_ExplainState : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_PanelRequest);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PanelAudioRequest, bool, bWantPlaying);
 
+/** The widgets of one sub-step line, under its step's instruction. */
+USTRUCT()
+struct FFXR_PanelSubRow
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TObjectPtr<UImage> Marker;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> TextLabel;
+};
+
 /**
  * The widgets of one step row, kept so that a step change restyles the list instead of rebuilding
  * it. The row count is fixed once a graph is compiled, so there is nothing to rebuild after the
@@ -78,6 +91,13 @@ struct FFXR_PanelStepRow
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> ChevronLabel;
+
+	/** The sub-step lines' container, shown only while the step is open. Null for a step without any. */
+	UPROPERTY()
+	TObjectPtr<UWidget> SubList;
+
+	UPROPERTY()
+	TArray<FFXR_PanelSubRow> SubRows;
 };
 
 /**
@@ -368,7 +388,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> ProgressFill;
 
-	/** Filled with one row per step. */
+	/** Filled with one row per step. The open step's row also lists its sub-steps, when it has any. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepList;
 
@@ -480,11 +500,18 @@ protected:
 	/** Show the report as a finished Training run - the full ring and the tick. Editor only. */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewTrainingRun = false;
+
+	/** Give the sample's open step three sub-steps, the tallest a row gets. Editor only. */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
+	bool bPreviewSubSteps = true;
 #endif
 
 private:
 	UFUNCTION()
 	void HandleStepActivated(FName InStepId, FText InInstruction);
+
+	UFUNCTION()
+	void HandleSubStepActivated(FName InStepId, FName InSubStepId);
 
 	UFUNCTION()
 	void HandleMistake(FFXR_Mistake Mistake);
@@ -537,6 +564,9 @@ private:
 
 	/** Restyle the rows and segments for these statuses. Called whenever they change. */
 	void RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps);
+
+	/** Whether the built rows have the shape of these steps - one each, with as many sub-step lines. */
+	bool RowsMatch(const TArray<FFXR_StepRecord>& Steps) const;
 
 	/**
 	 * Fill whichever screen the designer has the switcher on with the design page's own sample

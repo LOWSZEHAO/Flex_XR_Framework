@@ -14,6 +14,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
 #include "Engine/World.h"
@@ -43,6 +44,25 @@ namespace
 	{
 		return UEnum::GetDisplayValueAsText(Mode);
 	}
+
+	/**
+	 * A sub-step's marker: the step numeral's three states, smaller and without the number. The ring
+	 * needs its size in the brush - an image built in code has no other place to keep it.
+	 */
+	FSlateBrush SubMarker(bool bOpen, bool bDone)
+	{
+		if (bOpen || bDone)
+		{
+			return FXR_PanelStyle::Dot(bOpen ? FXR_PanelStyle::Blue() : FXR_PanelStyle::Green(), FXR_PanelStyle::SubMarkerSize);
+		}
+
+		FSlateBrush Ring = FXR_PanelStyle::RingedPill(FLinearColor::Transparent, FXR_PanelStyle::Divider(), FXR_PanelStyle::RuleW);
+		Ring.ImageSize = FVector2D(FXR_PanelStyle::SubMarkerSize, FXR_PanelStyle::SubMarkerSize);
+		return Ring;
+	}
+
+	/** Drops the marker onto the middle of a sub-step's first line, so a wrapped one still reads from the top. */
+	constexpr float SubMarkerTop = (21.f * 1.30f - FXR_PanelStyle::SubMarkerSize) * 0.5f;
 
 	/** Collapsed, not Hidden: a hidden widget keeps its space and leaves a hole where it was. */
 	void SetShown(UWidget* Widget, bool bShown, ESlateVisibility WhenShown = ESlateVisibility::SelfHitTestInvisible)
@@ -150,6 +170,25 @@ void UFXR_TrainingPanel::FillDesignPreview()
 			Record.Status = Line < 2 ? EFXR_StepStatus::Complete
 				: (Line == 2 ? EFXR_StepStatus::Active : EFXR_StepStatus::Pending);
 		}
+
+#if WITH_EDITORONLY_DATA
+		if (bPreviewSubSteps)
+		{
+			const TCHAR* Parts[] = {
+				TEXT("Twist the pin to break the tamper seal"),
+				TEXT("Pull the pin straight out of the handle"),
+				TEXT("Set the pin down clear of your feet"),
+			};
+
+			for (int32 Part = 0; Part < UE_ARRAY_COUNT(Parts); ++Part)
+			{
+				FFXR_SubStepRecord& Sub = Sample[2].SubSteps.AddDefaulted_GetRef();
+				Sub.DisplayName = FText::AsCultureInvariant(Parts[Part]);
+				Sub.Status = Part < 1 ? EFXR_StepStatus::Complete
+					: (Part == 1 ? EFXR_StepStatus::Active : EFXR_StepStatus::Pending);
+			}
+		}
+#endif
 
 		// The same two calls a run makes, so what the designer shows is what the code draws.
 		BuildStepWidgets(Sample);
@@ -264,6 +303,7 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 	if (UFXR_TrainingSession* Previous = Session.Get())
 	{
 		Previous->OnStepActivated.RemoveAll(this);
+		Previous->OnSubStepActivated.RemoveAll(this);
 		Previous->OnMistake.RemoveAll(this);
 		Previous->OnSessionFinished.RemoveAll(this);
 	}
@@ -289,6 +329,7 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 	}
 
 	InSession->OnStepActivated.AddDynamic(this, &UFXR_TrainingPanel::HandleStepActivated);
+	InSession->OnSubStepActivated.AddDynamic(this, &UFXR_TrainingPanel::HandleSubStepActivated);
 	InSession->OnMistake.AddDynamic(this, &UFXR_TrainingPanel::HandleMistake);
 	InSession->OnSessionFinished.AddDynamic(this, &UFXR_TrainingPanel::HandleFinished);
 
@@ -411,6 +452,14 @@ void UFXR_TrainingPanel::HandleStepActivated(FName InStepId, FText InInstruction
 
 	Refresh();
 	OnStepChanged(StepId, Instruction, Number, Total);
+}
+
+void UFXR_TrainingPanel::HandleSubStepActivated(FName InStepId, FName InSubStepId)
+{
+	// The step and its heading have not changed; the list has. A complaint about the last part is
+	// answered by moving on to the next one, the same as between steps.
+	ClearMistake();
+	Refresh();
 }
 
 void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
@@ -771,7 +820,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 			: (Open->DisplayName.IsEmpty() ? Open->Instruction : Open->DisplayName));
 	}
 
-	if (Rows.Num() != Snapshot.Steps.Num())
+	if (!RowsMatch(Snapshot.Steps))
 	{
 		BuildStepWidgets(Snapshot.Steps);
 	}
@@ -837,7 +886,9 @@ void UFXR_TrainingPanel::RefreshComplete()
 	}
 
 	// One line a passed run does not need. Only a failure has something to explain, and there are
-	// three ways to fail an exam.
+	// three ways to fail an exam. It names the narrowest thing that failed: the sub-step, if it was one.
+	const FText FailedName = Report.FailedSubStepName.IsEmpty() ? Report.FailedStepName : Report.FailedSubStepName;
+
 	FText Reason;
 	switch (Report.FailReason)
 	{
@@ -847,11 +898,11 @@ void UFXR_TrainingPanel::RefreshComplete()
 		break;
 	case EFXR_FailReason::CriticalMistake:
 		Reason = FText::Format(NSLOCTEXT("FlexXR", "PanelFailedCritical", "Critical mistake on \u201C{0}\u201D."),
-			Report.FailedStepName);
+			FailedName);
 		break;
 	case EFXR_FailReason::Timeout:
 		Reason = FText::Format(NSLOCTEXT("FlexXR", "PanelFailedReason", "Ran out of time on \u201C{0}\u201D."),
-			Report.FailedStepName);
+			FailedName);
 		break;
 	default:
 		break;
@@ -974,7 +1025,28 @@ void UFXR_TrainingPanel::BuildStepWidgets(const TArray<FFXR_StepRecord>& Steps)
 		Entry.Row->SetVerticalAlignment(VAlign_Center);
 
 		UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-		Entry.Row->AddChild(Line);
+
+		// A step with sub-steps stacks them under its own line. Only that step pays for the stack,
+		// so the ordinary row stays the widgets it always was.
+		UVerticalBox* SubList = nullptr;
+		if (Step.SubSteps.IsEmpty())
+		{
+			Entry.Row->AddChild(Line);
+		}
+		else
+		{
+			UVerticalBox* Stack = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+			Entry.Row->AddChild(Stack);
+			Stack->AddChild(Line);
+
+			SubList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+			if (UVerticalBoxSlot* StackSlot = Cast<UVerticalBoxSlot>(Stack->AddChild(SubList)))
+			{
+				StackSlot->SetPadding(FMargin(FXR_PanelStyle::SubIndent, FXR_PanelStyle::SubListTop, 0.f, 0.f));
+			}
+
+			Entry.SubList = SubList;
+		}
 
 		// A border sizes to its content, so the disc needs to be told how big it is. The brush
 		// rounds to half its own height, which at a square box is a circle with no arithmetic.
@@ -1022,9 +1094,58 @@ void UFXR_TrainingPanel::BuildStepWidgets(const TArray<FFXR_StepRecord>& Steps)
 			BoxSlot->SetPadding(FMargin(12.f, 0.f, 0.f, 0.f));
 		}
 
+		for (const FFXR_SubStepRecord& Sub : Step.SubSteps)
+		{
+			UHorizontalBox* SubLine = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+			if (UVerticalBoxSlot* LineSlot = Cast<UVerticalBoxSlot>(SubList->AddChild(SubLine)))
+			{
+				LineSlot->SetPadding(FMargin(0.f, FXR_PanelStyle::SubRowPadY));
+			}
+
+			FFXR_PanelSubRow& SubRow = Entry.SubRows.AddDefaulted_GetRef();
+
+			SubRow.Marker = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+			SubRow.Marker->SetBrush(SubMarker(false, false));
+
+			if (UHorizontalBoxSlot* BoxSlot = Cast<UHorizontalBoxSlot>(SubLine->AddChild(SubRow.Marker)))
+			{
+				BoxSlot->SetVerticalAlignment(VAlign_Top);
+				BoxSlot->SetPadding(FMargin(0.f, SubMarkerTop, FXR_PanelStyle::SubMarkerGap, 0.f));
+			}
+
+			SubRow.TextLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			SubRow.TextLabel->SetText(Sub.DisplayName.IsEmpty() ? FText::FromName(Sub.SubStepId) : Sub.DisplayName);
+			SubRow.TextLabel->SetLineHeightPercentage(FXR_PanelStyle::LineRow);
+			SubRow.TextLabel->SetAutoWrapText(true);
+
+			if (UHorizontalBoxSlot* BoxSlot = Cast<UHorizontalBoxSlot>(SubLine->AddChild(SubRow.TextLabel)))
+			{
+				BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				BoxSlot->SetVerticalAlignment(VAlign_Top);
+			}
+		}
+
 		StepList->AddChild(Entry.Row);
 		Rows.Add(Entry);
 	}
+}
+
+bool UFXR_TrainingPanel::RowsMatch(const TArray<FFXR_StepRecord>& Steps) const
+{
+	if (Rows.Num() != Steps.Num())
+	{
+		return false;
+	}
+
+	for (int32 Index = 0; Index < Rows.Num(); ++Index)
+	{
+		if (Rows[Index].SubRows.Num() != Steps[Index].SubSteps.Num())
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void UFXR_TrainingPanel::RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps)
@@ -1104,9 +1225,42 @@ void UFXR_TrainingPanel::RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps
 
 		SetShown(Entry.ChevronLabel, bOpen);
 
+		// Sub-steps belong to the step being done. A finished step folds back to its one line like
+		// any other; one not yet reached has nothing to show.
+		SetShown(Entry.SubList, bOpen);
+
+		UWidget* OpenSub = nullptr;
+		const TArray<FFXR_SubStepRecord>& Subs = Steps[Index].SubSteps;
+
+		for (int32 SubIndex = 0; SubIndex < Entry.SubRows.Num() && Subs.IsValidIndex(SubIndex); ++SubIndex)
+		{
+			const bool bSubOpen = Subs[SubIndex].Status == EFXR_StepStatus::Active;
+			const bool bSubDone = Subs[SubIndex].Status == EFXR_StepStatus::Complete;
+			const FFXR_PanelSubRow& Sub = Entry.SubRows[SubIndex];
+
+			if (Sub.Marker)
+			{
+				Sub.Marker->SetBrush(SubMarker(bSubOpen, bSubDone));
+			}
+
+			if (Sub.TextLabel)
+			{
+				Sub.TextLabel->SetFont(bSubOpen ? FXR_PanelStyle::TypeSubRowOpen() : FXR_PanelStyle::TypeSubRow());
+				Sub.TextLabel->SetColorAndOpacity(FSlateColor(bSubOpen ? FXR_PanelStyle::Text()
+					: (bSubDone ? FXR_PanelStyle::Text2() : FXR_PanelStyle::Text3())));
+			}
+
+			if (bSubOpen && !OpenSub)
+			{
+				OpenSub = Sub.TextLabel;
+			}
+		}
+
+		// The open sub-step is centred when there is one, because a step with several can be taller
+		// than the list, and then the middle of the row is not where the trainee is.
 		if (bOpen && !ScrollTo)
 		{
-			ScrollTo = Entry.Row;
+			ScrollTo = OpenSub ? OpenSub : Entry.Row.Get();
 		}
 	}
 
