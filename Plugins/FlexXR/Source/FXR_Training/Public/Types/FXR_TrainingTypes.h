@@ -61,6 +61,19 @@ enum class EFXR_SessionOutcome : uint8
 	Stopped
 };
 
+/** Why a run failed. Only meaningful when the outcome is Failed. */
+UENUM(BlueprintType)
+enum class EFXR_FailReason : uint8
+{
+	None,
+
+	/** An Exam step stayed open past its Timeout Seconds. */
+	Timeout,
+
+	/** An Exam run reached the session's Max Mistakes. */
+	TooManyMistakes
+};
+
 /** Where a step sits in the run. */
 UENUM(BlueprintType)
 enum class EFXR_StepStatus : uint8

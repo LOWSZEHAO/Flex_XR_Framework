@@ -123,6 +123,14 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText FailedStepName;
 
+	/** What ended a failed run. None for any other outcome. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	EFXR_FailReason FailReason = EFXR_FailReason::None;
+
+	/** The mistake limit the run was held to. Zero when there was none, which is every non-Exam run. */
+	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
+	int32 MistakeLimit = 0;
+
 	/** Ran to an end rather than being stopped or failed. Kept as the convenience it reads as. */
 	bool ReachedEnd() const { return Outcome == EFXR_SessionOutcome::Completed; }
 
