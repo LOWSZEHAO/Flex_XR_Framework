@@ -649,7 +649,8 @@ once it ran: a procedure is now **two assets**, the steps the trainee reads (`UF
 (`UFXR_TrainingGM`) that fires custom events on Blueprints as each step arrives. Steps run **in order**, finish
 when the project calls **Complete Step**, and run in two modes: **Training** (gated by the GM's events, fully
 hinted, unscored) and **Exam** (open from the start via *Auto Start In Exam*, every exposed object judged,
-failed by a critical step, a timeout or Max Mistakes).
+failed by a critical step, a timeout or Max Mistakes). A step may be split into **sub-steps**, done strictly
+in order and wired one by one in the GM (v0.21).
 
 **Opt-in hard-lock** per step (`☑ Hard-lock until reached`) for legally mandated interlocks — implemented via the same `SetInteractionEnabled` API games use. Gating is the exception, never the philosophy.
 
@@ -841,6 +842,26 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 ---
 
 ## Changelog
+
+**v0.21 — Sub-steps (ADR-011, decision 6)**
+- **A step can have sub-steps**, listed under it in the Steps asset. They run strictly in order: each
+  **Complete Step** ticks off the open one, and the step finishes with its last. The step's own id
+  completes nothing while it has sub-steps.
+- **Wired per sub-step.** The GM sets up each sub-step on its own - events, Step Objects, timeout,
+  Critical - and its Step Id dropdown offers sub-step ids in place of their step's. Gating is the reason:
+  opened together, the parts of a step could be done in any order.
+- **One id namespace.** Step and sub-step ids must be unique across the procedure; compile reports a
+  reused id, setup aimed at a step that has sub-steps, and a step whose sub-steps were all skipped.
+- **The runner is unchanged in kind.** Sub-steps compile to consecutive entries sharing their step's id
+  and index; Exam judges them like steps, so the pin before the extinguisher is out of order even within
+  one step. The session folds entries back into steps: `On Step Activated` brackets `On Sub Step
+  Activated`, and `On Sub Step Completed` comes before the step's own `On Step Completed`.
+- **Panel:** the open step's row lists its sub-steps under the instruction - green done, blue open,
+  ringed to come - and folds back to one line once the step is done. The meter and every count stay in
+  steps. A failure names the sub-step it happened on.
+- **Report:** each step record carries its sub-step records; a mistake carries the sub-step that was open.
+- **Start screen fix:** the step count was read from the runner, so it said 0 before the first run. It
+  now falls back to the Steps asset.
 
 **v0.20 — Training gates, Exam judges (ADR-011)**
 - **The step graph is replaced by two assets.** `UFXR_TrainingSteps` holds what the trainee reads - ids,

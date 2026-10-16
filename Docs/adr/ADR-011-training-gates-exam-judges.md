@@ -38,6 +38,11 @@ Running it for the first time surfaced three problems that the principle did not
    its step arrives, Exam fires it when the run begins. That is how Exam opens objects early enough to get
    wrong, without a second procedure.
 5. **Steps run in order.** Branching and fan-out are removed.
+6. **A step may have sub-steps**, run strictly in order (added the same day). Each `Complete Step` ticks
+   off the open sub-step, and the step finishes with its last. A step with sub-steps is set up in the GM
+   through them, one entry each — events, Step Objects, timeout, Critical — and its own id completes
+   nothing. Step and sub-step ids share one namespace, because both `Complete Step` and the GM name things
+   by id alone.
 
 ## Rationale
 - **Gating is right for teaching and wrong for assessment, so each mode gets one.** ADR-004's "watch, don't
@@ -51,11 +56,19 @@ Running it for the first time surfaced three problems that the principle did not
   are chosen from a dropdown of the Blueprint's own events, so a typo cannot be entered at all.
 - **Two assets because two people touch them.** The steps are content a writer or translator edits; the GM
   is wiring a designer edits. Neither should have to read past the other's half.
+- **Sub-steps are wired one by one because gating is.** If a step opened all its objects at once, the pin
+  could be pulled while the extinguisher was still on the wall, and Training would be back to a world that
+  runs ahead of the procedure — inside a single step. Per-sub-step setup also lets one part be Critical
+  ("pull the pin") without making the whole step so. Strict order, not "any order", for the same reason
+  steps are linear: a checklist that can be done in any order is not one a gated world can enforce.
 
 ## What survives from ADR-004
 The core decision: a small engine-free runner over a compiled step array, with authoring separate from the
-runtime. The array's shape changed — a step now carries its objects, messages, timeout and Critical flag
-instead of transitions — and the runner still never learns which assets produced it.
+runtime. The array's shape changed — an entry now carries its objects, timeout and Critical flag instead of
+transitions — and the runner still never learns which assets produced it. Sub-steps did not change the
+runner's model at all: they compile to consecutive entries that share their step's id and index, the runner
+works down the flat list as before, and the session folds entries back into steps for the panel and the
+report. The runner now has automation tests (`FlexXR.Training.*`), which is what being engine-free was for.
 
 ## Consequences
 - **Positive:** the world cannot run ahead of the procedure in Training; a step can finish on any condition
