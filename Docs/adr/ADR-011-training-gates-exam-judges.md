@@ -39,10 +39,11 @@ Running it for the first time surfaced three problems that the principle did not
    wrong, without a second procedure.
 5. **Steps run in order.** Branching and fan-out are removed.
 6. **A step may have sub-steps**, run strictly in order (added the same day). Each `Complete Step` ticks
-   off the open sub-step, and the step finishes with its last. A step with sub-steps is set up in the GM
-   through them, one entry each — events, Step Objects, timeout, Critical — and its own id completes
-   nothing. Step and sub-step ids share one namespace, because both `Complete Step` and the GM name things
-   by id alone.
+   off the open sub-step, and the step finishes with its last; the step's own id completes nothing. The GM
+   mirrors the Steps asset: each step's row holds its sub-steps' rows, each with its own events, Step
+   Objects, timeout and Critical. The step's own setup applies across all of them — its events fire once as
+   it arrives, its objects and Critical hold in every part, and its timeout covers the whole step. Step and
+   sub-step ids share one namespace, because `Complete Step` names things by id alone.
 
 ## Rationale
 - **Gating is right for teaching and wrong for assessment, so each mode gets one.** ADR-004's "watch, don't

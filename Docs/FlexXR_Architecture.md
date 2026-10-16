@@ -847,11 +847,15 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 - **A step can have sub-steps**, listed under it in the Steps asset. They run strictly in order: each
   **Complete Step** ticks off the open one, and the step finishes with its last. The step's own id
   completes nothing while it has sub-steps.
-- **Wired per sub-step.** The GM sets up each sub-step on its own - events, Step Objects, timeout,
-  Critical - and its Step Id dropdown offers sub-step ids in place of their step's. Gating is the reason:
-  opened together, the parts of a step could be done in any order.
+- **The GM mirrors the Steps asset.** Each step's row holds a row per sub-step - events, Step Objects,
+  timeout, Critical - so each part opens its own objects as it arrives. Gating is the reason: opened
+  together, the parts of a step could be done in any order. The step's own row still counts: its events
+  fire once as the step arrives, ahead of the first part's; its Step Objects and Critical hold in every
+  part; its timeout runs over the whole step. A sub-step's Sub Step Id is a dropdown of that step's own
+  sub-steps, from a property customization, because GetOptions cannot see which row it is in.
 - **One id namespace.** Step and sub-step ids must be unique across the procedure; compile reports a
-  reused id, setup aimed at a step that has sub-steps, and a step whose sub-steps were all skipped.
+  reused id, a sub-step set up under the wrong step, a step or part with nothing set up, and a step
+  whose sub-steps were all skipped.
 - **The runner is unchanged in kind.** Sub-steps compile to consecutive entries sharing their step's id
   and index; Exam judges them like steps, so the pin before the extinguisher is out of order even within
   one step. The session folds entries back into steps: `On Step Activated` brackets `On Sub Step
