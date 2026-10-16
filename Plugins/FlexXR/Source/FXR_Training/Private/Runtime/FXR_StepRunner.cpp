@@ -144,20 +144,10 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// 2. Given a line of its own for this step: that line is the most specific thing to say.
-	for (const FFXR_CompiledWrongMessage& Wrong : Open.WrongMessages)
-	{
-		if (Wrong.InteractionId == Event.InteractionId)
-		{
-			RecordMistake(Event.InteractionId, EFXR_MistakeKind::WrongAction, Wrong.Message);
-			return;
-		}
-	}
-
-	// 3. Used by a step that has finished: ignored. Procedures reuse things, and it outranks
+	// 2. Used by a step that has finished: ignored. Procedures reuse things, and it outranks
 	//    out-of-order so that an object a finished step used and a later step needs again reads as
 	//    one in use rather than one reached for early.
-	// 4. Needed by a step not yet open: out of order - the finding a gated world can never produce.
+	// 3. Needed by a step not yet open: out of order - the finding a gated world can never produce.
 	bool bNeededLater = false;
 	for (int32 Index = 0; Index < Steps.Num(); ++Index)
 	{
@@ -182,7 +172,7 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// 5. Anything else exposed is the wrong object. No list to keep: an object only reaches this
+	// 4. Anything else exposed is the wrong object. No list to keep: an object only reaches this
 	//    runner when its author ticked Expose to Training, which is already the choice of what counts.
 	RecordMistake(Event.InteractionId, EFXR_MistakeKind::WrongAction, FText::GetEmpty());
 }

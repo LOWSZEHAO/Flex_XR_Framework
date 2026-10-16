@@ -66,17 +66,9 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutSteps, TArray<TArray
 
 		if (Setup)
 		{
-			Out.Objects = Setup->Objects;
+			Out.Objects = Setup->StepObjects;
 			Out.TimeoutSeconds = Setup->TimeoutSeconds;
 			Out.bCritical = Setup->bCritical;
-
-			Out.WrongMessages.Reserve(Setup->WrongObjectMessages.Num());
-			for (const FFXR_WrongObjectMessage& Wrong : Setup->WrongObjectMessages)
-			{
-				FFXR_CompiledWrongMessage& Message = Out.WrongMessages.AddDefaulted_GetRef();
-				Message.InteractionId = Wrong.InteractionId;
-				Message.Message = Wrong.Message;
-			}
 
 			// Copied, not pointed at. The session keeps these for the whole run, and an asset edited
 			// during play must not leave it holding pointers into an array that has moved.

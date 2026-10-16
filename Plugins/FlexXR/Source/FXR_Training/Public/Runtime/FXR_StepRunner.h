@@ -6,13 +6,6 @@
 #include "Events/FXR_InteractionEvent.h"
 #include "Types/FXR_TrainingTypes.h"
 
-/** A message of its own for one wrong object, as the runner holds it. */
-struct FFXR_CompiledWrongMessage
-{
-	FName InteractionId;
-	FText Message;
-};
-
 /**
  * A step in the form the runner consumes, compiled from the Steps asset and the GM.
  *
@@ -27,9 +20,6 @@ struct FFXR_CompiledStep
 
 	/** The objects this step is about. Never wrong while it is open; out of order before it. */
 	TArray<FName> Objects;
-
-	/** Custom lines for specific wrong objects while this step is open. */
-	TArray<FFXR_CompiledWrongMessage> WrongMessages;
 
 	/** Exam only: open longer than this and the run fails. Zero or less is no limit. */
 	float TimeoutSeconds = 0.f;
