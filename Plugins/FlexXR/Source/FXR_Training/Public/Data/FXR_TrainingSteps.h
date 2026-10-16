@@ -6,6 +6,24 @@
 #include "Engine/DataAsset.h"
 #include "FXR_TrainingSteps.generated.h"
 
+/** One part of a step, done in its turn. */
+USTRUCT(BlueprintType)
+struct FFXR_SubStepInfo
+{
+	GENERATED_BODY()
+
+	/**
+	 * Unique within the procedure, step ids included. The GM sets the sub-step up by this, and
+	 * Complete Step names it to tick it off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	FName SubStepId;
+
+	/** Its line on the panel, under the step - "Pull the pin". */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	FText DisplayName;
+};
+
 /** One step as the trainee reads it. */
 USTRUCT(BlueprintType)
 struct FFXR_StepInfo
@@ -23,6 +41,16 @@ struct FFXR_StepInfo
 	/** What the trainee is asked to do, in their language - the step's row in the panel's list. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (MultiLine = "true"))
 	FText Instruction;
+
+	/**
+	 * Optional. The parts of this step, done strictly in this order: each Complete Step ticks off the
+	 * one that is open, and the step is finished when the last is.
+	 *
+	 * A step with sub-steps is set up in the GM through them, one entry each, because each part opens
+	 * its own objects - the pin cannot be pulled while the extinguisher is still on the wall.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "SubStepId"))
+	TArray<FFXR_SubStepInfo> SubSteps;
 };
 
 /**
@@ -53,12 +81,15 @@ public:
 	FText CourseName;
 
 	/** The steps, in the order they run. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "StepId"))
 	TArray<FFXR_StepInfo> Steps;
 
 	/** The step with this id, or null. */
 	const FFXR_StepInfo* FindStep(FName StepId) const;
 
-	/** Step ids in order, for the GM's step dropdown. */
-	TArray<FString> GetStepIdStrings() const;
+	/**
+	 * The ids Complete Step finishes, in the order they run: a step's own, or its sub-steps' when it
+	 * has any. These are what the GM sets up, so they fill its Step Id dropdown.
+	 */
+	TArray<FString> GetCompletableIdStrings() const;
 };
