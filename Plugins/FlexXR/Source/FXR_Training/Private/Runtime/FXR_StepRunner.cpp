@@ -14,6 +14,7 @@ void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InEntries, EFXR_Delivery
 	Entries = MoveTemp(InEntries);
 	Mode = InMode;
 	Elapsed = 0.f;
+	StepOpenedAt = 0.f;
 	Current = INDEX_NONE;
 	bReachedEnd = false;
 	bFailed = false;
@@ -67,6 +68,11 @@ void FFXR_StepRunner::Activate(int32 EntryIndex)
 	Current = EntryIndex;
 	Status[EntryIndex] = EFXR_StepStatus::Active;
 	OpenedAt[EntryIndex] = Elapsed;
+
+	if (EntryIndex == 0 || Entries[EntryIndex - 1].StepIndex != Entries[EntryIndex].StepIndex)
+	{
+		StepOpenedAt = Elapsed;
+	}
 
 	if (OnEntryActivated)
 	{
@@ -239,8 +245,12 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Two clocks: the open entry's own, and its step's, which keeps running across sub-steps.
 	const FFXR_CompiledStep& Open = Entries[Current];
-	if (Open.TimeoutSeconds > 0.f && Elapsed - OpenedAt[Current] >= Open.TimeoutSeconds)
+	const bool bEntryOver = Open.TimeoutSeconds > 0.f && Elapsed - OpenedAt[Current] >= Open.TimeoutSeconds;
+	const bool bStepOver = Open.StepTimeoutSeconds > 0.f && Elapsed - StepOpenedAt >= Open.StepTimeoutSeconds;
+
+	if (bEntryOver || bStepOver)
 	{
 		RecordMistake(NAME_None, EFXR_MistakeKind::Timeout, FText::GetEmpty());
 		Fail(Current, EFXR_FailReason::Timeout);

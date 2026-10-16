@@ -42,6 +42,12 @@ struct FFXR_CompiledStep
 	/** Exam only: open longer than this and the run fails. Zero or less is no limit. */
 	float TimeoutSeconds = 0.f;
 
+	/**
+	 * Exam only: the whole step's limit, counted from when its first entry opened. Carried by every
+	 * entry of a step with sub-steps; zero on a whole step, whose own limit is TimeoutSeconds.
+	 */
+	float StepTimeoutSeconds = 0.f;
+
 	/** Exam only: any mistake while this entry is open fails the run. */
 	bool bCritical = false;
 
@@ -142,6 +148,9 @@ private:
 	int32 Current = INDEX_NONE;
 	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Training;
 	float Elapsed = 0.f;
+
+	/** When the open entry's step began - its first entry's open time - for StepTimeoutSeconds. */
+	float StepOpenedAt = 0.f;
 	bool bRunning = false;
 	bool bReachedEnd = false;
 	bool bFailed = false;

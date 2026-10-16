@@ -42,28 +42,57 @@ struct FXR_TRAINING_API FFXR_StepAction
 	bool bAutoStartInExam = false;
 };
 
-/** Everything that happens at one step, or at one sub-step. */
+/** Everything that happens at one sub-step, on top of what its step sets up. */
+USTRUCT(BlueprintType)
+struct FXR_TRAINING_API FFXR_GMSubStep
+{
+	GENERATED_BODY()
+
+	/** Which sub-step. Picked from this step's own sub-steps in the Steps asset. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	FName SubStepId;
+
+	/**
+	 * Fired when this sub-step arrives - which is how each part of a step opens its own objects. In
+	 * Exam, those marked Auto Start In Exam fire when the run begins instead.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "EventName"))
+	TArray<FFXR_StepAction> Events;
+
+	/** The Interaction Ids of the objects this sub-step is about, added to its step's own. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	TArray<FName> StepObjects;
+
+	/** Exam: the run fails if this sub-step is still open after this many seconds. Zero is no limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
+	float TimeoutSeconds = 0.f;
+
+	/** Exam: any mistake made while this sub-step is open fails the run at once. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	bool bCritical = false;
+};
+
+/** Everything that happens at one step - and, under it, at each of its sub-steps. */
 USTRUCT(BlueprintType)
 struct FXR_TRAINING_API FFXR_GMStep
 {
 	GENERATED_BODY()
 
-	/**
-	 * Which step - or, for a step with sub-steps, which sub-step. Such a step is set up through its
-	 * sub-steps, one entry each, because each one opens its own objects in its turn. Picked from the
-	 * Steps asset, so the two cannot quietly disagree.
-	 */
+	/** Which step. Picked from the Steps asset, so the two cannot quietly disagree. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (GetOptions = "GetStepIdOptions"))
 	FName StepId;
 
-	/** Fired when this step arrives. In Exam, those marked Auto Start In Exam fire when the run begins instead. */
+	/**
+	 * Fired when this step arrives - for a step with sub-steps, just before its first sub-step's own.
+	 * In Exam, those marked Auto Start In Exam fire when the run begins instead.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "EventName"))
 	TArray<FFXR_StepAction> Events;
 
 	/**
 	 * The Interaction Ids of the objects this step is about - the gun, or the stick and the socket it
 	 * goes into. Not Step Ids: an Interaction Id names an object in the level, and one object can
-	 * belong to several steps.
+	 * belong to several steps. For a step with sub-steps, these belong to every one of them.
 	 *
 	 * Two jobs. In Training they get the highlight. In Exam they are how the judge tells the right
 	 * object from a wrong one: touching one of these while its step is open is never a mistake,
@@ -73,13 +102,27 @@ struct FXR_TRAINING_API FFXR_GMStep
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FName> StepObjects;
 
-	/** Exam: the run fails if this step is still open after this many seconds. Zero is no limit. Ignored in Training. */
+	/**
+	 * Exam: the run fails if this step is still open after this many seconds - all of it, sub-steps
+	 * included. Zero is no limit. Ignored in Training.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
 	float TimeoutSeconds = 0.f;
 
-	/** Exam: any mistake made while this step is open fails the run at once. */
+	/** Exam: any mistake made while this step is open - in any of its sub-steps - fails the run at once. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	bool bCritical = false;
+
+	/**
+	 * What happens at each of this step's sub-steps, when the Steps asset gives it any. Set each one
+	 * up to open its own objects as it arrives, so the pin cannot be pulled while the extinguisher is
+	 * still on the wall. A sub-step left out runs on the step's setup alone.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "SubStepId"))
+	TArray<FFXR_GMSubStep> SubSteps;
+
+	/** The setup for this sub-step, or null. */
+	const FFXR_GMSubStep* FindSubSetup(FName SubStepId) const;
 };
 
 /**
@@ -105,7 +148,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TObjectPtr<UFXR_TrainingSteps> Steps;
 
-	/** One entry per step, or per sub-step where a step has them. Each row is titled with its id. */
+	/** One entry per step, its sub-steps under it. Each row is titled with its Step Id. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "StepId"))
 	TArray<FFXR_GMStep> StepSetup;
 
@@ -119,10 +162,10 @@ public:
 	bool Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArray<FFXR_StepAction>>& OutEvents,
 		TArray<FString>& OutErrors) const;
 
-	/** The setup for this step or sub-step, or null. */
-	const FFXR_GMStep* FindSetup(FName Id) const;
+	/** The setup for this step, or null. */
+	const FFXR_GMStep* FindSetup(FName StepId) const;
 
-	/** The ids that can be set up - each step's, or its sub-steps' - for the Step Id dropdown. */
+	/** The Steps asset's step ids, for the Step Id dropdown. */
 	UFUNCTION()
 	TArray<FString> GetStepIdOptions() const;
 };

@@ -46,8 +46,8 @@ struct FFXR_StepInfo
 	 * Optional. The parts of this step, done strictly in this order: each Complete Step ticks off the
 	 * one that is open, and the step is finished when the last is.
 	 *
-	 * A step with sub-steps is set up in the GM through them, one entry each, because each part opens
-	 * its own objects - the pin cannot be pulled while the extinguisher is still on the wall.
+	 * In the GM they sit under their step the same way, each with its own events and objects, so
+	 * each part opens what it needs as it arrives.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "SubStepId"))
 	TArray<FFXR_SubStepInfo> SubSteps;
@@ -87,9 +87,9 @@ public:
 	/** The step with this id, or null. */
 	const FFXR_StepInfo* FindStep(FName StepId) const;
 
-	/**
-	 * The ids Complete Step finishes, in the order they run: a step's own, or its sub-steps' when it
-	 * has any. These are what the GM sets up, so they fill its Step Id dropdown.
-	 */
-	TArray<FString> GetCompletableIdStrings() const;
+	/** Step ids in order, for the GM's step dropdown. */
+	TArray<FString> GetStepIdStrings() const;
+
+	/** One step's sub-step ids in order, for the dropdown on that step's sub-step rows in the GM. */
+	TArray<FString> GetSubStepIdStrings(FName StepId) const;
 };
