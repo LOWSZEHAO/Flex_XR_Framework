@@ -139,7 +139,7 @@ the old Branch-on-Step-Id chain is gone, because the GM does that job. `BP_Train
 
 Checked in PIE without hands, by firing the props' own On Grabbed / On Released handlers: Training opens
 only the Magazine at the start, out-of-turn calls are ignored, the Magazine opens step 2 and its first
-sub-step unlocks the Weapon, the panel lists the sub-steps under the open step and ticks them, and the
+sub-step unlocks the Weapon, the panel turns to step 2's page and ticks its sub-steps off, and the
 release ends the run - Training complete, the ring and tick, the lamp on. In Exam both Auto Start events
 fire at the start and the Decoy stays locked. Not checked: real grabs in a headset, and Exam's judging,
 which needs a real grab to put an event on the bus.
@@ -178,8 +178,9 @@ which needs a real grab to put an event on the bus.
   **the screen is derived rather than set**: a finished run shows the report, a running one shows
   the procedure, anything else shows Start. An explanation is the one exception, because it is the
   one thing the runner has no opinion about.
-  The step list and the progress meter are built in C++ at runtime, one row and one segment per
-  compiled step, because their length is the graph's length and nothing else can know it.
+  **One page per step:** the heading is the open step and the list is its sub-steps, numbered from one
+  (a step without any shows one row, its instruction); the meter above has a segment per step. Both are
+  built in C++ at runtime, because their length is the procedure's and nothing else can know it.
   It reaches back into the session in exactly one place, and switchably: `Buttons Drive Session`
   lets Begin and Try again call `StartSession`, which is what makes a dropped-in panel work on its
   own. The request delegates fire either way.
