@@ -123,8 +123,10 @@ real consumer would define them.
 **The worked example - `Content/TrainingExample/`.** Written because the split between steps, GM,
 session and panel was the part that confused a first-time author, and a scene that shows each piece in
 its own place answers that faster than any paragraph. Rewired to the GM on 2026-10-16.
-`DA_TrainingExample` is the Steps asset, "Load the weapon": step 1 *Pick up the magazine* is a whole
-step, step 2 *Handle the weapon* has two sub-steps, *Pick up the weapon* and *Put the weapon down*.
+`DA_TrainingExample` is the Steps asset, "Load the weapon": step 1, *Pick up the magazine*, is a whole
+step; step 2, *Pick the weapon up, then put it down again*, has two sub-steps, *Pick up the weapon* and
+*Put the weapon down*. A step is its id, its instruction and its sub-steps - there is no separate
+display name, because the instruction is the step's heading on the panel.
 `DA_TrainingExample_GM` wires it: step 1 calls *Enable Grab* on the prop tagged `Magazine`; step 2 owns
 the `Weapon` as its Step Object, and its first sub-step calls *Enable Grab* on the prop tagged `Weapon`.
 Both events are marked Auto Start In Exam, and step 1 also calls *Enable Grab* on the `Decoy` with
@@ -180,11 +182,9 @@ which needs a real grab to put an event on the bus.
   **the screen is derived rather than set**: a finished run shows the report, a running one shows
   the procedure, anything else shows Start. An explanation is the one exception, because it is the
   one thing the runner has no opinion about.
-  **One page per step:** the heading is the open step, its instruction sits under it, and the list is
-  its sub-steps, numbered from one. A step without any shows its instruction as its one row instead,
-  and the line under the heading is collapsed so it is not said twice. The meter above has a segment
-  per step. Both are
-  built in C++ at runtime, because their length is the procedure's and nothing else can know it.
+  **One page per step:** the heading is the open step's instruction and the list is its sub-steps,
+  numbered from one; a step without any is its heading alone. The meter above has a segment per
+  step. Both are built in C++ at runtime, because their length is the procedure's and nothing else can know it.
   It reaches back into the session in exactly one place, and switchably: `Buttons Drive Session`
   lets Begin and Try again call `StartSession`, which is what makes a dropped-in panel work on its
   own. The request delegates fire either way.
@@ -196,11 +196,12 @@ which needs a real grab to put an event on the bus.
   public header, read by both the runtime panel and the editor builder. A token defined twice is a
   token that will disagree with itself, and a runtime-built row that does not match the list it sits
   in is the most visible kind of wrong.
-- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the generated panel, 129 widgets. The builder proves its
+- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the generated panel, 128 widgets. The builder proves its
   own work: it checks every `BindWidgetOptional` against the tree by name **and class**, the way UMG
-  does, and logs the result rather than leaving it to be inferred. Last run (2026-10-17): *43 resolve,
-  4 declared names unused by this layout, 129 widgets*. Those four are deliberate - `ProgressLabel`,
-  `ProgressFill`, `SummaryLabel` and `CompletionCard` exist for simpler layouts somebody else builds.
+  does, and logs the result rather than leaving it to be inferred. Last run (2026-10-17): *42 resolve,
+  5 declared names unused by this layout, 128 widgets*. Those five are deliberate - `InstructionLabel`,
+  `ProgressLabel`, `ProgressFill`, `SummaryLabel` and `CompletionCard` exist for simpler layouts
+  somebody else builds.
 - `F_Montserrat` at `/FlexXR/UI/Fonts` - a composite font over three `UFontFace` assets, Medium,
   SemiBold and ExtraBold, with the face data embedded. Three faces and no italics because that is
   what the design uses and an unused face is still a cooked megabyte. Sources and the SIL Open Font

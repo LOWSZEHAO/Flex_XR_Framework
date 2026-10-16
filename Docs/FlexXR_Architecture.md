@@ -867,10 +867,11 @@ ADRs are the written answer to "can you explain your architecture?" — consider
   and index; Exam judges them like steps, so the pin before the extinguisher is out of order even within
   one step. The session folds entries back into steps: `On Step Activated` brackets `On Sub Step
   Activated`, and `On Sub Step Completed` comes before the step's own `On Step Completed`.
-- **Panel: one page per step.** The heading is the open step; the list is that step's sub-steps,
-  numbered from one, in the rows the step list used to fill - green done, blue open, ringed to come -
-  with the step's instruction under the heading. A step without sub-steps is a page with one row, its
-  instruction, and no line under the heading. The meter and every count stay in
+- **Panel: one page per step.** The heading is the open step's instruction; the list is that step's
+  sub-steps, numbered from one, in the rows the step list used to fill - green done, blue open, ringed
+  to come. A step without sub-steps is its heading alone. Steps lost their separate Display Name: with
+  the instruction as the heading, a short title above it only said the same thing twice. The meter and
+  every count stay in
   steps, so the whole procedure is still on the panel. A failure names the sub-step it happened on. (A
   first build nested the sub-steps under the open row of a list of all steps; the owner wanted the page.)
 - **Report:** each step record carries its sub-step records; a mistake carries the sub-step that was open.
