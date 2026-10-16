@@ -9,7 +9,7 @@
 #include "Types/FXR_TrainingTypes.h"
 #include "FXR_StepGraph.generated.h"
 
-/** An action the author expects here and wants named when it happens. */
+/** An object that gets its own message when it is touched at the wrong time. */
 USTRUCT(BlueprintType)
 struct FFXR_WrongActionDefinition
 {
@@ -69,7 +69,14 @@ struct FFXR_StepDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_TransitionDefinition> Transitions;
 
-	/** Actions worth naming as wrong while this step is open. */
+	/**
+	 * Custom messages for specific wrong objects while this step is open.
+	 *
+	 * Optional. Every exposed object that is not this step's is already wrong without being listed,
+	 * and shows the panel's default message. List one here only to give it a line of its own -
+	 * "That's the decoy. The magazine is the cube." An object a finished step used is ignored, and
+	 * one a later step needs counts as out of order, unless it is listed here.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_WrongActionDefinition> WrongActions;
 
@@ -123,18 +130,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName EntryStep;
 
-	/**
-	 * Wrong at every step - written once here instead of on each step.
-	 *
-	 * For an object that is never part of the procedure but is worth catching when touched: the
-	 * decoy, the wrong extinguisher, the live panel on a lockout drill. A step that lists the same
-	 * object under its own Wrong Actions keeps its own message, as the more specific one.
-	 *
-	 * Objects the procedure does use need no entry. Touching one early is already caught as out of
-	 * order, and touching one that no step mentions is ignored unless it is listed here.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
-	TArray<FFXR_WrongActionDefinition> AlwaysWrong;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_StepDefinition> Steps;

@@ -57,7 +57,7 @@ namespace
 UFXR_TrainingPanel::UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	DefaultMistakeMessage = NSLOCTEXT("FlexXR", "PanelDefaultMistake", "Not that one.");
+	DefaultMistakeMessage = NSLOCTEXT("FlexXR", "PanelDefaultMistake", "Wrong object.");
 	TimeoutMessage = NSLOCTEXT("FlexXR", "PanelTimeout", "Take your time. Look for the highlighted object.");
 }
 
