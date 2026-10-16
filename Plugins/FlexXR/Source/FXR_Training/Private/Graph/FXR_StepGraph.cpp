@@ -31,29 +31,6 @@ bool UFXR_StepGraph::Compile(TArray<FFXR_CompiledStep>& OutSteps, int32& OutEntr
 		ByName.Add(StepId, Index);
 	}
 
-	// An object on the Always Wrong list that a step also needs is wrong everywhere except that
-	// step - almost certainly a slip rather than the intent, so it is said out loud. Not fatal:
-	// the step that needs it still completes on it, because completion is judged first.
-	for (const FFXR_WrongActionDefinition& Wrong : AlwaysWrong)
-	{
-		if (Wrong.InteractionId.IsNone())
-		{
-			OutErrors.Add(TEXT("An Always Wrong entry has no Interaction Id."));
-			continue;
-		}
-
-		for (const FFXR_StepDefinition& Definition : Steps)
-		{
-			if (Definition.Transitions.ContainsByPredicate([&Wrong](const FFXR_TransitionDefinition& Transition)
-				{ return Transition.InteractionId == Wrong.InteractionId; }))
-			{
-				OutErrors.Add(FString::Printf(
-					TEXT("'%s' is on the Always Wrong list but completes step '%s', so it counts as wrong at every other step."),
-					*Wrong.InteractionId.ToString(), *Definition.StepId.ToString()));
-			}
-		}
-	}
-
 	OutSteps.Reserve(Steps.Num());
 	for (const FFXR_StepDefinition& Definition : Steps)
 	{
@@ -94,35 +71,9 @@ bool UFXR_StepGraph::Compile(TArray<FFXR_CompiledStep>& OutSteps, int32& OutEntr
 			}
 		}
 
-		Compiled.WrongActions.Reserve(Definition.WrongActions.Num() + AlwaysWrong.Num());
+		Compiled.WrongActions.Reserve(Definition.WrongActions.Num());
 		for (const FFXR_WrongActionDefinition& Wrong : Definition.WrongActions)
 		{
-			FFXR_CompiledWrongAction& Out = Compiled.WrongActions.AddDefaulted_GetRef();
-			Out.InteractionId = Wrong.InteractionId;
-			Out.Message = Wrong.Message;
-		}
-
-		// The graph's own list, folded into every step at compile time so the runner never learns
-		// it exists. Skipped where the step already names the object - its message is the more
-		// specific - and where the object completes this step, which the list cannot mean here.
-		for (const FFXR_WrongActionDefinition& Wrong : AlwaysWrong)
-		{
-			if (Wrong.InteractionId.IsNone())
-			{
-				continue;
-			}
-
-			const bool bNamedHere = Compiled.WrongActions.ContainsByPredicate(
-				[&Wrong](const FFXR_CompiledWrongAction& Existing) { return Existing.InteractionId == Wrong.InteractionId; });
-
-			const bool bCompletesHere = Definition.Transitions.ContainsByPredicate(
-				[&Wrong](const FFXR_TransitionDefinition& Transition) { return Transition.InteractionId == Wrong.InteractionId; });
-
-			if (bNamedHere || bCompletesHere)
-			{
-				continue;
-			}
-
 			FFXR_CompiledWrongAction& Out = Compiled.WrongActions.AddDefaulted_GetRef();
 			Out.InteractionId = Wrong.InteractionId;
 			Out.Message = Wrong.Message;

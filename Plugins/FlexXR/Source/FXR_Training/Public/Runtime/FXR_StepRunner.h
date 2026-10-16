@@ -143,6 +143,9 @@ private:
 	void RecordMistake(FName StepId, FName InteractionId, EFXR_MistakeKind Kind, const FText& Message);
 	bool Matches(const FFXR_CompiledTransition& Transition, const FFXR_InteractionEvent& Event) const;
 
+	/** Whether any of the step's transitions is completed by this object, in any phase. */
+	static bool UsesObject(const FFXR_CompiledStep& Step, FName InteractionId);
+
 	TArray<FFXR_CompiledStep> Steps;
 	TArray<EFXR_StepStatus> Status;
 

@@ -103,6 +103,12 @@ void FFXR_StepRunner::Activate(int32 StepIndex)
 	}
 }
 
+bool FFXR_StepRunner::UsesObject(const FFXR_CompiledStep& Step, FName InteractionId)
+{
+	return Step.Transitions.ContainsByPredicate(
+		[InteractionId](const FFXR_CompiledTransition& Transition) { return Transition.InteractionId == InteractionId; });
+}
+
 bool FFXR_StepRunner::Matches(const FFXR_CompiledTransition& Transition, const FFXR_InteractionEvent& Event) const
 {
 	return Transition.InteractionId == Event.InteractionId && Transition.Phase == Event.Phase;
@@ -215,49 +221,75 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// Not a completion. Anything an open step called out as wrong is the most specific thing we can
-	// say, so it wins over the generic out-of-order reading.
+	// Everything below judges a mistake, and a mistake is counted once per action, on its start. A
+	// grab arrives as Began and then Ended; the release of a wrong grab is the same mistake rather
+	// than a second one, so every other phase stops here.
+	if (Event.Phase != EFXR_InteractionPhase::Began || Event.InteractionId.IsNone())
+	{
+		return;
+	}
+
+	const FName OpenStep = ActiveSteps.IsEmpty() ? NAME_None : Steps[ActiveSteps[0]].StepId;
+
+	// 1. The open step's own object is never wrong. Picking it up when the step wants it put down,
+	//    or re-gripping it with the other hand, is handling the right thing at the wrong moment.
+	for (const int32 StepIndex : ActiveSteps)
+	{
+		if (UsesObject(Steps[StepIndex], Event.InteractionId))
+		{
+			return;
+		}
+	}
+
+	// 2. Named by the author for the open step. Their message is the most specific thing to say,
+	//    so it outranks every reading below - even for an object an earlier step used.
 	for (const int32 StepIndex : ActiveSteps)
 	{
 		const FFXR_CompiledStep& Step = Steps[StepIndex];
 		for (const FFXR_CompiledWrongAction& Wrong : Step.WrongActions)
 		{
-			if (Wrong.InteractionId != Event.InteractionId)
-			{
-				continue;
-			}
-
-			// Once per action. A grab arrives as Began and then Ended, and one wrong grab is one
-			// mistake, not two - matching on the id alone counted every wrong action twice and
-			// charged it twice in the score. The start of the action is the finding; the rest of it
-			// is consumed here rather than falling through to be read again as out of order.
-			if (Event.Phase == EFXR_InteractionPhase::Began)
+			if (Wrong.InteractionId == Event.InteractionId)
 			{
 				RecordMistake(Step.StepId, Event.InteractionId, EFXR_MistakeKind::WrongAction, Wrong.Message);
-			}
-			return;
-		}
-	}
-
-	// Otherwise: did they just do something that belongs to a step which has not opened yet? That is
-	// the finding a gated world can never produce, and it is the reason this runner only watches.
-	for (int32 Index = 0; Index < Steps.Num(); ++Index)
-	{
-		if (Status[Index] != EFXR_StepStatus::Pending)
-		{
-			continue;
-		}
-
-		for (const FFXR_CompiledTransition& Transition : Steps[Index].Transitions)
-		{
-			if (Matches(Transition, Event))
-			{
-				const FName OpenStep = ActiveSteps.IsEmpty() ? NAME_None : Steps[ActiveSteps[0]].StepId;
-				RecordMistake(OpenStep, Event.InteractionId, EFXR_MistakeKind::OutOfOrder, FText::GetEmpty());
 				return;
 			}
 		}
 	}
+
+	// 3. Used by a step that has finished: ignored. Procedures reuse things - the extinguisher picked
+	//    up at step two is still in hand, and re-gripped, at step three. This outranks out-of-order
+	//    on purpose, so an object that a finished step used and a later step needs again reads as
+	//    one in use rather than one reached for early.
+	// 4. Needed by a step that has not opened yet: out of order - the finding a gated world can
+	//    never produce, and the reason this runner only watches.
+	bool bNeededLater = false;
+	for (int32 Index = 0; Index < Steps.Num(); ++Index)
+	{
+		if (!UsesObject(Steps[Index], Event.InteractionId))
+		{
+			continue;
+		}
+
+		if (Status[Index] == EFXR_StepStatus::Pending)
+		{
+			bNeededLater = true;
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	if (bNeededLater)
+	{
+		RecordMistake(OpenStep, Event.InteractionId, EFXR_MistakeKind::OutOfOrder, FText::GetEmpty());
+		return;
+	}
+
+	// 5. Anything else is the wrong object. There is no list to keep: an object only reaches this
+	//    runner when its author ticked Expose to Training, which is already the choice of what can
+	//    count. A prop left unticked is never judged, and everything ticked is.
+	RecordMistake(OpenStep, Event.InteractionId, EFXR_MistakeKind::WrongAction, FText::GetEmpty());
 }
 
 void FFXR_StepRunner::Tick(float DeltaSeconds)

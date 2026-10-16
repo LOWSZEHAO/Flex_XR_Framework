@@ -446,7 +446,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
 	float MistakeDwellSeconds = 4.f;
 
-	/** Shown when a wrong action was authored without a message of its own. */
+	/**
+	 * Shown for a wrong object that its step gave no message of its own - which, now that every
+	 * exposed object is judged, is most of them.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	FText DefaultMistakeMessage;
 
