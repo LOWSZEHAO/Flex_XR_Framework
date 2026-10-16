@@ -837,6 +837,29 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 
 ## Changelog
 
+**v0.19 — Every exposed object is judged**
+- **Reverses v0.18's `Always Wrong` and its "no strict mode".** Both answered the wrong question.
+  The real complaint was that an author had to list every object that could be wrong, and a scene
+  with ten interactables meant nine entries per step. Now nothing has to be listed: during a step,
+  every exposed object is classified, in this order -
+  1. **the open step's own object** - never wrong, in any phase (re-gripping it, or picking it up
+     when the step wants it put down, is the right thing at the wrong moment);
+  2. **listed under the step's Wrong Actions** - wrong, with the author's message;
+  3. **used by a step that has finished** - ignored, because procedures reuse things: the
+     extinguisher picked up at step two is still in hand at step three;
+  4. **needed by a step not yet open** - out of order;
+  5. **anything else** - wrong, with the panel's default, "Wrong object."
+- **Why v0.18 was wrong to call this harsh.** The fear was idle touches in VR counting as mistakes.
+  But an object only reaches the runner when its author ticked Expose to Training, so the author
+  has already chosen what can count; a prop left unticked is never judged. The safeguard existed;
+  it just wasn't credited.
+- **Wrong Actions become custom messages.** Still per step, now optional, and only needed to give a
+  specific object a line of its own. That is the one thing Always Wrong did that this does not - a
+  custom line for one object at every step - and the default message covers it well enough.
+- One action is one finding. Mistakes are judged on Began only, so a wrong grab and its release are
+  one mistake, and grabbing early something a later step completes on release is one out-of-order,
+  not two.
+
 **v0.18 — The score is earned by finishing; wrongs are written once**
 - **A failed run scores 0.** The score had only ever been 100 minus penalties, and penalties never
   ask whether the run was done: an Exam failed on step one after a single slip showed 98, and a run
