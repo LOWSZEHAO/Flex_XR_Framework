@@ -126,6 +126,38 @@ bool FFXR_StepRunnerSubStepJudgingTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_StepRunnerStepTimeoutTest,
+	"FlexXR.Training.Runner.StepTimeoutSpansSubSteps",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FFXR_StepRunnerStepTimeoutTest::RunTest(const FString& Parameters)
+{
+	using namespace FXR_StepRunnerTests;
+
+	// A step given ten seconds as a whole, in two parts with no limit of their own.
+	TArray<FFXR_CompiledStep> Entries;
+	Entries.Add(Entry(TEXT("Prepare"), 0, TEXT("Lift"), 0));
+	Entries.Add(Entry(TEXT("Prepare"), 0, TEXT("Pin"), 1));
+	Entries.Add(Entry(TEXT("Spray"), 1));
+	Entries[0].StepTimeoutSeconds = 10.f;
+	Entries[1].StepTimeoutSeconds = 10.f;
+
+	FFXR_StepRunner Runner;
+	Runner.Start(MoveTemp(Entries), EFXR_DeliveryMode::Exam);
+
+	Runner.Tick(6.f);
+	Runner.CompleteStep(TEXT("Lift"));
+	Runner.Tick(3.f);
+	TestTrue(TEXT("Nine seconds into a ten-second step is still in time"), Runner.IsRunning());
+
+	Runner.Tick(2.f);
+	TestTrue(TEXT("The step's clock does not restart with its second part"), Runner.Failed());
+	TestEqual(TEXT("... it fails on time"), Runner.GetFailReason(), EFXR_FailReason::Timeout);
+	TestEqual(TEXT("... on the part that was open"), Runner.GetFailedEntry(), 1);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_TrainingGMCompileSubStepsTest,
 	"FlexXR.Training.GM.CompilesSubSteps",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -149,37 +181,56 @@ bool FFXR_TrainingGMCompileSubStepsTest::RunTest(const FString& Parameters)
 	AddStep(TEXT("C"), { TEXT("A") });                 // its only sub-step reuses an id
 	AddStep(TEXT("D"), {});
 
-	TestEqual(TEXT("The dropdown offers what can be completed, once each"), Steps->GetCompletableIdStrings(),
-		TArray<FString>({ TEXT("A"), TEXT("B1"), TEXT("B2"), TEXT("D") }));
+	TestEqual(TEXT("The step dropdown offers steps only"), Steps->GetStepIdStrings(),
+		TArray<FString>({ TEXT("A"), TEXT("B"), TEXT("C"), TEXT("D") }));
+	TestEqual(TEXT("A step's sub-step dropdown offers its own sub-steps"), Steps->GetSubStepIdStrings(TEXT("B")),
+		TArray<FString>({ TEXT("B1"), TEXT("B2") }));
 
 	UFXR_TrainingGM* GM = NewObject<UFXR_TrainingGM>();
 	GM->Steps = Steps;
 
-	auto AddSetup = [GM](FName Id) -> FFXR_GMStep&
+	auto Action = [](FName EventName)
 	{
-		FFXR_GMStep& Setup = GM->StepSetup.AddDefaulted_GetRef();
-		Setup.StepId = Id;
-		return Setup;
+		FFXR_StepAction Out;
+		Out.EventName = EventName;
+		return Out;
 	};
 
-	AddSetup(TEXT("A"));
-	AddSetup(TEXT("B1")).StepObjects.Add(TEXT("Extinguisher"));
-	AddSetup(TEXT("B2")).bCritical = true;
-	AddSetup(TEXT("B"));                               // set up as a whole, though it has sub-steps
-	AddSetup(TEXT("Nowhere"));
-	AddSetup(TEXT("D"));
+	GM->StepSetup.AddDefaulted_GetRef().StepId = TEXT("A");
+	GM->StepSetup.Last().StepObjects.Add(TEXT("Gun"));
+
+	// B is set up as a whole and part by part.
+	FFXR_GMStep& B = GM->StepSetup.AddDefaulted_GetRef();
+	B.StepId = TEXT("B");
+	B.StepObjects.Add(TEXT("Extinguisher"));
+	B.TimeoutSeconds = 30.f;
+	B.Events.Add(Action(TEXT("OpenCabinet")));
+
+	FFXR_GMSubStep& B1 = B.SubSteps.AddDefaulted_GetRef();
+	B1.SubStepId = TEXT("B1");
+	B1.StepObjects.Add(TEXT("Bracket"));
+	B1.Events.Add(Action(TEXT("EnableBracket")));
+
+	FFXR_GMSubStep& B2 = B.SubSteps.AddDefaulted_GetRef();
+	B2.SubStepId = TEXT("B2");
+	B2.StepObjects.Add(TEXT("Pin"));
+	B2.bCritical = true;
+	B2.Events.Add(Action(TEXT("EnablePin")));
+
+	B.SubSteps.AddDefaulted_GetRef().SubStepId = TEXT("D");   // a step's id, under B
+
+	GM->StepSetup.AddDefaulted_GetRef().StepId = TEXT("Nowhere");
 
 	TArray<FFXR_CompiledStep> Entries;
 	TArray<TArray<FFXR_StepAction>> Events;
 	TArray<FString> Errors;
 	TestTrue(TEXT("Compiles"), GM->Compile(Entries, Events, Errors));
 
-	if (!TestEqual(TEXT("A, B1, B2 and D - C has nothing left to complete"), Entries.Num(), 4))
+	if (!TestEqual(TEXT("A, B1, B2 and D - C has nothing left to complete"), Entries.Num(), 4)
+		|| !TestEqual(TEXT("Events stay parallel to the entries"), Events.Num(), Entries.Num()))
 	{
 		return false;
 	}
-
-	TestEqual(TEXT("Events stay parallel to the entries"), Events.Num(), Entries.Num());
 
 	TestEqual(TEXT("A is a whole step"), Entries[0].GetCompletionId(), FName(TEXT("A")));
 	TestFalse(TEXT("... not a sub-step"), Entries[0].IsSubStep());
@@ -188,9 +239,30 @@ bool FFXR_TrainingGMCompileSubStepsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("... and belongs to B"), Entries[1].StepId, FName(TEXT("B")));
 	TestEqual(TEXT("B1 and B2 share B's index"), Entries[1].StepIndex, Entries[2].StepIndex);
 	TestEqual(TEXT("B2 is B's second sub-step"), Entries[2].SubStepIndex, 1);
-	TestEqual(TEXT("B1 carries its objects"), Entries[1].Objects, TArray<FName>({ TEXT("Extinguisher") }));
-	TestTrue(TEXT("B2 carries its Critical flag"), Entries[2].bCritical);
 	TestEqual(TEXT("D keeps its index in the Steps asset"), Entries[3].StepIndex, 3);
+
+	TestEqual(TEXT("B1 holds B's objects and its own"), Entries[1].Objects,
+		TArray<FName>({ TEXT("Extinguisher"), TEXT("Bracket") }));
+	TestEqual(TEXT("B2 holds B's objects and its own"), Entries[2].Objects,
+		TArray<FName>({ TEXT("Extinguisher"), TEXT("Pin") }));
+	TestFalse(TEXT("B1 is not critical"), Entries[1].bCritical);
+	TestTrue(TEXT("B2 is"), Entries[2].bCritical);
+	TestEqual(TEXT("B's timeout covers its parts"), Entries[2].StepTimeoutSeconds, 30.f);
+	TestEqual(TEXT("... and is not a part's own"), Entries[2].TimeoutSeconds, 0.f);
+
+	auto Names = [](const TArray<FFXR_StepAction>& Actions)
+	{
+		TArray<FName> Out;
+		for (const FFXR_StepAction& Action : Actions)
+		{
+			Out.Add(Action.EventName);
+		}
+		return Out;
+	};
+
+	TestEqual(TEXT("B's events fire with its first part, ahead of the part's own"), Names(Events[1]),
+		TArray<FName>({ TEXT("OpenCabinet"), TEXT("EnableBracket") }));
+	TestEqual(TEXT("... and only once"), Names(Events[2]), TArray<FName>({ TEXT("EnablePin") }));
 
 	auto Reported = [&Errors](const TCHAR* Fragment)
 	{
@@ -199,8 +271,9 @@ bool FFXR_TrainingGMCompileSubStepsTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Reports the reused id"), Reported(TEXT("is used twice")));
 	TestTrue(TEXT("Reports the step left empty"), Reported(TEXT("no usable sub-steps")));
-	TestTrue(TEXT("Reports setup on a step that has sub-steps"), Reported(TEXT("which has sub-steps")));
-	TestTrue(TEXT("Reports setup for an unknown id"), Reported(TEXT("not a step or sub-step")));
+	TestTrue(TEXT("Reports a sub-step set up under the wrong step"), Reported(TEXT("not one of its sub-steps")));
+	TestTrue(TEXT("Reports setup for an unknown step"), Reported(TEXT("which is not a step in")));
+	TestTrue(TEXT("Reports a step with nothing set up"), Reported(TEXT("'D' has nothing set up")));
 
 	return true;
 }

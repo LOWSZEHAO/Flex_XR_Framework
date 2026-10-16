@@ -4,14 +4,19 @@
 
 #include "Data/FXR_TrainingSteps.h"
 
-const FFXR_GMStep* UFXR_TrainingGM::FindSetup(FName Id) const
+const FFXR_GMSubStep* FFXR_GMStep::FindSubSetup(FName SubStepId) const
 {
-	return StepSetup.FindByPredicate([Id](const FFXR_GMStep& Setup) { return Setup.StepId == Id; });
+	return SubSteps.FindByPredicate([SubStepId](const FFXR_GMSubStep& Setup) { return Setup.SubStepId == SubStepId; });
+}
+
+const FFXR_GMStep* UFXR_TrainingGM::FindSetup(FName StepId) const
+{
+	return StepSetup.FindByPredicate([StepId](const FFXR_GMStep& Setup) { return Setup.StepId == StepId; });
 }
 
 TArray<FString> UFXR_TrainingGM::GetStepIdOptions() const
 {
-	return Steps ? Steps->GetCompletableIdStrings() : TArray<FString>();
+	return Steps ? Steps->GetStepIdStrings() : TArray<FString>();
 }
 
 bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArray<FFXR_StepAction>>& OutEvents,
@@ -30,34 +35,25 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 	OutEntries.Reserve(Steps->Steps.Num());
 	OutEvents.Reserve(Steps->Steps.Num());
 
-	// One entry, with its setup copied in. Copied, not pointed at: the session keeps these for the
-	// whole run, and an asset edited during play must not leave it holding pointers into an array
-	// that has moved.
-	auto AddEntry = [this, &OutEntries, &OutEvents, &OutErrors](FFXR_CompiledStep&& Entry)
+	// One entry, with its events beside it. Everything is copied rather than pointed at: the session
+	// keeps these for the whole run, and an asset edited during play must not leave it holding
+	// pointers into an array that has moved.
+	auto AddEntry = [this, &OutEntries, &OutEvents, &OutErrors](FFXR_CompiledStep&& Entry, TArray<FFXR_StepAction>&& Events)
 	{
 		const FName Id = Entry.GetCompletionId();
-		const FFXR_GMStep* Setup = Id.IsNone() ? nullptr : FindSetup(Id);
-		if (!Setup && !Id.IsNone())
+		if (!Id.IsNone() && Events.IsEmpty() && Entry.Objects.IsEmpty())
 		{
 			OutErrors.Add(FString::Printf(
-				TEXT("'%s' has no setup in %s: it fires no events, and Exam has no objects to judge it by."),
+				TEXT("'%s' has nothing set up in %s: it fires no events, and Exam has no objects to judge it by."),
 				*Id.ToString(), *GetName()));
 		}
 
-		TArray<FFXR_StepAction>& Events = OutEvents.AddDefaulted_GetRef();
-		if (Setup)
-		{
-			Entry.Objects = Setup->StepObjects;
-			Entry.TimeoutSeconds = Setup->TimeoutSeconds;
-			Entry.bCritical = Setup->bCritical;
-			Events = Setup->Events;
-		}
-
 		OutEntries.Add(MoveTemp(Entry));
+		OutEvents.Add(MoveTemp(Events));
 	};
 
-	// Steps and sub-steps share one set of ids. Complete Step and the GM both name things by id
-	// alone, so an id that meant two things would leave both of them guessing.
+	// Steps and sub-steps share one set of ids. Complete Step names things by id alone, so an id that
+	// meant two things would leave it guessing.
 	TSet<FName> Seen;
 
 	for (int32 Index = 0; Index < Steps->Steps.Num(); ++Index)
@@ -80,15 +76,31 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 
 		Seen.Add(Info.StepId);
 
+		const FFXR_GMStep* Setup = Info.StepId.IsNone() ? nullptr : FindSetup(Info.StepId);
+
 		if (Info.SubSteps.IsEmpty())
 		{
 			FFXR_CompiledStep Entry;
 			Entry.StepId = Info.StepId;
 			Entry.StepIndex = Index;
-			AddEntry(MoveTemp(Entry));
+
+			TArray<FFXR_StepAction> Events;
+			if (Setup)
+			{
+				Entry.Objects = Setup->StepObjects;
+				Entry.TimeoutSeconds = Setup->TimeoutSeconds;
+				Entry.bCritical = Setup->bCritical;
+				Events = Setup->Events;
+			}
+
+			AddEntry(MoveTemp(Entry), MoveTemp(Events));
 			continue;
 		}
 
+		// A step with sub-steps runs as one entry per sub-step. The step's own setup is shared out
+		// across them: its objects and Critical hold in every part, its timeout runs over all of
+		// them, and its events fire once, as the step arrives - with the first part, ahead of that
+		// part's own.
 		const int32 EntriesBefore = OutEntries.Num();
 
 		for (int32 SubIndex = 0; SubIndex < Info.SubSteps.Num(); ++SubIndex)
@@ -114,7 +126,33 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 			Entry.StepIndex = Index;
 			Entry.SubStepId = Sub.SubStepId;
 			Entry.SubStepIndex = SubIndex;
-			AddEntry(MoveTemp(Entry));
+
+			TArray<FFXR_StepAction> Events;
+			if (Setup)
+			{
+				Entry.Objects = Setup->StepObjects;
+				Entry.StepTimeoutSeconds = Setup->TimeoutSeconds;
+				Entry.bCritical = Setup->bCritical;
+
+				if (OutEntries.Num() == EntriesBefore)
+				{
+					Events = Setup->Events;
+				}
+			}
+
+			if (const FFXR_GMSubStep* SubSetup = (Setup && !Sub.SubStepId.IsNone()) ? Setup->FindSubSetup(Sub.SubStepId) : nullptr)
+			{
+				for (const FName Object : SubSetup->StepObjects)
+				{
+					Entry.Objects.AddUnique(Object);
+				}
+
+				Entry.TimeoutSeconds = SubSetup->TimeoutSeconds;
+				Entry.bCritical |= SubSetup->bCritical;
+				Events.Append(SubSetup->Events);
+			}
+
+			AddEntry(MoveTemp(Entry), MoveTemp(Events));
 		}
 
 		// Every sub-step was a duplicate, so the step has nothing left in it to complete and simply
@@ -125,33 +163,48 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 		}
 	}
 
-	// The drift the Step Id dropdown exists to prevent, caught for anything that predates it or
-	// was typed by hand: setup the run will never use.
-	TSet<FName> Completable;
-	for (const FFXR_CompiledStep& Entry : OutEntries)
-	{
-		Completable.Add(Entry.GetCompletionId());
-	}
-
+	// The drift the dropdowns exist to prevent, caught for anything that predates them or was typed
+	// by hand: setup the run will never use.
 	TSet<FName> SetupSeen;
 	for (const FFXR_GMStep& Setup : StepSetup)
 	{
-		if (!Completable.Contains(Setup.StepId))
+		const FFXR_StepInfo* Info = Steps->FindStep(Setup.StepId);
+
+		if (!Info)
 		{
-			const FFXR_StepInfo* Parent = Steps->FindStep(Setup.StepId);
-			OutErrors.Add(Parent && !Parent->SubSteps.IsEmpty()
-				? FString::Printf(TEXT("%s sets up '%s', which has sub-steps; set up each of them instead. This entry never fires."),
-					*GetName(), *Setup.StepId.ToString())
-				: FString::Printf(TEXT("%s has setup for '%s', which is not a step or sub-step in %s; it never fires."),
-					*GetName(), *Setup.StepId.ToString(), *Steps->GetName()));
+			OutErrors.Add(FString::Printf(TEXT("%s has setup for '%s', which is not a step in %s; it never fires."),
+				*GetName(), *Setup.StepId.ToString(), *Steps->GetName()));
+			continue;
 		}
-		else if (SetupSeen.Contains(Setup.StepId))
+
+		if (SetupSeen.Contains(Setup.StepId))
 		{
 			OutErrors.Add(FString::Printf(TEXT("%s sets up '%s' twice; only the first is used."),
 				*GetName(), *Setup.StepId.ToString()));
+			continue;
 		}
 
 		SetupSeen.Add(Setup.StepId);
+
+		TSet<FName> SubSeen;
+		for (const FFXR_GMSubStep& SubSetup : Setup.SubSteps)
+		{
+			const bool bKnown = Info->SubSteps.ContainsByPredicate(
+				[&SubSetup](const FFXR_SubStepInfo& Sub) { return Sub.SubStepId == SubSetup.SubStepId; });
+
+			if (!bKnown)
+			{
+				OutErrors.Add(FString::Printf(TEXT("%s sets up '%s' under '%s', which is not one of its sub-steps; it never fires."),
+					*GetName(), *SubSetup.SubStepId.ToString(), *Setup.StepId.ToString()));
+			}
+			else if (SubSeen.Contains(SubSetup.SubStepId))
+			{
+				OutErrors.Add(FString::Printf(TEXT("%s sets up '%s' twice; only the first is used."),
+					*GetName(), *SubSetup.SubStepId.ToString()));
+			}
+
+			SubSeen.Add(SubSetup.SubStepId);
+		}
 	}
 
 	return !OutEntries.IsEmpty();
