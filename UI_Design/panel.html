@@ -465,7 +465,8 @@
     <p class="note">
       Same panel either way. The ring always means the score, so colour and the eyebrow carry the verdict and
       nothing has to be re-learned &mdash; and a failed run gets one line that a passed run does not need,
-      saying why it ended. In <b>Exam</b>, a step running past its <code>Timeout Seconds</code> ends the run
+      saying why it ended. A failed run scores <b>0</b>: the score is earned by finishing, and partial
+      credit on a failed exam is a mixed message. In <b>Exam</b>, a step running past its <code>Timeout Seconds</code> ends the run
       here rather than escalating a hint, which is what makes the mode mean anything: Guided and Practice
       spend a timeout on help, and Exam spends it on the verdict.
     </p>
@@ -507,11 +508,8 @@
             <div class="ring">
               <svg width="200" height="200" viewBox="0 0 200 200">
                 <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(120,120,128,0.26)" stroke-width="12"/>
-                <circle cx="100" cy="100" r="88" fill="none" stroke="#ff453a" stroke-width="12"
-                        stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="254"
-                        transform="rotate(-90 100 100)"/>
               </svg>
-              <div class="num" style="color:var(--danger);">54</div>
+              <div class="num" style="color:var(--danger);">0</div>
             </div>
             <div class="eyeb" style="margin-top:24px; color:var(--danger);">Procedure failed</div>
             <h2 class="h2" style="margin-top:12px;">Extinguisher drill</h2>

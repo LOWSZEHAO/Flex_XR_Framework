@@ -295,8 +295,6 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 		const int32 WantedLevel = FMath::FloorToInt32(OpenFor / Step.TimeoutSeconds);
 		if (WantedLevel > HintLevelReached[StepIndex])
 		{
-			HintLevelReached[StepIndex] = WantedLevel;
-
 			// The first expiry is the one worth recording. After that it is the same finding louder.
 			if (WantedLevel == 1)
 			{
@@ -311,6 +309,10 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 					break;
 				}
 			}
+
+			// Recorded only once a hint is actually given. Exam leaves above without giving one, and
+			// a hint level it never showed was being reported as a hint taken - and charged for.
+			HintLevelReached[StepIndex] = WantedLevel;
 
 			if (OnHintEscalated)
 			{
