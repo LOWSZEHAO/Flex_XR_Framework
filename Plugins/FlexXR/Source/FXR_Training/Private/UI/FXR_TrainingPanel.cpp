@@ -30,6 +30,15 @@ namespace
 	/** The clock in the foot. Twice a second, so a rolling second never looks stuck. */
 	constexpr float ClockPeriod = 0.5f;
 
+	/** "2", or "2 of 3" when there is a limit to count against. */
+	FText MistakeCountText(int32 Count, int32 Limit)
+	{
+		return Limit > 0
+			? FText::Format(NSLOCTEXT("FlexXR", "PanelMistakeCountOf", "{0} of {1}"),
+				FText::AsNumber(Count), FText::AsNumber(Limit))
+			: FText::AsNumber(Count);
+	}
+
 	FText ModeToText(EFXR_DeliveryMode Mode)
 	{
 		return UEnum::GetDisplayValueAsText(Mode);
@@ -49,6 +58,7 @@ UFXR_TrainingPanel::UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializ
 	: Super(ObjectInitializer)
 {
 	DefaultMistakeMessage = NSLOCTEXT("FlexXR", "PanelDefaultMistake", "Not that one.");
+	TimeoutMessage = NSLOCTEXT("FlexXR", "PanelTimeout", "Take your time. Look for the highlighted object.");
 }
 
 void UFXR_TrainingPanel::NativePreConstruct()
@@ -114,6 +124,10 @@ void UFXR_TrainingPanel::FillDesignPreview()
 
 	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
 	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Pull the safety pin")); }
+
+	// Left on whichever body the designer chose, so flipping ProcedureBodySwitcher previews Exam.
+	if (ExamProgressLabel) { ExamProgressLabel->SetText(INVTEXT("2 / 5")); }
+	if (ExamMistakesValue) { ExamMistakesValue->SetText(INVTEXT("1 of 3")); }
 	if (ModeLabel) { ModeLabel->SetText(INVTEXT("Guided")); }
 	if (ElapsedLabel) { ElapsedLabel->SetText(INVTEXT("1:46")); }
 
@@ -165,6 +179,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 			Sample.DurationSeconds = 130.f;
 			Sample.Mistakes.SetNum(3);
 			Sample.FailedStepName = INVTEXT("Pull the safety pin");
+			Sample.FailReason = EFXR_FailReason::Timeout;
 		}
 		else
 		{
@@ -399,7 +414,28 @@ void UFXR_TrainingPanel::HandleStepActivated(FName InStepId, FText InInstruction
 
 void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
 {
-	MistakeText = Mistake.Message.IsEmpty() ? DefaultMistakeMessage : Mistake.Message;
+	const UFXR_TrainingSession* Current = Session.Get();
+
+	if (Current && Current->GetMode() == EFXR_DeliveryMode::Exam)
+	{
+		// No hints in an exam. The author's message says what went wrong, which is the answer, so
+		// the trainee is told only that it counted - and, when there is a limit, how close it is.
+		const int32 Count = Current->GetMistakes().Num();
+		const int32 Limit = Current->GetMaxMistakes();
+		MistakeText = Limit > 0
+			? FText::Format(NSLOCTEXT("FlexXR", "PanelExamMistakeOf", "Mistake {0} of {1}"),
+				FText::AsNumber(Count), FText::AsNumber(Limit))
+			: FText::Format(NSLOCTEXT("FlexXR", "PanelExamMistake", "Mistake {0}"), FText::AsNumber(Count));
+	}
+	else if (Mistake.Kind == EFXR_MistakeKind::Timeout)
+	{
+		// Practice is the only mode that gets here: Guided ignores timeouts and Exam fails on them.
+		MistakeText = TimeoutMessage;
+	}
+	else
+	{
+		MistakeText = Mistake.Message.IsEmpty() ? DefaultMistakeMessage : Mistake.Message;
+	}
 
 	Refresh();
 	OnMistakeShown(Mistake, MistakeText);
@@ -653,6 +689,29 @@ void UFXR_TrainingPanel::RefreshProcedure()
 {
 	const UFXR_TrainingSession* Current = Session.Get();
 
+	// Exam shows progress and the mistake count and nothing else. The list and the heading are not
+	// hidden so much as never chosen: the switcher holds two bodies, and an exam gets the other one.
+	const bool bExam = Current && Current->GetMode() == EFXR_DeliveryMode::Exam;
+
+	if (ProcedureBodySwitcher)
+	{
+		ProcedureBodySwitcher->SetActiveWidgetIndex(bExam ? 1 : 0);
+	}
+
+	if (ExamProgressLabel)
+	{
+		ExamProgressLabel->SetText(FText::Format(NSLOCTEXT("FlexXR", "PanelExamProgress", "{0} / {1}"),
+			FText::AsNumber(Current ? Current->GetStepsCompleted() : 0),
+			FText::AsNumber(Current ? Current->GetStepTotal() : 0)));
+	}
+
+	if (ExamMistakesValue)
+	{
+		ExamMistakesValue->SetText(Current
+			? MistakeCountText(Current->GetMistakes().Num(), Current->GetMaxMistakes())
+			: FText::AsNumber(0));
+	}
+
 	if (InstructionLabel)
 	{
 		InstructionLabel->SetText(Instruction);
@@ -770,14 +829,18 @@ void UFXR_TrainingPanel::RefreshComplete()
 	}
 
 	// One line a passed run does not need. Only a failure has something to explain.
+	const bool bTooManyMistakes = Report.FailReason == EFXR_FailReason::TooManyMistakes;
+
 	if (ReasonLabel)
 	{
-		ReasonLabel->SetText(FText::Format(
-			NSLOCTEXT("FlexXR", "PanelFailedReason", "Ran out of time on “{0}”."),
-			Report.FailedStepName));
+		ReasonLabel->SetText(bTooManyMistakes
+			? FText::Format(NSLOCTEXT("FlexXR", "PanelFailedMistakes", "Too many mistakes: {0} of {1}."),
+				FText::AsNumber(Report.Mistakes.Num()), FText::AsNumber(Report.MistakeLimit))
+			: FText::Format(NSLOCTEXT("FlexXR", "PanelFailedReason", "Ran out of time on “{0}”."),
+				Report.FailedStepName));
 	}
 
-	SetShown(ReasonLabel, bFailed && !Report.FailedStepName.IsEmpty());
+	SetShown(ReasonLabel, bFailed && (bTooManyMistakes || !Report.FailedStepName.IsEmpty()));
 
 	if (ResultStepsValue)
 	{
@@ -788,7 +851,7 @@ void UFXR_TrainingPanel::RefreshComplete()
 
 	if (ResultMistakesValue)
 	{
-		ResultMistakesValue->SetText(FText::AsNumber(Report.Mistakes.Num()));
+		ResultMistakesValue->SetText(MistakeCountText(Report.Mistakes.Num(), Report.MistakeLimit));
 	}
 
 	if (ResultHintsValue)
