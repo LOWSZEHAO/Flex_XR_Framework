@@ -32,7 +32,8 @@ struct FXR_TRAINING_API FFXR_StepAction
 	FName EventName;
 
 	/**
-	 * Exam only: fire when the run begins, instead of when this step arrives.
+	 * In Exam, fire when the run begins instead of when this step arrives. Training still fires it
+	 * when the step arrives, unless Exam Only is ticked too.
 	 *
 	 * This is how one flow serves both modes. Training opens each object as its step comes up, so
 	 * nothing can be done early; Exam opens the ones marked here from the start, so the trainee can
@@ -40,6 +41,24 @@ struct FXR_TRAINING_API FFXR_StepAction
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	bool bAutoStartInExam = false;
+
+	/**
+	 * Never fire in Training. For what only an exam should have - a decoy to reach for, a
+	 * distraction - which Training, opening one right object at a time, must never offer. With Auto
+	 * Start In Exam ticked as well it fires when an Exam begins; without, when its step arrives.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	bool bExamOnly = false;
+
+	/** Whether this fires when its step arrives, in this mode. */
+	bool FiresOnArrival(EFXR_DeliveryMode Mode) const
+	{
+		// Exam fired the Auto Start ones when the run began; Training never fires the Exam Only ones.
+		return Mode == EFXR_DeliveryMode::Exam ? !bAutoStartInExam : !bExamOnly;
+	}
+
+	/** Whether this fires when an Exam run begins. Training has no such moment. */
+	bool FiresAtExamStart() const { return bAutoStartInExam; }
 };
 
 /** Everything that happens at one sub-step, on top of what its step sets up. */
