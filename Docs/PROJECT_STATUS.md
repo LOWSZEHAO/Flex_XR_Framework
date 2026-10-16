@@ -137,7 +137,7 @@ needs.
 **The SOP runtime (ADR-004, revised by ADR-011)**
 - `UFXR_TrainingSteps` - the procedure as the trainee reads it: ids, names, instructions, in order.
 - `UFXR_TrainingGM` - what happens at each step: custom events to fire on Blueprints in the level (picked
-  from a dropdown of each Blueprint's own events), the step's objects, wrong-object messages, a timeout
+  from a dropdown of each Blueprint's own events), the step's objects (Step Objects - Interaction Ids, not Step Ids), a timeout
   and a Critical flag. Points at the Steps asset and picks its step ids from it.
 - **Complete Step** - a global Blueprint node the project wires to whatever event means "done". An
   optional Step Id makes it advance only while that step is open.
@@ -528,12 +528,12 @@ Small and recorded so they are not rediscovered as mysteries.
 
 ## 9. Next actions, in order
 
-1. **Interaction events.** `Complete Step` is wired to an interactable's own events, and `FXR_Grab` has
-   no On Grabbed / On Released - so a "pick it up" step has nothing to hook to except the event bus. The
-   owner is preparing a list of the events every component should expose; it lands as one consistent pass.
+1. **Interaction events.** `Complete Step` is wired to an interactable's own events. `FXR_Grab` now has
+   On Grabbed and On Released - added ahead of the rest because a "pick it up" step had nothing else to
+   hook to. The owner is preparing the full list for every component; those two fold into it.
 2. **Rewire the worked example to the GM** (`Content/TrainingExample/`). Its Steps asset survived the
    redirect; it needs a `DA_*_GM`, Enable/Disable custom events on the props, Actor Tags to tell the three
-   `BP_Interactable1` copies apart, and `Complete Step` on their events - which waits on item 1.
+   `BP_Interactable1` copies apart, and `Complete Step` on their On Grabbed / On Released.
 3. **See the new model run**, none of which has been played: Training gating step by step and the green
    ring with its tick; Exam opening Auto Start events at the start, judging every exposed object, failing on
    a Critical step, a timeout and Max Mistakes; the GM's two dropdowns; the start-of-run warnings for a bad

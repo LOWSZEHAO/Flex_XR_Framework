@@ -29,7 +29,7 @@ Running it for the first time surfaced three problems that the principle did not
    Mistakes fails the run.
 2. **Two assets.** `UFXR_TrainingSteps` is the procedure as the trainee reads it — ids, names, instructions,
    in order. `UFXR_TrainingGM` is what happens at each step: custom events to fire on Blueprints in the
-   level, the step's objects, wrong-object messages, a timeout and a Critical flag. The GM picks step ids
+   level, the step's objects, a timeout and a Critical flag. The GM picks step ids
    from the Steps asset and reports any disagreement between the two before the run starts.
 3. **The project finishes a step.** A global `Complete Step` node, wired to whatever event means "done" — a
    grab, a latch's state change, a button. An optional Step Id makes it advance only while that step is
