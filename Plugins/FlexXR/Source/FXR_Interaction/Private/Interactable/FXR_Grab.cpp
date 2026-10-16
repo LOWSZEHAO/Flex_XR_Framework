@@ -74,6 +74,9 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		TrackedLinearVelocity = FVector::ZeroVector;
 		TrackedAngularVelocity = FVector::ZeroVector;
 	}
+
+	// Last, so anything listening finds the object already held.
+	OnGrabbed.Broadcast();
 }
 
 void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
@@ -230,6 +233,9 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 	TrackedLinearVelocity = FVector::ZeroVector;
 	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
+
+	// After the base has ended the hold, so a listener sees an object that is no longer held.
+	OnReleased.Broadcast();
 }
 
 bool UFXR_Grab::CanBeginSecondary(IFXR_Interactor* Interactor) const

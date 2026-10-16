@@ -14,6 +14,9 @@ class UFXR_HandPose;
 /** Broadcast on the use-input edges of a held FXR_Grab (trigger pull / index-squeeze). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
 
+/** Broadcast when an FXR_Grab is picked up or let go. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabEvent);
+
 /**
  * UFXR_Grab — free 6-DOF grab.
  *
@@ -109,6 +112,21 @@ public:
 	/** Use fell below Use Release Threshold, or the object was released while using. */
 	UPROPERTY(BlueprintAssignable, Category = "Grab|Use")
 	FFXR_GrabUseDelegate OnUseEnded;
+
+	/**
+	 * Picked up - once per hold, after the object is in the hand. A second hand joining does not
+	 * fire it again.
+	 *
+	 * Training's event bus has already heard the grab by now, which matters when this is wired to
+	 * Complete Step: the grab is judged while its step is still open, so the right object is never
+	 * counted as a wrong one on its way to finishing the step.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Grab")
+	FFXR_GrabEvent OnGrabbed;
+
+	/** Let go - dropped, thrown, or taken from the hand. Once per hold, after physics is handed back. */
+	UPROPERTY(BlueprintAssignable, Category = "Grab")
+	FFXR_GrabEvent OnReleased;
 
 protected:
 	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
