@@ -123,6 +123,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName EntryStep;
 
+	/**
+	 * Wrong at every step - written once here instead of on each step.
+	 *
+	 * For an object that is never part of the procedure but is worth catching when touched: the
+	 * decoy, the wrong extinguisher, the live panel on a lockout drill. A step that lists the same
+	 * object under its own Wrong Actions keeps its own message, as the more specific one.
+	 *
+	 * Objects the procedure does use need no entry. Touching one early is already caught as out of
+	 * order, and touching one that no step mentions is ignored unless it is listed here.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
+	TArray<FFXR_WrongActionDefinition> AlwaysWrong;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_StepDefinition> Steps;
 
