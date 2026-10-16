@@ -120,19 +120,29 @@ own events fired, and the panel followed. Exam mode, the Start screen, the repor
 Quest have not been exercised yet (§8). Phase 3's two deferred items landed here, as planned, so a
 real consumer would define them.
 
-**The worked example - `Content/TrainingExample/`.** Written because the split between graph, session
-and panel was the part that confused a first-time author, and a scene that shows each piece in its
-own place answers that faster than any paragraph. **It predates the GM and needs rewiring** (§9): its old graph now
-loads as a Steps asset with the names and instructions kept, but its session has no GM yet, so it does
-not run. `L_TrainingExample` has three plain
-`BP_Interactable1` props whose only training setup is Expose to Training and an Interaction Id, set
-per placed copy because one Blueprint is used three times; `DA_TrainingExample`, a three-step graph
-with one wrong action and one step that completes on **release** (`Ended`) rather than pick-up;
-`BP_TrainingExampleManager`, which holds the session and shows where a project's own logic goes -
-each session event, a Branch on Step Id, and a custom event per step, one of which turns a lamp on;
-and `BP_TrainingExamplePanel`, which is an `FXR_Panel` and nothing else, because the panel finds the
-session by itself. `BP_FXR_Pawn` now carries one `FXR_WidgetPointer` per hand, which every panel
-needs.
+**The worked example - `Content/TrainingExample/`.** Written because the split between steps, GM,
+session and panel was the part that confused a first-time author, and a scene that shows each piece in
+its own place answers that faster than any paragraph. Rewired to the GM on 2026-10-16.
+`DA_TrainingExample` is the Steps asset, "Load the weapon": step 1 *Pick up the magazine* is a whole
+step, step 2 *Handle the weapon* has two sub-steps, *Pick up the weapon* and *Put the weapon down*.
+`DA_TrainingExample_GM` wires it: step 1 calls *Enable Grab* on the prop tagged `Magazine`; step 2 owns
+the `Weapon` as its Step Object, and its first sub-step calls *Enable Grab* on the prop tagged `Weapon`.
+Both events are marked Auto Start In Exam. `BP_TrainingExampleProp` (a copy of `BP_Interactable1`, so
+the dev map's props are untouched) starts with its grab **locked**, has *Enable Grab* / *Disable Grab*
+for the GM to call, and two per-copy ids, *Complete On Grab* and *Complete On Release*, which its On
+Grabbed / On Released hand to `Complete Step` when set. `L_TrainingExample` places three of them -
+Magazine (cube), Weapon (cylinder, completes on grab *and* on release) and Decoy (cone, wired to
+nothing) - each with an Actor Tag the GM targets. `BP_TrainingExampleManager` is now only the session,
+debug prints for steps, sub-steps and mistakes, and the lamp, which turns on when the run finishes;
+the old Branch-on-Step-Id chain is gone, because the GM does that job. `BP_TrainingExamplePanel` is an
+`FXR_Panel` and nothing else. `BP_FXR_Pawn` carries one `FXR_WidgetPointer` per hand.
+
+Checked in PIE without hands, by firing the props' own On Grabbed / On Released handlers: Training opens
+only the Magazine at the start, out-of-turn calls are ignored, the Magazine opens step 2 and its first
+sub-step unlocks the Weapon, the panel lists the sub-steps under the open step and ticks them, and the
+release ends the run - Training complete, the ring and tick, the lamp on. In Exam both Auto Start events
+fire at the start and the Decoy stays locked. Not checked: real grabs in a headset, and Exam's judging,
+which needs a real grab to put an event on the bus.
 
 **The SOP runtime (ADR-004, revised by ADR-011)**
 - `UFXR_TrainingSteps` - the procedure as the trainee reads it: ids, names, instructions, in order. A step
@@ -536,21 +546,20 @@ Small and recorded so they are not rediscovered as mysteries.
 1. **Interaction events.** `Complete Step` is wired to an interactable's own events. `FXR_Grab` now has
    On Grabbed and On Released - added ahead of the rest because a "pick it up" step had nothing else to
    hook to. The owner is preparing the full list for every component; those two fold into it.
-2. **Rewire the worked example to the GM** (`Content/TrainingExample/`). Its Steps asset survived the
-   redirect; it needs a `DA_*_GM`, Enable/Disable custom events on the props, Actor Tags to tell the three
-   `BP_Interactable1` copies apart, and `Complete Step` on their On Grabbed / On Released.
-3. **See the new model run**, none of which has been played: Training gating step by step and the green
-   ring with its tick; Exam opening Auto Start events at the start, judging every exposed object, failing on
-   a Critical step, a timeout and Max Mistakes; the GM's two dropdowns; the start-of-run warnings for a bad
-   event name or a Blueprint not in the level; sub-steps ticking in order and their rows on the panel.
-4. **The fire-safety demo.** Phase 4's actual deliverable, built on the GM.
-5. **Close the phase.** Quest smoke test, PR into `main`, tag.
+2. **Play the worked example in the headset** (§4), in Training and then Exam: real grabs, Exam judging
+   every exposed object, failing on a Critical step, a timeout and Max Mistakes; the GM's three dropdowns.
+   **Open question:** an object that should be live only in Exam - the example's Decoy - cannot be
+   expressed, because an Auto Start In Exam event also fires in Training when its step arrives. The Decoy
+   is therefore locked in both modes. Candidate fix: an *Exam only* option on GM events.
+3. **The fire-safety demo.** Phase 4's actual deliverable, built on the GM.
+4. **Close the phase.** Quest smoke test, PR into `main`, tag.
 
 Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
 confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
 design, approved 2026-10-09; the approved design built, the font bug fixed and Exam auto-fail
 implemented, 2026-10-11; the worked example, and the Guided flow run end to end in VR preview,
-2026-10-16; the GM redesign (ADR-011), built 2026-10-16; sub-steps, built and unit-tested 2026-10-16.
+2026-10-16; the GM redesign (ADR-011), built 2026-10-16; sub-steps, built and unit-tested 2026-10-16; the
+worked example rewired to the GM and run in PIE, 2026-10-16.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
