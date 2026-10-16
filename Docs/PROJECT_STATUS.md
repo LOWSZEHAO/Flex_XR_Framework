@@ -178,8 +178,10 @@ which needs a real grab to put an event on the bus.
   **the screen is derived rather than set**: a finished run shows the report, a running one shows
   the procedure, anything else shows Start. An explanation is the one exception, because it is the
   one thing the runner has no opinion about.
-  **One page per step:** the heading is the open step and the list is its sub-steps, numbered from one
-  (a step without any shows one row, its instruction); the meter above has a segment per step. Both are
+  **One page per step:** the heading is the open step, its instruction sits under it, and the list is
+  its sub-steps, numbered from one. A step without any shows its instruction as its one row instead,
+  and the line under the heading is collapsed so it is not said twice. The meter above has a segment
+  per step. Both are
   built in C++ at runtime, because their length is the procedure's and nothing else can know it.
   It reaches back into the session in exactly one place, and switchably: `Buttons Drive Session`
   lets Begin and Try again call `StartSession`, which is what makes a dropped-in panel work on its
@@ -192,12 +194,11 @@ which needs a real grab to put an event on the bus.
   public header, read by both the runtime panel and the editor builder. A token defined twice is a
   token that will disagree with itself, and a runtime-built row that does not match the list it sits
   in is the most visible kind of wrong.
-- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the generated panel, 119 widgets. The builder proves its
+- `WBP_FXR_TrainingPanel` at `/FlexXR/UI` - the generated panel, 129 widgets. The builder proves its
   own work: it checks every `BindWidgetOptional` against the tree by name **and class**, the way UMG
-  does, and logs the result rather than leaving it to be inferred. Last run: *39 resolve, 5 declared
-  names unused by this layout, 119 widgets*. Those five are deliberate - `InstructionLabel`,
-  `ProgressLabel`, `ProgressFill`, `SummaryLabel` and `CompletionCard` exist for simpler layouts
-  somebody else builds.
+  does, and logs the result rather than leaving it to be inferred. Last run (2026-10-17): *43 resolve,
+  4 declared names unused by this layout, 129 widgets*. Those four are deliberate - `ProgressLabel`,
+  `ProgressFill`, `SummaryLabel` and `CompletionCard` exist for simpler layouts somebody else builds.
 - `F_Montserrat` at `/FlexXR/UI/Fonts` - a composite font over three `UFontFace` assets, Medium,
   SemiBold and ExtraBold, with the face data embedded. Three faces and no italics because that is
   what the design uses and an unused face is still a cooked megabyte. Sources and the SIL Open Font
