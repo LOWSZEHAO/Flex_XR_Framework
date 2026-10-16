@@ -73,7 +73,12 @@ struct FFXR_StepDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_WrongActionDefinition> WrongActions;
 
-	/** Seconds before the hint escalates. Zero means this step never times out. */
+	/**
+	 * How long this step may stay open. Zero means it never times out.
+	 *
+	 * Practice: the first expiry counts as a mistake and switches the highlight on. Exam: the run
+	 * fails. Guided: ignored - its help is on from the start, so a timeout has nothing to add.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
 	float TimeoutSeconds = 0.f;
 

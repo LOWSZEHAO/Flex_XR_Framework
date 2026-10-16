@@ -9,7 +9,8 @@ namespace
 	constexpr float NeverHappened = -1.f;
 }
 
-void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode)
+void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode,
+	int32 InMaxMistakes)
 {
 	Steps = MoveTemp(InSteps);
 	Mode = InMode;
@@ -18,6 +19,11 @@ void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryInde
 	bReachedEnd = false;
 	bFailed = false;
 	FailedStep = INDEX_NONE;
+	FailReason = EFXR_FailReason::None;
+
+	// Held only in Exam. Guided and Practice exist to let people get things wrong and learn from it,
+	// so a limit there would end exactly the runs that were doing their job.
+	MaxMistakes = InMode == EFXR_DeliveryMode::Exam ? FMath::Max(0, InMaxMistakes) : 0;
 
 	const int32 Count = Steps.Num();
 	Status.Init(EFXR_StepStatus::Pending, Count);
@@ -144,11 +150,13 @@ void FFXR_StepRunner::RecordMistake(FName StepId, FName InteractionId, EFXR_Mist
 
 	// Attributed to the step that was open, so a report can say which part of the procedure is the
 	// one people get wrong.
+	int32 StepIndex = INDEX_NONE;
 	for (int32 Index = 0; Index < Steps.Num(); ++Index)
 	{
 		if (Steps[Index].StepId == StepId)
 		{
 			++MistakeCounts[Index];
+			StepIndex = Index;
 			break;
 		}
 	}
@@ -158,6 +166,14 @@ void FFXR_StepRunner::RecordMistake(FName StepId, FName InteractionId, EFXR_Mist
 	if (OnMistake)
 	{
 		OnMistake(Mistake);
+	}
+
+	// The mistake that reaches the limit ends the run, after it has been reported, so anything
+	// listening hears the mistake and then the verdict in that order. Timeouts are left to Tick,
+	// which already ends an Exam run on the first one; a timeout is never also the last straw.
+	if (MaxMistakes > 0 && Kind != EFXR_MistakeKind::Timeout && Mistakes.Num() >= MaxMistakes)
+	{
+		Fail(StepIndex, EFXR_FailReason::TooManyMistakes);
 	}
 }
 
@@ -253,6 +269,13 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	Elapsed += DeltaSeconds;
 
+	// Guided has no timeouts. Its help is on from the moment a step opens, so a timeout there could
+	// only add a mistake for being slow - and being slow while being taught is not a finding.
+	if (Mode == EFXR_DeliveryMode::Guided)
+	{
+		return;
+	}
+
 	// Acted on after the loop rather than inside it: failing the run empties ActiveSteps, and this
 	// is iterating ActiveSteps.
 	int32 ExpiredInExam = INDEX_NONE;
@@ -298,15 +321,22 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	if (ExpiredInExam != INDEX_NONE)
 	{
-		Fail(ExpiredInExam);
+		Fail(ExpiredInExam, EFXR_FailReason::Timeout);
 	}
 }
 
-void FFXR_StepRunner::Fail(int32 StepIndex)
+void FFXR_StepRunner::Fail(int32 StepIndex, EFXR_FailReason Reason)
 {
+	// A run is judged once. Two routes to failure arriving in the same frame must not report twice.
+	if (!bRunning)
+	{
+		return;
+	}
+
 	bRunning = false;
 	bFailed = true;
 	FailedStep = StepIndex;
+	FailReason = Reason;
 
 	// Closed, but not Complete. The step is left Active because that is what it was - open, and
 	// never finished - while the close time is recorded because the run did end on it, and the

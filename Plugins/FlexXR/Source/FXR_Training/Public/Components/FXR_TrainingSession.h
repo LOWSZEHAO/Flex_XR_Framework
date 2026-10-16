@@ -58,6 +58,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	EFXR_DeliveryMode GetMode() const { return Mode; }
 
+	/** The mistake limit in force: Max Mistakes in Exam, zero in every other mode. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	int32 GetMaxMistakes() const { return Mode == EFXR_DeliveryMode::Exam ? MaxMistakes : 0; }
+
 	/** The procedure's name, falling back to the asset's own so it is never nameless on a wall. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetProcedureName() const;
@@ -116,6 +120,17 @@ protected:
 	/** How much help. One graph, three dials; the run is scored the same either way. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Guided;
+
+	/**
+	 * Exam only: the run fails on the mistake that reaches this many. Zero means no limit.
+	 *
+	 * Wrong actions and out-of-order actions count; a timeout already ends an Exam run by itself.
+	 * Shown only while Mode is Exam, because Guided and Practice exist to let people get things
+	 * wrong and learn from it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training",
+		meta = (ClampMin = "0", EditCondition = "Mode == EFXR_DeliveryMode::Exam", EditConditionHides))
+	int32 MaxMistakes = 0;
 
 	/** Start as soon as play begins. Clear it to drive the session from your own logic. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")

@@ -70,7 +70,8 @@ struct FFXR_CompiledStep
 struct FXR_TRAINING_API FFXR_StepRunner
 {
 	/** Begin a run. Steps are moved in; the entry step is the first thing opened. */
-	void Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode);
+	void Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode,
+		int32 InMaxMistakes = 0);
 
 	/** End the run early. Active steps are left as they are, for the report. */
 	void Stop();
@@ -110,6 +111,12 @@ struct FXR_TRAINING_API FFXR_StepRunner
 	/** The step that ended the run, or INDEX_NONE. Only meaningful once Failed is true. */
 	int32 GetFailedStep() const { return FailedStep; }
 
+	/** What ended a failed run. None while running, and for any outcome that is not a failure. */
+	EFXR_FailReason GetFailReason() const { return FailReason; }
+
+	/** The mistake limit this run is held to. Zero when there is none. */
+	int32 GetMaxMistakes() const { return MaxMistakes; }
+
 	/** Hints are suppressed entirely in Exam, and held back until a mistake in Practice. */
 	bool ShouldShowHints() const;
 
@@ -124,14 +131,14 @@ private:
 	void Activate(int32 StepIndex);
 
 	/**
-	 * End the run against the trainee, on the step that ran out of time.
+	 * End the run against the trainee, on the step that was open when it happened.
 	 *
-	 * Only Exam gets here. Guided and Practice spend a timeout on help, which is the difference
-	 * between the modes: a timeout that produces a louder hint is teaching, and one that produces a
-	 * verdict is assessment. Without this, Exam was the worst of both - ShouldShowHints already
-	 * refuses to show the hint, so the timeout stacked a mistake and then said nothing at all.
+	 * Only Exam gets here, by one of two routes: a step running out of time, or the mistake that
+	 * reaches Max Mistakes. Guided and Practice spend a timeout on help instead, which is the
+	 * difference between the modes - a timeout that produces help is teaching, and one that produces
+	 * a verdict is assessment.
 	 */
-	void Fail(int32 StepIndex);
+	void Fail(int32 StepIndex, EFXR_FailReason Reason);
 	void Complete(int32 StepIndex, const FFXR_CompiledTransition& Via);
 	void RecordMistake(FName StepId, FName InteractionId, EFXR_MistakeKind Kind, const FText& Message);
 	bool Matches(const FFXR_CompiledTransition& Transition, const FFXR_InteractionEvent& Event) const;
@@ -161,4 +168,9 @@ private:
 	bool bFailed = false;
 
 	int32 FailedStep = INDEX_NONE;
+
+	EFXR_FailReason FailReason = EFXR_FailReason::None;
+
+	/** Exam's limit. Zero is no limit, and the runner only ever receives one for an Exam run. */
+	int32 MaxMistakes = 0;
 };

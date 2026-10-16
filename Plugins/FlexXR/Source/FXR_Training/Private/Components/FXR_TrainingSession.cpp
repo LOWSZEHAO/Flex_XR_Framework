@@ -226,7 +226,7 @@ void UFXR_TrainingSession::StartSession()
 		ReleaseAll();
 		OnSessionFinished.Broadcast(Report);
 	};
-	Runner.Start(MoveTemp(Compiled), EntryIndex, Mode);
+	Runner.Start(MoveTemp(Compiled), EntryIndex, Mode, GetMaxMistakes());
 	LockAllGatedSteps();
 
 	// The entry step opened during Start, before the locks went on, so give it back its way through.
@@ -319,6 +319,8 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 	Report.ProcedureName = GetProcedureName();
 	Report.CourseName = GetCourseName();
 	Report.Mode = Runner.GetMode();
+	Report.FailReason = Runner.GetFailReason();
+	Report.MistakeLimit = Runner.GetMaxMistakes();
 	Report.DurationSeconds = Runner.GetElapsedSeconds();
 	Report.Mistakes = Runner.GetMistakes();
 
