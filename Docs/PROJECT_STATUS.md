@@ -529,7 +529,10 @@ Small and recorded so they are not rediscovered as mysteries.
    in **Exam** the Procedure screen should show only `EXAM IN PROGRESS`, the progress figure and the
    mistake count, and a mistake should read "Mistake 1 of 3"; set **Max Mistakes** and reach it; put
    a `Timeout Seconds` on a step and let Exam fail on it; in **Practice** let a step time out and
-   check the new line and the highlight; in **Guided** confirm a timeout does nothing. Then the paths
+   check the new line and the highlight; in **Guided** confirm a timeout does nothing. A failed run
+   should now score **0** with an empty red ring, and a stopped one show "—". Move the example's
+   Decoy from its two steps to the graph's **Always Wrong** list and confirm it still counts once,
+   at either step. Then the paths
    the example skipped: clear **Auto Start** and press **Begin**, press **Done** and **Try again**,
    poke the panel with a fingertip.
 3. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
