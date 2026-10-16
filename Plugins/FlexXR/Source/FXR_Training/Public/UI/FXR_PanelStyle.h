@@ -134,17 +134,6 @@ namespace FXR_PanelStyle
 	constexpr float RowPadY        = 10.f;
 	constexpr float NumeralSize   = 42.f;
 
-	/**
-	 * Sub-steps sit under the open step's instruction, indented to its text rather than its numeral,
-	 * so they read as parts of it. Their markers are smaller discs with no number: the order is the
-	 * order on the panel, and a second set of numerals would compete with the step's own.
-	 */
-	constexpr float SubIndent     = NumeralSize + 16.f;
-	constexpr float SubMarkerSize = 18.f;
-	constexpr float SubMarkerGap  = 14.f;
-	constexpr float SubRowPadY    = 5.f;
-	constexpr float SubListTop    = 12.f;
-
 	/** The score ring, and the width of its band. */
 	constexpr float RingSize      = 200.f;
 	constexpr float RingThickness = 12.f;
@@ -223,8 +212,6 @@ namespace FXR_PanelStyle
 	inline FSlateFontInfo TypeRow()        { return Type(21, FontMedium()); }
 	inline FSlateFontInfo TypeRowActive()  { return Type(24, FontSemiBold()); }
 	inline FSlateFontInfo TypeNumeral()    { return Type(20, FontSemiBold()); }
-	inline FSlateFontInfo TypeSubRow()     { return Type(21, FontMedium()); }
-	inline FSlateFontInfo TypeSubRowOpen() { return Type(21, FontSemiBold()); }
 	inline FSlateFontInfo TypeDefTerm()    { return Type(24, FontMedium()); }
 	inline FSlateFontInfo TypeDefValue()   { return Type(24, FontSemiBold()); }
 	inline FSlateFontInfo TypeScore()      { return Type(64, FontExtraBold(), -30); }

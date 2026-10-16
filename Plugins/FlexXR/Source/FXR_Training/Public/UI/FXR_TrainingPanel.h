@@ -54,19 +54,6 @@ enum class EFXR_ExplainState : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_PanelRequest);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PanelAudioRequest, bool, bWantPlaying);
 
-/** The widgets of one sub-step line, under its step's instruction. */
-USTRUCT()
-struct FFXR_PanelSubRow
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	TObjectPtr<UImage> Marker;
-
-	UPROPERTY()
-	TObjectPtr<UTextBlock> TextLabel;
-};
-
 /**
  * The widgets of one step row, kept so that a step change restyles the list instead of rebuilding
  * it. The row count is fixed once a graph is compiled, so there is nothing to rebuild after the
@@ -91,13 +78,6 @@ struct FFXR_PanelStepRow
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> ChevronLabel;
-
-	/** The sub-step lines' container, shown only while the step is open. Null for a step without any. */
-	UPROPERTY()
-	TObjectPtr<UWidget> SubList;
-
-	UPROPERTY()
-	TArray<FFXR_PanelSubRow> SubRows;
 };
 
 /**
@@ -300,7 +280,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StatusLabel;
 
-	/** Filled with one segment per step in the compiled graph. */
+	/** Filled with one segment per step: the whole procedure, while the list shows one step. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepMeter;
 
@@ -388,11 +368,14 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UProgressBar> ProgressFill;
 
-	/** Filled with one row per step. The open step's row also lists its sub-steps, when it has any. */
+	/**
+	 * One page per step: filled with a row per sub-step of the open step, numbered from one. A step
+	 * without sub-steps is a page with a single row, its instruction.
+	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepList;
 
-	/** Scrolled so the open step is centred, not merely on screen. */
+	/** Scrolled so the open row is centred, not merely on screen. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> StepScroll;
 
@@ -501,7 +484,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewTrainingRun = false;
 
-	/** Give the sample's open step three sub-steps, the tallest a row gets. Editor only. */
+	/** Show the sample step with three sub-steps. Clear it to see a step without any - one row. Editor only. */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewSubSteps = true;
 #endif
@@ -554,19 +537,23 @@ private:
 	/** Move the switcher, collapse the chrome that does not belong, and tell Blueprint. */
 	void ApplyScreen(EFXR_PanelScreen NewScreen);
 
-	/**
-	 * One meter segment and one list row per step. Called when a run starts.
-	 *
-	 * Takes the steps as data rather than reading the session, so the designer preview can feed it
-	 * the sample procedure and draw the list with the same code a run will use.
-	 */
-	void BuildStepWidgets(const TArray<FFXR_StepRecord>& Steps);
+	//~ The meter and the list take their content as data rather than reading the session, so the
+	//~ designer preview can feed them the sample procedure and draw with the code a run will use.
 
-	/** Restyle the rows and segments for these statuses. Called whenever they change. */
-	void RefreshStepWidgets(const TArray<FFXR_StepRecord>& Steps);
+	/** One meter segment per step. Called when a run starts. */
+	void BuildMeter(int32 StepCount);
 
-	/** Whether the built rows have the shape of these steps - one each, with as many sub-step lines. */
-	bool RowsMatch(const TArray<FFXR_StepRecord>& Steps) const;
+	/** Colour the segments for these statuses. */
+	void RefreshMeter(const TArray<FFXR_StepRecord>& Steps);
+
+	/** One list row per line of the page on show. Called when the open step changes. */
+	void BuildRows(const TArray<FFXR_SubStepRecord>& Lines);
+
+	/** Restyle the rows for these statuses. Called whenever they change. */
+	void RefreshRows(const TArray<FFXR_SubStepRecord>& Lines);
+
+	/** A step's page: its sub-steps, or - when it has none - one line, its instruction. */
+	static TArray<FFXR_SubStepRecord> PageLines(const FFXR_StepRecord& Step);
 
 	/**
 	 * Fill whichever screen the designer has the switcher on with the design page's own sample
@@ -595,11 +582,11 @@ private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UFXR_TrainingSession> Session;
 
-	/** Rows, parallel to the compiled step array. */
+	/** Rows of the page on show, parallel to its lines. */
 	UPROPERTY(Transient)
 	TArray<FFXR_PanelStepRow> Rows;
 
-	/** Meter segments, parallel to the same array. */
+	/** Meter segments, one per step. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UImage>> MeterSegments;
 
@@ -614,6 +601,9 @@ private:
 
 	FFXR_SessionReport Report;
 	FName StepId;
+
+	/** The step whose page the rows were built for, or INDEX_NONE. */
+	int32 PageStep = INDEX_NONE;
 	EFXR_PanelScreen Screen = EFXR_PanelScreen::Start;
 	EFXR_ExplainState ExplainState = EFXR_ExplainState::Idle;
 	bool bFinished = false;
