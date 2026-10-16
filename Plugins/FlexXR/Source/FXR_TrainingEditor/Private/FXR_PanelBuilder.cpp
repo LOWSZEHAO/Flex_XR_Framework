@@ -24,6 +24,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/WidgetSwitcherSlot.h"
 #include "Engine/Font.h"
 #include "Engine/FontFace.h"
 #include "FileHelpers.h"
@@ -756,9 +757,25 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
 
+		// Two bodies over one foot. [0] teaches - the heading and the step list. [1] examines -
+		// progress and the mistake count. The runtime panel picks [1] in Exam, because in an exam
+		// the step list is the answer sheet.
+		UWidgetSwitcher* BodySwitch = New<UWidgetSwitcher>(Tree, TEXT("ProcedureBodySwitcher"));
+		Stack(Screen, BodySwitch, FMargin(0.f), true);
+
+		const auto AddBody = [BodySwitch](UWidget* Child)
+		{
+			if (UWidgetSwitcherSlot* BodySlot = Cast<UWidgetSwitcherSlot>(BodySwitch->AddChild(Child)))
+			{
+				BodySlot->SetPadding(FMargin(Gutter, 36.f, Gutter, 0.f));
+				BodySlot->SetHorizontalAlignment(HAlign_Fill);
+				BodySlot->SetVerticalAlignment(VAlign_Fill);
+			}
+		};
+
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
 		Body->SetClipping(EWidgetClipping::ClipToBounds);
-		Stack(Screen, Body, FMargin(Gutter, 36.f, Gutter, 0.f), true);
+		AddBody(Body);
 
 		Stack(Body, Label(Tree, nullptr, TypeEyebrow(), Text3(),
 			NSLOCTEXT("FlexXR", "PanelCurrentStep", "CURRENT STEP")));
@@ -783,6 +800,29 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		// laser-targetable needs. Nothing in this list is a target.
 		UVerticalBox* List = New<UVerticalBox>(Tree, TEXT("StepList"));
 		ListCard->AddChild(List);
+
+		// [1] The exam body: the Start screen's shape - an eyebrow, one large figure, a definition
+		// list - so an exam reads as the same panel with the answers taken away, not a new one.
+		{
+			UVerticalBox* ExamBody = New<UVerticalBox>(Tree);
+			ExamBody->SetClipping(EWidgetClipping::ClipToBounds);
+			AddBody(ExamBody);
+
+			Stack(ExamBody, Label(Tree, nullptr, TypeEyebrow(), Text3(),
+				NSLOCTEXT("FlexXR", "PanelExamInProgress", "EXAM IN PROGRESS")));
+
+			Stack(ExamBody, Label(Tree, TEXT("ExamProgressLabel"), TypeTitle(), Text(),
+				FText::GetEmpty(), LineTitle), FMargin(0.f, 14.f, 0.f, 0.f));
+
+			Stack(ExamBody, Label(Tree, nullptr, TypeReason(), Text2(),
+				NSLOCTEXT("FlexXR", "PanelExamStepsComplete", "steps complete")), FMargin(0.f, 6.f, 0.f, 0.f));
+
+			UVerticalBox* Defs = New<UVerticalBox>(Tree);
+			Stack(ExamBody, Defs, FMargin(0.f, 34.f, 0.f, 0.f));
+			DefRow(Tree, Defs, NSLOCTEXT("FlexXR", "PanelMistakes", "Mistakes"), TEXT("ExamMistakesValue"));
+
+			PushUp(Tree, ExamBody);
+		}
 
 		UWidgetSwitcher* FootSwitch = New<UWidgetSwitcher>(Tree, TEXT("FootSwitcher"));
 		Stack(Screen, FootSwitch);

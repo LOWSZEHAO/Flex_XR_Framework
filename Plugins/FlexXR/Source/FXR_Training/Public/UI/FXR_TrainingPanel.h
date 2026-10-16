@@ -329,6 +329,24 @@ protected:
 
 	//~ Procedure.
 
+	/**
+	 * The procedure body, in two forms. Index 0 teaches: the heading and the step list. Index 1
+	 * examines: progress and the mistake count, nothing else.
+	 *
+	 * Exam selects 1, because in an exam the step list is the answer sheet - a trainee who can read
+	 * every instruction off the wall is being tested on reading.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> ProcedureBodySwitcher;
+
+	/** Exam: steps done out of the total, "2 / 5". */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ExamProgressLabel;
+
+	/** Exam: the mistake count, "1 of 3" when the session has a limit. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ExamMistakesValue;
+
 	/** The open step's short label — the heading. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StepTitleLabel;
@@ -431,6 +449,16 @@ protected:
 	/** Shown when a wrong action was authored without a message of its own. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	FText DefaultMistakeMessage;
+
+	/**
+	 * Shown when a step times out in Practice - the only mode where a timeout is shown at all.
+	 *
+	 * Its own line because a timeout is slowness, not a wrong action, and the wrong-action fallback
+	 * told a trainee who had done nothing that they had done something. Practice turns the highlight
+	 * on at that moment, which is what the default points them to.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
+	FText TimeoutMessage;
 
 	/**
 	 * Let Begin and Try again start the session themselves.
