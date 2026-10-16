@@ -36,7 +36,9 @@ Running it for the first time surfaced three problems that the principle did not
    open, so an event that fires on every use advances the procedure exactly once.
 4. **One flow serves both modes.** Each GM event can be marked *Auto Start In Exam*: Training fires it when
    its step arrives, Exam fires it when the run begins. That is how Exam opens objects early enough to get
-   wrong, without a second procedure.
+   wrong, without a second procedure. An event can also be marked *Exam Only* (added the same day), which
+   Training never fires - for what only an exam should have, such as a decoy to reach for. With both ticked
+   it fires when an Exam begins and never in Training.
 5. **Steps run in order.** Branching and fan-out are removed.
 6. **A step may have sub-steps**, run strictly in order (added the same day). Each `Complete Step` ticks
    off the open sub-step, and the step finishes with its last; the step's own id completes nothing. The GM

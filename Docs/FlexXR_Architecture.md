@@ -843,6 +843,13 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 
 ## Changelog
 
+**v0.22 — Exam Only events (ADR-011, decision 4)**
+- **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not
+  express a decoy: it fires in Training too, when its step arrives, which hands the trainee the one thing
+  Training exists to keep out of reach. The two ticks combine - both together fire when an Exam begins
+  and never in Training - and the rule lives on the event (`FiresOnArrival`, `FiresAtExamStart`), so the
+  session and a test read the same four cases.
+
 **v0.21 — Sub-steps (ADR-011, decision 6)**
 - **A step can have sub-steps**, listed under it in the Steps asset. They run strictly in order: each
   **Complete Step** ticks off the open one, and the step finishes with its last. The step's own id
