@@ -123,6 +123,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 
 	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
 	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Pull the safety pin")); }
+	if (InstructionLabel) { InstructionLabel->SetText(INVTEXT("Grip the safety pin and pull it free of the handle.")); }
 
 	// Left on whichever body the designer chose, so flipping ProcedureBodySwitcher previews Exam.
 	if (ExamProgressLabel) { ExamProgressLabel->SetText(INVTEXT("2 / 5")); }
@@ -168,6 +169,9 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		// The same calls a run makes, so what the designer shows is what the code draws.
 		BuildMeter(Sample.Num());
 		RefreshMeter(Sample);
+
+		// Shown only on a page with parts, as at runtime: without them the instruction is the one row.
+		SetShown(InstructionLabel, !Open.SubSteps.IsEmpty());
 
 		const TArray<FFXR_SubStepRecord> Lines = PageLines(Open);
 		BuildRows(Lines);
@@ -796,6 +800,12 @@ void UFXR_TrainingPanel::RefreshProcedure()
 				? Snapshot.Steps[Open].Instruction
 				: Snapshot.Steps[Open].DisplayName));
 	}
+
+	// Under the heading only on a page with parts. A step without any shows its instruction as its
+	// single row, and saying it twice would read as a mistake.
+	SetShown(InstructionLabel, Snapshot.Steps.IsValidIndex(Open)
+		&& !Snapshot.Steps[Open].SubSteps.IsEmpty()
+		&& !Snapshot.Steps[Open].Instruction.IsEmpty());
 
 	// The meter is the whole procedure, so its length is settled when a run starts.
 	if (MeterSegments.Num() != Snapshot.Steps.Num())

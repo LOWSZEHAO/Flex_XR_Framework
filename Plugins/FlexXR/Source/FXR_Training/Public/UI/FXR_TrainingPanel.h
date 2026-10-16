@@ -352,11 +352,9 @@ protected:
 	TObjectPtr<UTextBlock> StepTitleLabel;
 
 	/**
-	 * The open step's full instruction.
-	 *
-	 * The generated panel does not use this: it puts the instruction in the open row, where the
-	 * step's place in the procedure is visible at the same time. Kept because a simpler layout
-	 * that wants the instruction as its headline is a reasonable thing to build.
+	 * The open step's full instruction, under the heading - for a step with sub-steps, the sentence
+	 * its rows add up to. Collapsed for a step without sub-steps, whose instruction is already its
+	 * one row and would otherwise be said twice.
 	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> InstructionLabel;
