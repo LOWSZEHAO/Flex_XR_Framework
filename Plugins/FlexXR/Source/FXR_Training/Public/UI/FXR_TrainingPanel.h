@@ -245,7 +245,7 @@ protected:
 	 * no event graph at all, which is what keeps framework logic out of Blueprint. Leave any of
 	 * them out and that part simply does not exist: **Optional** rather than required, because this
 	 * is a base class for layouts nobody has designed yet, and one that refuses to compile without
-	 * a widget named `ResultHintsValue` would be a base class people work around.
+	 * a widget named `ResultTimeValue` would be a base class people work around.
 	 *
 	 * Prefer these to property bindings. A bound getter runs every frame per widget whether
 	 * anything changed or not; these are written when something does.
@@ -399,12 +399,19 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> CompletionCard;
 
-	/** The score as an arc. Always the score, whatever the verdict — only its colour changes. */
+	/**
+	 * The score as an arc in Exam, where only its colour carries the verdict. After Training it is
+	 * full and green around a tick instead - Training cannot go wrong, so there is nothing to grade.
+	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<URadialSlider> ScoreRing;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ScoreLabel;
+
+	/** Shown in the ring in place of the score once a Training run is done. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> ScoreTick;
 
 	/** "Procedure complete" or "Procedure failed". Carries the verdict, with the ring's colour. */
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -422,9 +429,6 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ResultMistakesValue;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> ResultHintsValue;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ResultTimeValue;
@@ -453,15 +457,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	FText DefaultMistakeMessage;
 
-	/**
-	 * Shown when a step times out in Practice - the only mode where a timeout is shown at all.
-	 *
-	 * Its own line because a timeout is slowness, not a wrong action, and the wrong-action fallback
-	 * told a trainee who had done nothing that they had done something. Practice turns the highlight
-	 * on at that moment, which is what the default points them to.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
-	FText TimeoutMessage;
 
 	/**
 	 * Let Begin and Try again start the session themselves.
@@ -481,6 +476,10 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewFailedRun = false;
+
+	/** Show the report as a finished Training run - the full ring and the tick. Editor only. */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
+	bool bPreviewTrainingRun = false;
 #endif
 
 private:
@@ -562,9 +561,6 @@ private:
 
 	/** Steps, mistakes and elapsed time for the one-line summary. */
 	FText BuildSummaryText() const;
-
-	/** The only session in the level, or null. Warns rather than picking when there are several. */
-	UFXR_TrainingSession* FindSessionInWorld() const;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UFXR_TrainingSession> Session;

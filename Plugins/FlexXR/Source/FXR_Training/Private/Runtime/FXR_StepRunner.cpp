@@ -5,40 +5,35 @@
 
 namespace
 {
-	/** Sentinel for "this never happened", so a report can tell a skipped step from one at t=0. */
+	/** Sentinel for "this never happened", so a report can tell a step that never opened from one at t=0. */
 	constexpr float NeverHappened = -1.f;
 }
 
-void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, int32 EntryIndex, EFXR_DeliveryMode InMode,
-	int32 InMaxMistakes)
+void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InSteps, EFXR_DeliveryMode InMode, int32 InMaxMistakes)
 {
 	Steps = MoveTemp(InSteps);
 	Mode = InMode;
 	Elapsed = 0.f;
-	bAnyMistakeYet = false;
+	Current = INDEX_NONE;
 	bReachedEnd = false;
 	bFailed = false;
 	FailedStep = INDEX_NONE;
 	FailReason = EFXR_FailReason::None;
 
-	// Held only in Exam. Guided and Practice exist to let people get things wrong and learn from it,
-	// so a limit there would end exactly the runs that were doing their job.
+	// Held only in Exam. Training cannot fail, so a limit there would be a number with nothing to do.
 	MaxMistakes = InMode == EFXR_DeliveryMode::Exam ? FMath::Max(0, InMaxMistakes) : 0;
 
 	const int32 Count = Steps.Num();
 	Status.Init(EFXR_StepStatus::Pending, Count);
 	OpenedAt.Init(NeverHappened, Count);
 	ClosedAt.Init(NeverHappened, Count);
-	HintLevelReached.Init(0, Count);
 	MistakeCounts.Init(0, Count);
-
-	ActiveSteps.Reset();
 	Mistakes.Reset();
 
-	bRunning = Steps.IsValidIndex(EntryIndex);
+	bRunning = Count > 0;
 	if (bRunning)
 	{
-		Activate(EntryIndex);
+		Activate(0);
 	}
 }
 
@@ -62,40 +57,16 @@ float FFXR_StepRunner::GetStepClosedAt(int32 StepIndex) const
 	return ClosedAt.IsValidIndex(StepIndex) ? ClosedAt[StepIndex] : NeverHappened;
 }
 
-int32 FFXR_StepRunner::GetStepHintLevel(int32 StepIndex) const
-{
-	return HintLevelReached.IsValidIndex(StepIndex) ? HintLevelReached[StepIndex] : 0;
-}
-
 int32 FFXR_StepRunner::GetStepMistakeCount(int32 StepIndex) const
 {
 	return MistakeCounts.IsValidIndex(StepIndex) ? MistakeCounts[StepIndex] : 0;
 }
 
-bool FFXR_StepRunner::ShouldShowHints() const
-{
-	switch (Mode)
-	{
-	case EFXR_DeliveryMode::Guided:
-		return true;
-	case EFXR_DeliveryMode::Practice:
-		return bAnyMistakeYet;
-	case EFXR_DeliveryMode::Exam:
-	default:
-		return false;
-	}
-}
-
 void FFXR_StepRunner::Activate(int32 StepIndex)
 {
-	if (!Steps.IsValidIndex(StepIndex) || Status[StepIndex] != EFXR_StepStatus::Pending)
-	{
-		return; // already open, done, or bypassed; re-entering would restart its clock
-	}
-
+	Current = StepIndex;
 	Status[StepIndex] = EFXR_StepStatus::Active;
 	OpenedAt[StepIndex] = Elapsed;
-	ActiveSteps.Add(StepIndex);
 
 	if (OnStepActivated)
 	{
@@ -103,165 +74,90 @@ void FFXR_StepRunner::Activate(int32 StepIndex)
 	}
 }
 
-bool FFXR_StepRunner::UsesObject(const FFXR_CompiledStep& Step, FName InteractionId)
+bool FFXR_StepRunner::CompleteStep(FName StepId)
 {
-	return Step.Transitions.ContainsByPredicate(
-		[InteractionId](const FFXR_CompiledTransition& Transition) { return Transition.InteractionId == InteractionId; });
-}
+	if (!bRunning || !Steps.IsValidIndex(Current))
+	{
+		return false;
+	}
 
-bool FFXR_StepRunner::Matches(const FFXR_CompiledTransition& Transition, const FFXR_InteractionEvent& Event) const
-{
-	return Transition.InteractionId == Event.InteractionId && Transition.Phase == Event.Phase;
-}
+	// Named, and not the open one: an event firing at a step it does not belong to. Doing nothing
+	// is the whole point - it is what lets "On Grabbed -> Complete Step" be wired once and trusted.
+	if (!StepId.IsNone() && Steps[Current].StepId != StepId)
+	{
+		return false;
+	}
 
-void FFXR_StepRunner::Complete(int32 StepIndex, const FFXR_CompiledTransition& Via)
-{
-	ActiveSteps.RemoveSingle(StepIndex);
-	Status[StepIndex] = EFXR_StepStatus::Complete;
-	ClosedAt[StepIndex] = Elapsed;
+	const int32 Finished = Current;
+	Status[Finished] = EFXR_StepStatus::Complete;
+	ClosedAt[Finished] = Elapsed;
 
 	if (OnStepCompleted)
 	{
-		OnStepCompleted(StepIndex);
+		OnStepCompleted(Finished);
 	}
 
-	// Every next step on the transition that fired opens at once. One of them is a plain sequence;
-	// several is the parallel case.
-	for (const int32 Next : Via.NextSteps)
+	if (Steps.IsValidIndex(Finished + 1))
 	{
-		Activate(Next);
+		Activate(Finished + 1);
+		return true;
 	}
 
-	// Nothing open and nothing opened means the procedure is over. A run can also end with steps
-	// still Pending, which is exactly what a branch not taken looks like.
-	if (ActiveSteps.IsEmpty())
+	Current = INDEX_NONE;
+	bRunning = false;
+	bReachedEnd = true;
+
+	if (OnFinished)
 	{
-		bRunning = false;
-		bReachedEnd = true;
-		if (OnFinished)
-		{
-			OnFinished();
-		}
+		OnFinished();
 	}
+
+	return true;
 }
 
-void FFXR_StepRunner::RecordMistake(FName StepId, FName InteractionId, EFXR_MistakeKind Kind, const FText& Message)
+bool FFXR_StepRunner::UsesObject(const FFXR_CompiledStep& Step, FName InteractionId)
 {
-	FFXR_Mistake& Mistake = Mistakes.AddDefaulted_GetRef();
-	Mistake.StepId = StepId;
-	Mistake.InteractionId = InteractionId;
-	Mistake.Kind = Kind;
-	Mistake.TimeSeconds = Elapsed;
-	Mistake.Message = Message;
-
-	// Attributed to the step that was open, so a report can say which part of the procedure is the
-	// one people get wrong.
-	int32 StepIndex = INDEX_NONE;
-	for (int32 Index = 0; Index < Steps.Num(); ++Index)
-	{
-		if (Steps[Index].StepId == StepId)
-		{
-			++MistakeCounts[Index];
-			StepIndex = Index;
-			break;
-		}
-	}
-
-	bAnyMistakeYet = true;
-
-	if (OnMistake)
-	{
-		OnMistake(Mistake);
-	}
-
-	// The mistake that reaches the limit ends the run, after it has been reported, so anything
-	// listening hears the mistake and then the verdict in that order. Timeouts are left to Tick,
-	// which already ends an Exam run on the first one; a timeout is never also the last straw.
-	if (MaxMistakes > 0 && Kind != EFXR_MistakeKind::Timeout && Mistakes.Num() >= MaxMistakes)
-	{
-		Fail(StepIndex, EFXR_FailReason::TooManyMistakes);
-	}
+	return Step.Objects.Contains(InteractionId);
 }
 
 void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_StepRunner_HandleEvent);
 
-	if (!bRunning)
+	if (!bRunning || !Steps.IsValidIndex(Current))
 	{
 		return;
 	}
 
-	// Completion is resolved before anything mutates, because completing a step opens others and
-	// walking a set while it changes would let one event cascade through a chain.
-	int32 CompletedIndex = INDEX_NONE;
-	FFXR_CompiledTransition FiredTransition;
-
-	for (const int32 StepIndex : ActiveSteps)
-	{
-		for (const FFXR_CompiledTransition& Transition : Steps[StepIndex].Transitions)
-		{
-			if (Matches(Transition, Event))
-			{
-				CompletedIndex = StepIndex;
-				FiredTransition = Transition;
-				break;
-			}
-		}
-
-		if (CompletedIndex != INDEX_NONE)
-		{
-			break;
-		}
-	}
-
-	if (CompletedIndex != INDEX_NONE)
-	{
-		Complete(CompletedIndex, FiredTransition);
-		return;
-	}
-
-	// Everything below judges a mistake, and a mistake is counted once per action, on its start. A
-	// grab arrives as Began and then Ended; the release of a wrong grab is the same mistake rather
-	// than a second one, so every other phase stops here.
+	// A mistake is counted once per action, on its start. A grab arrives as Began and then Ended;
+	// the release of a wrong grab is the same mistake, not a second one.
 	if (Event.Phase != EFXR_InteractionPhase::Began || Event.InteractionId.IsNone())
 	{
 		return;
 	}
 
-	const FName OpenStep = ActiveSteps.IsEmpty() ? NAME_None : Steps[ActiveSteps[0]].StepId;
+	const FFXR_CompiledStep& Open = Steps[Current];
 
-	// 1. The open step's own object is never wrong. Picking it up when the step wants it put down,
-	//    or re-gripping it with the other hand, is handling the right thing at the wrong moment.
-	for (const int32 StepIndex : ActiveSteps)
+	// 1. The open step's own object is never wrong.
+	if (UsesObject(Open, Event.InteractionId))
 	{
-		if (UsesObject(Steps[StepIndex], Event.InteractionId))
+		return;
+	}
+
+	// 2. Given a line of its own for this step: that line is the most specific thing to say.
+	for (const FFXR_CompiledWrongMessage& Wrong : Open.WrongMessages)
+	{
+		if (Wrong.InteractionId == Event.InteractionId)
 		{
+			RecordMistake(Event.InteractionId, EFXR_MistakeKind::WrongAction, Wrong.Message);
 			return;
 		}
 	}
 
-	// 2. Named by the author for the open step. Their message is the most specific thing to say,
-	//    so it outranks every reading below - even for an object an earlier step used.
-	for (const int32 StepIndex : ActiveSteps)
-	{
-		const FFXR_CompiledStep& Step = Steps[StepIndex];
-		for (const FFXR_CompiledWrongAction& Wrong : Step.WrongActions)
-		{
-			if (Wrong.InteractionId == Event.InteractionId)
-			{
-				RecordMistake(Step.StepId, Event.InteractionId, EFXR_MistakeKind::WrongAction, Wrong.Message);
-				return;
-			}
-		}
-	}
-
-	// 3. Used by a step that has finished: ignored. Procedures reuse things - the extinguisher picked
-	//    up at step two is still in hand, and re-gripped, at step three. This outranks out-of-order
-	//    on purpose, so an object that a finished step used and a later step needs again reads as
+	// 3. Used by a step that has finished: ignored. Procedures reuse things, and it outranks
+	//    out-of-order so that an object a finished step used and a later step needs again reads as
 	//    one in use rather than one reached for early.
-	// 4. Needed by a step that has not opened yet: out of order - the finding a gated world can
-	//    never produce, and the reason this runner only watches.
+	// 4. Needed by a step not yet open: out of order - the finding a gated world can never produce.
 	bool bNeededLater = false;
 	for (int32 Index = 0; Index < Steps.Num(); ++Index)
 	{
@@ -282,14 +178,52 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 
 	if (bNeededLater)
 	{
-		RecordMistake(OpenStep, Event.InteractionId, EFXR_MistakeKind::OutOfOrder, FText::GetEmpty());
+		RecordMistake(Event.InteractionId, EFXR_MistakeKind::OutOfOrder, FText::GetEmpty());
 		return;
 	}
 
-	// 5. Anything else is the wrong object. There is no list to keep: an object only reaches this
-	//    runner when its author ticked Expose to Training, which is already the choice of what can
-	//    count. A prop left unticked is never judged, and everything ticked is.
-	RecordMistake(OpenStep, Event.InteractionId, EFXR_MistakeKind::WrongAction, FText::GetEmpty());
+	// 5. Anything else exposed is the wrong object. No list to keep: an object only reaches this
+	//    runner when its author ticked Expose to Training, which is already the choice of what counts.
+	RecordMistake(Event.InteractionId, EFXR_MistakeKind::WrongAction, FText::GetEmpty());
+}
+
+void FFXR_StepRunner::RecordMistake(FName InteractionId, EFXR_MistakeKind Kind, const FText& Message)
+{
+	FFXR_Mistake& Mistake = Mistakes.AddDefaulted_GetRef();
+	Mistake.StepId = Steps.IsValidIndex(Current) ? Steps[Current].StepId : NAME_None;
+	Mistake.InteractionId = InteractionId;
+	Mistake.Kind = Kind;
+	Mistake.TimeSeconds = Elapsed;
+	Mistake.Message = Message;
+
+	// Attributed to the step that was open, so a report can say which part of the procedure is the
+	// one people get wrong.
+	if (MistakeCounts.IsValidIndex(Current))
+	{
+		++MistakeCounts[Current];
+	}
+
+	if (OnMistake)
+	{
+		OnMistake(Mistake);
+	}
+
+	// Training records the mistake and moves on: it is teaching, and there is nothing to fail. Exam
+	// judges it after it has been reported, so anything listening hears the mistake and then the
+	// verdict in that order. A timeout is left to Tick, which fails the run on it by itself.
+	if (Mode != EFXR_DeliveryMode::Exam || Kind == EFXR_MistakeKind::Timeout)
+	{
+		return;
+	}
+
+	if (Steps.IsValidIndex(Current) && Steps[Current].bCritical)
+	{
+		Fail(Current, EFXR_FailReason::CriticalMistake);
+	}
+	else if (MaxMistakes > 0 && Mistakes.Num() >= MaxMistakes)
+	{
+		Fail(Current, EFXR_FailReason::TooManyMistakes);
+	}
 }
 
 void FFXR_StepRunner::Tick(float DeltaSeconds)
@@ -301,67 +235,24 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	Elapsed += DeltaSeconds;
 
-	// Guided has no timeouts. Its help is on from the moment a step opens, so a timeout there could
-	// only add a mistake for being slow - and being slow while being taught is not a finding.
-	if (Mode == EFXR_DeliveryMode::Guided)
+	// Timeouts are an Exam rule. Training is teaching, and being slow while being taught is not a
+	// finding.
+	if (Mode != EFXR_DeliveryMode::Exam || !Steps.IsValidIndex(Current))
 	{
 		return;
 	}
 
-	// Acted on after the loop rather than inside it: failing the run empties ActiveSteps, and this
-	// is iterating ActiveSteps.
-	int32 ExpiredInExam = INDEX_NONE;
-
-	for (const int32 StepIndex : ActiveSteps)
+	const FFXR_CompiledStep& Open = Steps[Current];
+	if (Open.TimeoutSeconds > 0.f && Elapsed - OpenedAt[Current] >= Open.TimeoutSeconds)
 	{
-		const FFXR_CompiledStep& Step = Steps[StepIndex];
-		if (Step.TimeoutSeconds <= 0.f)
-		{
-			continue;
-		}
-
-		const float OpenFor = Elapsed - OpenedAt[StepIndex];
-
-		// Escalation is per elapsed multiple of the timeout, so someone who is lost gets a
-		// progressively louder hint rather than one nag and then silence.
-		const int32 WantedLevel = FMath::FloorToInt32(OpenFor / Step.TimeoutSeconds);
-		if (WantedLevel > HintLevelReached[StepIndex])
-		{
-			// The first expiry is the one worth recording. After that it is the same finding louder.
-			if (WantedLevel == 1)
-			{
-				RecordMistake(Step.StepId, NAME_None, EFXR_MistakeKind::Timeout, FText::GetEmpty());
-
-				// Exam spends a timeout on the verdict; the other two spend it on help. Breaking
-				// here rather than escalating is the point: there is nothing to escalate to, and
-				// an escalation event immediately followed by a finish is noise.
-				if (Mode == EFXR_DeliveryMode::Exam)
-				{
-					ExpiredInExam = StepIndex;
-					break;
-				}
-			}
-
-			// Recorded only once a hint is actually given. Exam leaves above without giving one, and
-			// a hint level it never showed was being reported as a hint taken - and charged for.
-			HintLevelReached[StepIndex] = WantedLevel;
-
-			if (OnHintEscalated)
-			{
-				OnHintEscalated(StepIndex, WantedLevel);
-			}
-		}
-	}
-
-	if (ExpiredInExam != INDEX_NONE)
-	{
-		Fail(ExpiredInExam, EFXR_FailReason::Timeout);
+		RecordMistake(NAME_None, EFXR_MistakeKind::Timeout, FText::GetEmpty());
+		Fail(Current, EFXR_FailReason::Timeout);
 	}
 }
 
 void FFXR_StepRunner::Fail(int32 StepIndex, EFXR_FailReason Reason)
 {
-	// A run is judged once. Two routes to failure arriving in the same frame must not report twice.
+	// A run is judged once. Two routes to failure in the same frame must not report twice.
 	if (!bRunning)
 	{
 		return;
@@ -372,13 +263,14 @@ void FFXR_StepRunner::Fail(int32 StepIndex, EFXR_FailReason Reason)
 	FailedStep = StepIndex;
 	FailReason = Reason;
 
-	// Closed, but not Complete. The step is left Active because that is what it was - open, and
-	// never finished - while the close time is recorded because the run did end on it, and the
-	// seconds it was open are the whole finding.
+	// Closed, but not Complete. The step is left Active because that is what it was - open, and never
+	// finished - while the close time is recorded because the run ended on it.
 	if (ClosedAt.IsValidIndex(StepIndex))
 	{
 		ClosedAt[StepIndex] = Elapsed;
 	}
+
+	Current = INDEX_NONE;
 
 	if (OnFinished)
 	{
