@@ -41,9 +41,6 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float DurationSeconds = 0.f;
 
-	/** Hint escalations consumed. Non-zero means they were slow enough to need prompting. */
-	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
-	int32 HintsUsed = 0;
 
 	/** Mistakes made while this step was open. The per-step number is the interesting one. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
@@ -75,9 +72,6 @@ struct FFXR_ScoringWeights
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0"))
 	float Timeout = 5.f;
 
-	/** Per hint escalation consumed. Zero if being prompted should not cost anything. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0"))
-	float PerHint = 2.f;
 };
 
 /**
@@ -109,7 +103,7 @@ struct FFXR_SessionReport
 	FText CourseName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
-	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Guided;
+	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Training;
 
 	/** What the run amounted to. See EFXR_SessionOutcome for why this is not a bool. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
@@ -144,8 +138,6 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 StepsTotal = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
-	int32 HintsUsed = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_StepRecord> Steps;

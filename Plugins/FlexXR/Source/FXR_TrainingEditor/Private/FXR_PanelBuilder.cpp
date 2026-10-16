@@ -927,6 +927,51 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			Slot->SetVerticalAlignment(VAlign_Center);
 		}
 
+		// The tick a finished Training run shows in place of the score - Training cannot go wrong,
+		// so there is nothing to grade. Two strokes rather than a glyph: Montserrat has no check
+		// mark (read off its cmap), and two rounded bars are a tick in any typeface. The points,
+		// relative to the ring's centre, are (-30,0) to (-8,22) to (34,-22); each bar is its segment
+		// plus its own thickness long, so the round caps meet in a rounded joint.
+		UOverlay* Tick = New<UOverlay>(Tree, TEXT("ScoreTick"));
+		{
+			struct FStroke
+			{
+				float Length;
+				FVector2D Centre;
+				float Angle;
+			};
+
+			const FStroke Strokes[] = {
+				{ 45.f, FVector2D(-19.f, 11.f), 45.f },
+				{ 75.f, FVector2D(13.f, 0.f), -46.3f },
+			};
+
+			for (const FStroke& Stroke : Strokes)
+			{
+				FSlateBrush Brush = Pill(Green());
+				Brush.ImageSize = FVector2D(Stroke.Length, 14.f);
+
+				UImage* Bar = New<UImage>(Tree);
+				Bar->SetBrush(Brush);
+				Bar->SetRenderTransform(FWidgetTransform(Stroke.Centre, FVector2D(1.f, 1.f), FVector2D::ZeroVector, Stroke.Angle));
+
+				if (UOverlaySlot* BarSlot = Tick->AddChildToOverlay(Bar))
+				{
+					BarSlot->SetHorizontalAlignment(HAlign_Center);
+					BarSlot->SetVerticalAlignment(VAlign_Center);
+				}
+			}
+		}
+
+		// The runtime panel decides when it shows; until then it is not there.
+		Tick->SetVisibility(ESlateVisibility::Collapsed);
+
+		if (UOverlaySlot* Slot = RingStack->AddChildToOverlay(Tick))
+		{
+			Slot->SetHorizontalAlignment(HAlign_Fill);
+			Slot->SetVerticalAlignment(VAlign_Fill);
+		}
+
 		Stack(Body, RingBox, FMargin(0.f), false, HAlign_Center);
 
 		Stack(Body, Label(Tree, TEXT("CompleteEyebrowLabel"), TypeEyebrow(), Green(),
@@ -946,8 +991,6 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		DefRow(Tree, Defs, NSLOCTEXT("FlexXR", "PanelSteps", "Steps"), TEXT("ResultStepsValue"));
 		DefRule(Tree, Defs);
 		DefRow(Tree, Defs, NSLOCTEXT("FlexXR", "PanelMistakes", "Mistakes"), TEXT("ResultMistakesValue"));
-		DefRule(Tree, Defs);
-		DefRow(Tree, Defs, NSLOCTEXT("FlexXR", "PanelHints", "Hints taken"), TEXT("ResultHintsValue"));
 		DefRule(Tree, Defs);
 		DefRow(Tree, Defs, NSLOCTEXT("FlexXR", "PanelTime", "Time"), TEXT("ResultTimeValue"));
 

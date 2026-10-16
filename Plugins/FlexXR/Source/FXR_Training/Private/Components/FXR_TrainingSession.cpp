@@ -1,9 +1,13 @@
 // Copyright (c) 2026 Low Sze Hao. All rights reserved.
 
 #include "Components/FXR_TrainingSession.h"
-#include "Graph/FXR_StepGraph.h"
+
+#include "Data/FXR_TrainingSteps.h"
 #include "Detection/FXR_InteractionSubsystem.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Events/FXR_EventBus.h"
+#include "GameFramework/Actor.h"
 #include "Highlight/FXR_HighlightSubsystem.h"
 #include "Interactable/FXR_InteractableBase.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -57,33 +61,267 @@ void UFXR_TrainingSession::TickComponent(float DeltaTime, ELevelTick TickType, F
 	Runner.Tick(DeltaTime);
 }
 
+const UFXR_TrainingSteps* UFXR_TrainingSession::GetStepsAsset() const
+{
+	return GM ? GM->Steps.Get() : nullptr;
+}
+
 UFXR_InteractableBase* UFXR_TrainingSession::ResolveTarget(FName InteractionId) const
 {
 	const UFXR_InteractionSubsystem* Registry = UFXR_InteractionSubsystem::Get(this);
 	return Registry ? Registry->FindByInteractionId(InteractionId) : nullptr;
 }
 
-void UFXR_TrainingSession::LockAllGatedSteps()
+UFXR_TrainingSession* UFXR_TrainingSession::FindInWorld(const UObject* WorldContextObject)
 {
-	for (const FFXR_CompiledStep& Step : Runner.GetSteps())
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
 	{
-		if (!Step.bHardLock)
+		return nullptr;
+	}
+
+	UFXR_TrainingSession* First = nullptr;
+	int32 Found = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (UFXR_TrainingSession* Candidate = It->FindComponentByClass<UFXR_TrainingSession>())
+		{
+			++Found;
+			if (!First)
+			{
+				First = Candidate;
+			}
+		}
+	}
+
+	// One session is the ordinary case. Two is a decision nothing here is entitled to make silently.
+	if (Found > 1)
+	{
+		UE_LOG(LogFXRTraining, Warning,
+			TEXT("Found %d training sessions and used the first. Call it on the session you mean instead."), Found);
+	}
+
+	return First;
+}
+
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+// Running
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+
+void UFXR_TrainingSession::StartSession()
+{
+	if (!GM)
+	{
+		UE_LOG(LogFXRTraining, Warning, TEXT("%s has no GM assigned; nothing to run."), *GetOwner()->GetName());
+		return;
+	}
+
+	TArray<FFXR_CompiledStep> Compiled;
+	TArray<FString> Errors;
+	const bool bRunnable = GM->Compile(Compiled, StepEvents, Errors);
+
+	for (const FString& Error : Errors)
+	{
+		UE_LOG(LogFXRTraining, Warning, TEXT("%s: %s"), *GM->GetName(), *Error);
+	}
+
+	if (!bRunnable)
+	{
+		UE_LOG(LogFXRTraining, Error, TEXT("%s cannot run; see the warnings above."), *GM->GetName());
+		return;
+	}
+
+	ValidateEvents(Compiled);
+	ReleaseAll();
+
+	// Bound before Start, because Start opens the first step and that callback is what fires it.
+	Runner.OnStepActivated = [this](int32 StepIndex)
+	{
+		FireStepEvents(StepIndex);
+		SetGuidance(StepIndex, true);
+
+		const FName StepId = Runner.GetSteps()[StepIndex].StepId;
+		const UFXR_TrainingSteps* Steps = GetStepsAsset();
+		const FFXR_StepInfo* Info = Steps ? Steps->FindStep(StepId) : nullptr;
+		OnStepActivated.Broadcast(StepId, Info ? Info->Instruction : FText::GetEmpty());
+	};
+
+	Runner.OnStepCompleted = [this](int32 StepIndex)
+	{
+		SetGuidance(StepIndex, false);
+		OnStepCompleted.Broadcast(Runner.GetSteps()[StepIndex].StepId, FText::GetEmpty());
+	};
+
+	Runner.OnMistake = [this](const FFXR_Mistake& Mistake)
+	{
+		OnMistake.Broadcast(Mistake);
+	};
+
+	Runner.OnFinished = [this]()
+	{
+		// Built before the highlight comes down, so the report describes the run and not the cleanup.
+		const FFXR_SessionReport Report = BuildReport();
+		ReleaseAll();
+		OnSessionFinished.Broadcast(Report);
+	};
+
+	// Exam opens what it was told to before the first step arrives, so that step's own events land
+	// on the world the rest of the run will see.
+	if (Mode == EFXR_DeliveryMode::Exam)
+	{
+		FireExamStartEvents();
+	}
+
+	Runner.Start(MoveTemp(Compiled), Mode, GetMaxMistakes());
+}
+
+void UFXR_TrainingSession::StopSession()
+{
+	Runner.Stop();
+	ReleaseAll();
+}
+
+bool UFXR_TrainingSession::CompleteStep(FName StepId)
+{
+	return Runner.CompleteStep(StepId);
+}
+
+void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_TrainingSession_HandleBusEvent);
+	Runner.HandleEvent(Event);
+}
+
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+// The GM's events
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+
+void UFXR_TrainingSession::FireStepEvents(int32 StepIndex)
+{
+	if (!StepEvents.IsValidIndex(StepIndex))
+	{
+		return;
+	}
+
+	for (const FFXR_StepAction& Action : StepEvents[StepIndex])
+	{
+		// Already fired when the run began.
+		if (Mode == EFXR_DeliveryMode::Exam && Action.bAutoStartInExam)
 		{
 			continue;
 		}
 
-		for (const FFXR_CompiledTransition& Transition : Step.Transitions)
+		FireEvent(Action);
+	}
+}
+
+void UFXR_TrainingSession::FireExamStartEvents()
+{
+	for (const TArray<FFXR_StepAction>& Events : StepEvents)
+	{
+		for (const FFXR_StepAction& Action : Events)
 		{
-			if (UFXR_InteractableBase* Target = ResolveTarget(Transition.InteractionId))
+			if (Action.bAutoStartInExam)
 			{
-				Target->SetInteractionEnabled(false);
-				LockedIds.Add(Transition.InteractionId);
+				FireEvent(Action);
 			}
 		}
 	}
 }
 
-void UFXR_TrainingSession::ApplyStepPresentation(int32 StepIndex, bool bOpen)
+void UFXR_TrainingSession::FireEvent(const FFXR_StepAction& Action) const
+{
+	UWorld* World = GetWorld();
+	UClass* Class = Action.Blueprint.LoadSynchronous();
+	if (!World || !Class || Action.EventName.IsNone())
+	{
+		return; // reported once by ValidateEvents rather than on every firing
+	}
+
+	UFunction* Function = Class->FindFunctionByName(Action.EventName);
+	if (!Function || Function->NumParms > 0)
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> It(World, Class); It; ++It)
+	{
+		if (!Action.Tag.IsNone() && !It->ActorHasTag(Action.Tag))
+		{
+			continue;
+		}
+
+		It->ProcessEvent(Function, nullptr);
+	}
+}
+
+void UFXR_TrainingSession::ValidateEvents(const TArray<FFXR_CompiledStep>& Steps) const
+{
+	const UWorld* World = GetWorld();
+
+	for (int32 StepIndex = 0; StepIndex < StepEvents.Num(); ++StepIndex)
+	{
+		const FString Step = Steps.IsValidIndex(StepIndex) ? Steps[StepIndex].StepId.ToString() : FString::FromInt(StepIndex);
+
+		for (const FFXR_StepAction& Action : StepEvents[StepIndex])
+		{
+			if (Action.Blueprint.IsNull())
+			{
+				UE_LOG(LogFXRTraining, Warning, TEXT("%s, step '%s': an event has no Blueprint set."), *GM->GetName(), *Step);
+				continue;
+			}
+
+			UClass* Class = Action.Blueprint.LoadSynchronous();
+			if (!Class)
+			{
+				UE_LOG(LogFXRTraining, Warning, TEXT("%s, step '%s': %s could not be loaded."),
+					*GM->GetName(), *Step, *Action.Blueprint.ToString());
+				continue;
+			}
+
+			const UFunction* Function = Action.EventName.IsNone() ? nullptr : Class->FindFunctionByName(Action.EventName);
+			if (!Function)
+			{
+				UE_LOG(LogFXRTraining, Warning, TEXT("%s, step '%s': %s has no event '%s'."),
+					*GM->GetName(), *Step, *Class->GetName(), *Action.EventName.ToString());
+				continue;
+			}
+
+			if (Function->NumParms > 0)
+			{
+				UE_LOG(LogFXRTraining, Warning, TEXT("%s, step '%s': %s.%s takes inputs, and the GM can only call events that take none."),
+					*GM->GetName(), *Step, *Class->GetName(), *Action.EventName.ToString());
+				continue;
+			}
+
+			int32 Matches = 0;
+			if (World)
+			{
+				for (TActorIterator<AActor> It(World, Class); It; ++It)
+				{
+					if (Action.Tag.IsNone() || It->ActorHasTag(Action.Tag))
+					{
+						++Matches;
+					}
+				}
+			}
+
+			if (Matches == 0)
+			{
+				UE_LOG(LogFXRTraining, Warning, TEXT("%s, step '%s': there is no %s in this level%s, so '%s' reaches nothing."),
+					*GM->GetName(), *Step, *Class->GetName(),
+					Action.Tag.IsNone() ? TEXT("") : *FString::Printf(TEXT(" tagged '%s'"), *Action.Tag.ToString()),
+					*Action.EventName.ToString());
+			}
+		}
+	}
+}
+
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+// Training's highlight
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+
+void UFXR_TrainingSession::SetGuidance(int32 StepIndex, bool bOn)
 {
 	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
 	if (!Steps.IsValidIndex(StepIndex))
@@ -91,49 +329,33 @@ void UFXR_TrainingSession::ApplyStepPresentation(int32 StepIndex, bool bOpen)
 		return;
 	}
 
-	const FFXR_CompiledStep& Step = Steps[StepIndex];
 	UFXR_HighlightSubsystem* Highlight = UFXR_HighlightSubsystem::Get(this);
-
-	// Hints are a presentation decision; whether the step is open is not. Exam runs light nothing up
-	// and still score identically.
-	const bool bWantHighlight = bOpen && bHighlightCurrentStep && Runner.ShouldShowHints();
-
-	for (const FFXR_CompiledTransition& Transition : Step.Transitions)
+	if (!Highlight)
 	{
-		UFXR_InteractableBase* Target = ResolveTarget(Transition.InteractionId);
+		return;
+	}
+
+	// Exam shows no hints, and the highlight is the loudest one there is.
+	const bool bWant = bOn && bHighlightCurrentStep && Mode == EFXR_DeliveryMode::Training;
+
+	for (const FName Id : Steps[StepIndex].Objects)
+	{
+		UFXR_InteractableBase* Target = ResolveTarget(Id);
 		if (!Target)
 		{
 			continue;
 		}
 
-		if (Step.bHardLock)
+		const bool bAlready = GuidedIds.Contains(Id);
+		if (bWant && !bAlready)
 		{
-			// Opt-in interlock: open the way while the step is live, close it again after. This is
-			// the same switch a game uses for a cutscene, and the only place training touches state.
-			Target->SetInteractionEnabled(bOpen);
-			if (bOpen)
-			{
-				LockedIds.Remove(Transition.InteractionId);
-			}
-			else
-			{
-				LockedIds.Add(Transition.InteractionId);
-			}
+			Highlight->SetGuidance(Target, true);
+			GuidedIds.Add(Id);
 		}
-
-		if (Highlight)
+		else if (!bWant && bAlready)
 		{
-			const bool bAlready = GuidedIds.Contains(Transition.InteractionId);
-			if (bWantHighlight && !bAlready)
-			{
-				Highlight->SetGuidance(Target, true);
-				GuidedIds.Add(Transition.InteractionId);
-			}
-			else if (!bWantHighlight && bAlready)
-			{
-				Highlight->SetGuidance(Target, false);
-				GuidedIds.Remove(Transition.InteractionId);
-			}
+			Highlight->SetGuidance(Target, false);
+			GuidedIds.Remove(Id);
 		}
 	}
 }
@@ -153,114 +375,27 @@ void UFXR_TrainingSession::ReleaseAll()
 		}
 	}
 	GuidedIds.Reset();
-
-	// Only ever re-enable what this session closed. Anything disabled for its own reasons stays that way.
-	for (const FName Id : LockedIds)
-	{
-		if (UFXR_InteractableBase* Target = ResolveTarget(Id))
-		{
-			Target->SetInteractionEnabled(true);
-		}
-	}
-	LockedIds.Reset();
 }
 
-void UFXR_TrainingSession::StartSession()
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+// Reading the run
+// ───────────────────────────────────────────────────────────────────────────────────────────────
+
+FName UFXR_TrainingSession::GetCurrentStepId() const
 {
-	if (!Graph)
-	{
-		UE_LOG(LogFXRTraining, Warning, TEXT("No step graph assigned; nothing to run."));
-		return;
-	}
-
-	TArray<FFXR_CompiledStep> Compiled;
-	TArray<FString> Errors;
-	int32 EntryIndex = INDEX_NONE;
-	const bool bRunnable = Graph->Compile(Compiled, EntryIndex, Errors);
-
-	for (const FString& Error : Errors)
-	{
-		UE_LOG(LogFXRTraining, Warning, TEXT("%s: %s"), *Graph->GetName(), *Error);
-	}
-
-	if (!bRunnable)
-	{
-		UE_LOG(LogFXRTraining, Error, TEXT("%s cannot run; see the warnings above."), *Graph->GetName());
-		return;
-	}
-
-	ReleaseAll();
-
-	// Bound before Start, because Start opens the entry step and that callback is what presents it.
-	Runner.OnStepActivated = [this](int32 StepIndex)
-	{
-		ApplyStepPresentation(StepIndex, true);
-		const FFXR_CompiledStep& Step = Runner.GetSteps()[StepIndex];
-		const FFXR_StepDefinition* Authored = Graph ? Graph->Steps.FindByPredicate(
-			[&Step](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == Step.StepId; }) : nullptr;
-		OnStepActivated.Broadcast(Step.StepId, Authored ? Authored->Instruction : FText::GetEmpty());
-	};
-
-	Runner.OnStepCompleted = [this](int32 StepIndex)
-	{
-		ApplyStepPresentation(StepIndex, false);
-		OnStepCompleted.Broadcast(Runner.GetSteps()[StepIndex].StepId, FText::GetEmpty());
-	};
-
-	Runner.OnMistake = [this](const FFXR_Mistake& Mistake)
-	{
-		OnMistake.Broadcast(Mistake);
-	};
-
-	Runner.OnHintEscalated = [this](int32 StepIndex, int32 /*HintLevel*/)
-	{
-		// Practice mode stays quiet until something goes wrong, and a timeout counts, so the
-		// presentation is re-evaluated rather than assumed unchanged.
-		ApplyStepPresentation(StepIndex, true);
-	};
-
-	Runner.OnFinished = [this]()
-	{
-		// Built before the locks come off, so the report reflects the run and not the cleanup.
-		const FFXR_SessionReport Report = BuildReport();
-		ReleaseAll();
-		OnSessionFinished.Broadcast(Report);
-	};
-	Runner.Start(MoveTemp(Compiled), EntryIndex, Mode, GetMaxMistakes());
-	LockAllGatedSteps();
-
-	// The entry step opened during Start, before the locks went on, so give it back its way through.
-	for (const int32 StepIndex : Runner.GetActiveSteps())
-	{
-		ApplyStepPresentation(StepIndex, true);
-	}
-}
-
-void UFXR_TrainingSession::StopSession()
-{
-	Runner.Stop();
-	ReleaseAll();
+	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
+	return Steps.IsValidIndex(Runner.GetCurrentStep()) ? Steps[Runner.GetCurrentStep()].StepId : NAME_None;
 }
 
 TArray<FName> UFXR_TrainingSession::GetActiveStepIds() const
 {
 	TArray<FName> Out;
-	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
-	Out.Reserve(Runner.GetActiveSteps().Num());
-	for (const int32 Index : Runner.GetActiveSteps())
+	const FName Current = GetCurrentStepId();
+	if (!Current.IsNone())
 	{
-		if (Steps.IsValidIndex(Index))
-		{
-			Out.Add(Steps[Index].StepId);
-		}
+		Out.Add(Current);
 	}
 	return Out;
-}
-
-void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
-{
-	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_TrainingSession_HandleBusEvent);
-	Runner.HandleEvent(Event);
 }
 
 int32 UFXR_TrainingSession::GetStepsCompleted() const
@@ -279,43 +414,34 @@ int32 UFXR_TrainingSession::GetStepsCompleted() const
 
 FText UFXR_TrainingSession::GetActiveInstruction() const
 {
-	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
-	const TArray<int32>& Active = Runner.GetActiveSteps();
-	if (!Graph || Active.IsEmpty() || !Steps.IsValidIndex(Active[0]))
-	{
-		return FText::GetEmpty();
-	}
-
-	// Instructions live with the authoring, not the runtime, so they are looked up by name here for
-	// the same reason the report reads display names back out.
-	const FName StepId = Steps[Active[0]].StepId;
-	const FFXR_StepDefinition* Authored = Graph->Steps.FindByPredicate(
-		[StepId](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == StepId; });
-
-	return Authored ? Authored->Instruction : FText::GetEmpty();
+	const UFXR_TrainingSteps* Steps = GetStepsAsset();
+	const FFXR_StepInfo* Info = Steps ? Steps->FindStep(GetCurrentStepId()) : nullptr;
+	return Info ? Info->Instruction : FText::GetEmpty();
 }
 
 FText UFXR_TrainingSession::GetProcedureName() const
 {
-	if (!Graph)
+	const UFXR_TrainingSteps* Steps = GetStepsAsset();
+	if (!Steps)
 	{
 		return FText::GetEmpty();
 	}
 
-	// An unnamed graph is far more likely to be unfinished authoring than a deliberate choice, and
-	// a blank title on a wall reads as a bug. The asset name is a poor title and a useful one.
-	return Graph->DisplayName.IsEmpty() ? FText::FromName(Graph->GetFName()) : Graph->DisplayName;
+	// An unnamed procedure is far more likely to be unfinished authoring than a choice, and a blank
+	// title on a wall reads as a bug. The asset name is a poor title and a useful one.
+	return Steps->DisplayName.IsEmpty() ? FText::FromName(Steps->GetFName()) : Steps->DisplayName;
 }
 
 FText UFXR_TrainingSession::GetCourseName() const
 {
-	return Graph ? Graph->CourseName : FText::GetEmpty();
+	const UFXR_TrainingSteps* Steps = GetStepsAsset();
+	return Steps ? Steps->CourseName : FText::GetEmpty();
 }
 
 FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 {
 	FFXR_SessionReport Report;
-	Report.GraphName = Graph ? Graph->GetFName() : NAME_None;
+	Report.GraphName = GM ? GM->GetFName() : NAME_None;
 	Report.ProcedureName = GetProcedureName();
 	Report.CourseName = GetCourseName();
 	Report.Mode = Runner.GetMode();
@@ -343,6 +469,7 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		Report.Outcome = EFXR_SessionOutcome::Stopped;
 	}
 
+	const UFXR_TrainingSteps* StepsAsset = GetStepsAsset();
 	const TArray<FFXR_CompiledStep>& Steps = Runner.GetSteps();
 	Report.StepsTotal = Steps.Num();
 	Report.Steps.Reserve(Steps.Num());
@@ -354,7 +481,6 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		Record.Status = Runner.GetStatus(Index);
 		Record.OpenedAtSeconds = Runner.GetStepOpenedAt(Index);
 		Record.ClosedAtSeconds = Runner.GetStepClosedAt(Index);
-		Record.HintsUsed = Runner.GetStepHintLevel(Index);
 		Record.MistakeCount = Runner.GetStepMistakeCount(Index);
 
 		if (Record.OpenedAtSeconds >= 0.f && Record.ClosedAtSeconds >= 0.f)
@@ -362,23 +488,16 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 			Record.DurationSeconds = Record.ClosedAtSeconds - Record.OpenedAtSeconds;
 		}
 
-		// The label lives with the authoring, not the runtime, so it is read back out here.
-		if (Graph)
+		if (const FFXR_StepInfo* Info = StepsAsset ? StepsAsset->FindStep(Record.StepId) : nullptr)
 		{
-			if (const FFXR_StepDefinition* Authored = Graph->Steps.FindByPredicate(
-				[&Record](const FFXR_StepDefinition& Candidate) { return Candidate.StepId == Record.StepId; }))
-			{
-				Record.DisplayName = Authored->DisplayName;
-				Record.Instruction = Authored->Instruction;
-			}
+			Record.DisplayName = Info->DisplayName;
+			Record.Instruction = Info->Instruction;
 		}
 
 		if (Record.Status == EFXR_StepStatus::Complete)
 		{
 			++Report.StepsCompleted;
 		}
-
-		Report.HintsUsed += Record.HintsUsed;
 	}
 
 	float Score = Scoring.StartingScore;
@@ -398,26 +517,19 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		}
 	}
 
-	Score -= Scoring.PerHint * static_cast<float>(Report.HintsUsed);
-
-	// The score is earned by finishing. Penalties alone never asked whether the run was done, so a
-	// run that failed on step one after a single slip scored 98 - and one stopped at once scored 100.
-	// A failed run now scores nothing, since partial credit on a failed exam is a mixed message; a
-	// stopped run is not a verdict and has no score either. A run still going keeps its provisional
-	// score, for anything watching it live.
+	// The score is earned by finishing, and it is an Exam measure: Training cannot go wrong, so the
+	// panel shows a tick there instead. A failed run scores nothing - partial credit on a failed exam
+	// is a mixed message - and a stopped run is not a verdict, so it has no score either. A run still
+	// going keeps its provisional score for anything watching it live.
 	const bool bEarned = Report.Outcome == EFXR_SessionOutcome::Completed
 		|| Report.Outcome == EFXR_SessionOutcome::InProgress;
 	Report.Score = bEarned ? FMath::Max(0.f, Score) : 0.f;
 
-	// Named after the step records exist, so the failed step's label comes from the same lookup
-	// rather than a second pass over the graph.
 	if (Report.Outcome == EFXR_SessionOutcome::Failed && Report.Steps.IsValidIndex(Runner.GetFailedStep()))
 	{
 		const FFXR_StepRecord& Failed = Report.Steps[Runner.GetFailedStep()];
 		Report.FailedStepId = Failed.StepId;
-		Report.FailedStepName = Failed.DisplayName.IsEmpty()
-			? FText::FromName(Failed.StepId)
-			: Failed.DisplayName;
+		Report.FailedStepName = Failed.DisplayName.IsEmpty() ? FText::FromName(Failed.StepId) : Failed.DisplayName;
 	}
 
 	return Report;

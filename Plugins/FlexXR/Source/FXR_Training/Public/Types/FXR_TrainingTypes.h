@@ -6,20 +6,29 @@
 #include "FXR_TrainingTypes.generated.h"
 
 /**
- * How much help the trainee gets. One graph, three dials: the procedure is authored once and the
- * mode decides what the session shows, never what it accepts. An Exam run and a Guided run score
- * the same actions identically, which is what makes the two comparable.
+ * How a procedure is run. The same two assets serve both: the steps the trainee reads, and the GM
+ * that says what happens at each one.
+ *
+ * Two modes rather than three. Guided and Practice differed only in when help appeared, and both
+ * let the trainee change the world ahead of the procedure - attach the part early, close the valve
+ * early - after which the steps and the world disagree. Teaching should not allow that, and
+ * assessment should record it. So one mode does each.
  */
 UENUM(BlueprintType)
 enum class EFXR_DeliveryMode : uint8
 {
-	/** Hints from the moment a step opens. Teaching. */
-	Guided,
+	/**
+	 * Teaching. The GM's events open each step's objects as the step arrives, so the trainee can
+	 * only do what the procedure is on. The highlight and every instruction are shown, timeouts do
+	 * nothing, and there is no score - a run that cannot go wrong has nothing to grade.
+	 */
+	Training,
 
-	/** Silent until something goes wrong, then help. Rehearsal. */
-	Practice,
-
-	/** No hints at all. Assessment. */
+	/**
+	 * Assessment. Events marked Auto Start In Exam fire when the run begins, so the objects are
+	 * open from the start and mistakes are possible. No hints, no instructions on the panel. A
+	 * critical step, a timeout, or reaching Max Mistakes fails the run.
+	 */
 	Exam
 };
 
@@ -27,7 +36,7 @@ enum class EFXR_DeliveryMode : uint8
 UENUM(BlueprintType)
 enum class EFXR_MistakeKind : uint8
 {
-	/** Did something the step author explicitly called out as wrong here. */
+	/** Touched an object that is not this step's - or one the step named, with its own message. */
 	WrongAction,
 
 	/** Did something that belongs to a step that has not opened yet. */
@@ -71,7 +80,10 @@ enum class EFXR_FailReason : uint8
 	Timeout,
 
 	/** An Exam run reached the session's Max Mistakes. */
-	TooManyMistakes
+	TooManyMistakes,
+
+	/** A mistake was made while a step marked Critical was open. */
+	CriticalMistake
 };
 
 /** Where a step sits in the run. */

@@ -4,13 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Data/FXR_TrainingGM.h"
 #include "Runtime/FXR_SessionReport.h"
 #include "Runtime/FXR_StepRunner.h"
 #include "Types/FXR_TrainingTypes.h"
 #include "FXR_TrainingSession.generated.h"
 
 class UFXR_InteractableBase;
-class UFXR_StepGraph;
+class UFXR_TrainingSteps;
 struct FFXR_InteractionEvent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FFXR_StepEvent, FName, StepId, FText, Instruction);
@@ -20,13 +21,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SessionFinishedEvent, FFXR_Sess
 /**
  * UFXR_TrainingSession — runs one procedure against the live world.
  *
- * The runner is the judge and deliberately cannot reach the world; this is the part that can. It
- * subscribes to the interaction event bus, feeds what arrives to the runner, and turns the runner's
- * answers back into things the player can see: the Guidance highlight on the step's target, and,
- * where an author has opted in, the interlock.
+ * Point it at a GM. As each step arrives it fires that step's custom events on the Blueprints the
+ * GM names - which is where objects are opened and closed, doors unlocked, sounds played - and, in
+ * Training, highlights the step's objects. It never decides a step is done: the project calls
+ * Complete Step from whatever event means "done". And it hands every interaction to the runner to
+ * be judged, which in Exam is what can fail the run.
  *
- * Drop it on a game mode, a manager actor, or the pawn. Nothing in FXR_Interaction knows it exists,
- * which is what lets a game ship the same interactables with no training module loaded at all.
+ * Drop it on a manager actor. Nothing in FXR_Interaction knows it exists, which is what lets a game
+ * ship the same interactables with no training module loaded at all.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_TRAINING_API UFXR_TrainingSession : public UActorComponent
@@ -40,13 +42,23 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Compile the graph and begin. Does nothing without a graph, and logs why. */
+	/** Compile the GM and begin at the first step. Does nothing without a GM, and logs why. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void StartSession();
 
-	/** End early. Any interaction this session locked is handed back unlocked. */
+	/** End early. Any highlight this session put up is taken down. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void StopSession();
+
+	/**
+	 * Finish the open step and move to the next. The Complete Step node calls this for you.
+	 *
+	 * With a Step Id, only that step can be finished, and only while it is open - wire an event that
+	 * fires every time something is grabbed and it still advances the procedure exactly once. With
+	 * no Step Id, it finishes whatever step is open. Returns whether a step was finished.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
+	bool CompleteStep(FName StepId);
 
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	bool IsRunning() const { return Runner.IsRunning(); }
@@ -54,23 +66,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	float GetElapsedSeconds() const { return Runner.GetElapsedSeconds(); }
 
-	/** How much help this run gives. A panel states the mode; it never offers to change it. */
+	/** Training or Exam. A panel states the mode; it never offers to change it. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	EFXR_DeliveryMode GetMode() const { return Mode; }
 
-	/** The mistake limit in force: Max Mistakes in Exam, zero in every other mode. */
+	/** The mistake limit in force: Max Mistakes in Exam, zero in Training. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	int32 GetMaxMistakes() const { return Mode == EFXR_DeliveryMode::Exam ? MaxMistakes : 0; }
 
-	/** The procedure's name, falling back to the asset's own so it is never nameless on a wall. */
+	/** The procedure's name, falling back to the Steps asset's own so it is never nameless on a wall. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetProcedureName() const;
 
-	/** The course this procedure belongs to, or empty for a standalone one. */
+	/** The course this procedure belongs to, or empty. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetCourseName() const;
 
-	/** Every step currently open. More than one means the procedure allows them in any order. */
+	/** The open step's id, or None before and after the run. */
+	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
+	FName GetCurrentStepId() const;
+
+	/** The open step as a one-entry list, or empty. Kept for layouts written against parallel steps. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	TArray<FName> GetActiveStepIds() const;
 
@@ -81,24 +97,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	int32 GetStepTotal() const { return Runner.GetSteps().Num(); }
 
-	/** How many of them are done. Cheap, for a panel; BuildReport is the whole picture. */
+	/** How many of them are done. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	int32 GetStepsCompleted() const;
 
-	/**
-	 * The instruction for the first step currently open, read back out of the authoring graph.
-	 * For a panel that appears part-way through a run, which otherwise has nothing to show until
-	 * the next step opens.
-	 */
+	/** The open step's instruction, from the Steps asset. For a panel that appears mid-run. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetActiveInstruction() const;
 
-	/**
-	 * Everything the run produced, built on demand. Safe to call mid-session for a live panel
-	 * and after it for the record; a step still open simply has no close time.
-	 */
+	/** Everything the run produced, built on demand. Safe mid-session for a live panel. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FFXR_SessionReport BuildReport() const;
+
+	/** The only session in the world, or null. Warns rather than picking when there are several. */
+	static UFXR_TrainingSession* FindInWorld(const UObject* WorldContextObject);
 
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
 	FFXR_StepEvent OnStepActivated;
@@ -113,61 +125,70 @@ public:
 	FFXR_SessionFinishedEvent OnSessionFinished;
 
 protected:
-	/** The procedure to run. */
+	/** What happens at each step - and, through it, the steps themselves. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
-	TObjectPtr<UFXR_StepGraph> Graph;
+	TObjectPtr<UFXR_TrainingGM> GM;
 
-	/** How much help. One graph, three dials; the run is scored the same either way. */
+	/** Training teaches one step at a time; Exam opens what the GM marks and judges. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
-	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Guided;
+	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Training;
 
 	/**
-	 * Exam only: the run fails on the mistake that reaches this many. Zero means no limit.
-	 *
-	 * Wrong actions and out-of-order actions count; a timeout already ends an Exam run by itself.
-	 * Shown only while Mode is Exam, because Guided and Practice exist to let people get things
-	 * wrong and learn from it.
+	 * Exam only: the run fails on the mistake that reaches this many. Zero means no limit. Timeouts
+	 * and mistakes on a Critical step fail the run by themselves and are not counted toward it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training",
 		meta = (ClampMin = "0", EditCondition = "Mode == EFXR_DeliveryMode::Exam", EditConditionHides))
 	int32 MaxMistakes = 0;
 
-	/** Start as soon as play begins. Clear it to drive the session from your own logic. */
+	/** Start as soon as play begins. Clear it to begin from the panel's Start screen or your own logic. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	bool bAutoStart = true;
 
 	/**
-	 * Put the Guidance highlight on the open step's target while hints are allowed. The highlight
-	 * system is asked for a semantic state, not an appearance, so this never decides what guidance
-	 * looks like.
+	 * Training only: put the Guidance highlight on the open step's objects. The highlight system is
+	 * asked for a semantic state, not an appearance, so this never decides what guidance looks like.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training",
+		meta = (EditCondition = "Mode == EFXR_DeliveryMode::Training", EditConditionHides))
 	bool bHighlightCurrentStep = true;
 
-	/** What a mistake costs. Expand to tune; the defaults are a starting point, not a standard. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
+	/** Exam: what a mistake costs. The defaults are a starting point, not a standard. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training",
+		meta = (EditCondition = "Mode == EFXR_DeliveryMode::Exam", EditConditionHides))
 	FFXR_ScoringWeights Scoring;
 
 private:
 	void HandleBusEvent(const FFXR_InteractionEvent& Event);
 
-	/** The interactable a step is authored against, via the registry. Null when nothing matches. */
+	/** The interactable with this id, via the registry. Null when nothing matches. */
 	UFXR_InteractableBase* ResolveTarget(FName InteractionId) const;
 
-	/** Guidance highlight and, for a hard-locked step, the interlock. */
-	void ApplyStepPresentation(int32 StepIndex, bool bOpen);
+	/** The step's own events, as it arrives. In Exam, those marked Auto Start In Exam are skipped. */
+	void FireStepEvents(int32 StepIndex);
 
-	/** Close every hard-locked interaction before the run starts. */
-	void LockAllGatedSteps();
+	/** Exam: every event marked Auto Start In Exam, before the first step arrives. */
+	void FireExamStartEvents();
 
-	/** Hand back everything this session touched, whatever state the run ended in. */
+	/** Call one event on every matching Blueprint in the level. */
+	void FireEvent(const FFXR_StepAction& Action) const;
+
+	/** Check every event against the level before the run, so a typo is found now rather than at step nine. */
+	void ValidateEvents(const TArray<FFXR_CompiledStep>& Steps) const;
+
+	/** Training's highlight on a step's objects. */
+	void SetGuidance(int32 StepIndex, bool bOn);
+
+	/** Take down everything this session put up, whatever state the run ended in. */
 	void ReleaseAll();
+
+	const UFXR_TrainingSteps* GetStepsAsset() const;
 
 	FFXR_StepRunner Runner;
 	FDelegateHandle BusHandle;
 
-	/** Ids this session disabled, so it only ever re-enables what it closed itself. */
-	TSet<FName> LockedIds;
+	/** Each compiled step's events, parallel to the runner's steps. Copied from the GM at start. */
+	TArray<TArray<FFXR_StepAction>> StepEvents;
 
 	/** Ids currently showing Guidance, so they can be cleared without re-resolving. */
 	TSet<FName> GuidedIds;

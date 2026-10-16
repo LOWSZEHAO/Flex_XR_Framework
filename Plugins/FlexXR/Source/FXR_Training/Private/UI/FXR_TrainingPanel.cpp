@@ -58,7 +58,6 @@ UFXR_TrainingPanel::UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializ
 	: Super(ObjectInitializer)
 {
 	DefaultMistakeMessage = NSLOCTEXT("FlexXR", "PanelDefaultMistake", "Wrong object.");
-	TimeoutMessage = NSLOCTEXT("FlexXR", "PanelTimeout", "Take your time. Look for the highlighted object.");
 }
 
 void UFXR_TrainingPanel::NativePreConstruct()
@@ -166,16 +165,19 @@ void UFXR_TrainingPanel::FillDesignPreview()
 
 #if WITH_EDITORONLY_DATA
 		const bool bFailed = bPreviewFailedRun;
+		const bool bTraining = bPreviewTrainingRun && !bPreviewFailedRun;
 #else
 		const bool bFailed = false;
+		const bool bTraining = false;
 #endif
+
+		Sample.Mode = bTraining ? EFXR_DeliveryMode::Training : EFXR_DeliveryMode::Exam;
 
 		if (bFailed)
 		{
 			Sample.Outcome = EFXR_SessionOutcome::Failed;
 			Sample.Score = 0.f;
 			Sample.StepsCompleted = 2;
-			Sample.HintsUsed = 0;
 			Sample.DurationSeconds = 130.f;
 			Sample.Mistakes.SetNum(3);
 			Sample.FailedStepName = INVTEXT("Pull the safety pin");
@@ -186,9 +188,8 @@ void UFXR_TrainingPanel::FillDesignPreview()
 			Sample.Outcome = EFXR_SessionOutcome::Completed;
 			Sample.Score = 92.f;
 			Sample.StepsCompleted = 5;
-			Sample.HintsUsed = 1;
 			Sample.DurationSeconds = 221.f;
-			Sample.Mistakes.SetNum(2);
+			Sample.Mistakes.SetNum(bTraining ? 0 : 2);
 		}
 
 		// RefreshComplete reads nothing but the report, so it can draw the sample as it is.
@@ -205,7 +206,7 @@ void UFXR_TrainingPanel::NativeConstruct()
 
 	if (!Session.IsValid())
 	{
-		BindToSession(FindSessionInWorld());
+		BindToSession(UFXR_TrainingSession::FindInWorld(this));
 	}
 	else
 	{
@@ -426,11 +427,6 @@ void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
 			? FText::Format(NSLOCTEXT("FlexXR", "PanelExamMistakeOf", "Mistake {0} of {1}"),
 				FText::AsNumber(Count), FText::AsNumber(Limit))
 			: FText::Format(NSLOCTEXT("FlexXR", "PanelExamMistake", "Mistake {0}"), FText::AsNumber(Count));
-	}
-	else if (Mistake.Kind == EFXR_MistakeKind::Timeout)
-	{
-		// Practice is the only mode that gets here: Guided ignores timeouts and Exam fails on them.
-		MistakeText = TimeoutMessage;
 	}
 	else
 	{
@@ -788,6 +784,10 @@ void UFXR_TrainingPanel::RefreshComplete()
 	const bool bFailed = Report.Outcome == EFXR_SessionOutcome::Failed;
 	const bool bPassed = Report.Outcome == EFXR_SessionOutcome::Completed;
 
+	// Training cannot go wrong, so it has nothing to grade: a finished run is a full green ring with
+	// a tick, which says "done" without pretending to be a score.
+	const bool bTrainingDone = bPassed && Report.Mode == EFXR_DeliveryMode::Training;
+
 	// The ring always means the score. Only its colour carries the verdict, so there is nothing to
 	// re-learn between a pass and a failure.
 	const FLinearColor Verdict = bFailed
@@ -803,7 +803,7 @@ void UFXR_TrainingPanel::RefreshComplete()
 	{
 		// Out of 100. Scoring Weights can start a run somewhere else, in which case the arc is
 		// still a fraction of 100 rather than of that starting score.
-		ScoreRing->SetValue(FMath::Clamp(Report.Score / 100.f, 0.f, 1.f));
+		ScoreRing->SetValue(bTrainingDone ? 1.f : FMath::Clamp(Report.Score / 100.f, 0.f, 1.f));
 		ScoreRing->SetSliderProgressColor(Verdict);
 	}
 
@@ -816,13 +816,18 @@ void UFXR_TrainingPanel::RefreshComplete()
 		ScoreLabel->SetColorAndOpacity(FSlateColor(VerdictText));
 	}
 
+	SetShown(ScoreLabel, !bTrainingDone);
+	SetShown(ScoreTick, bTrainingDone);
+
 	if (CompleteEyebrowLabel)
 	{
 		CompleteEyebrowLabel->SetText(bFailed
 			? NSLOCTEXT("FlexXR", "PanelFailed", "Procedure failed")
-			: (bPassed
-				? NSLOCTEXT("FlexXR", "PanelPassed", "Procedure complete")
-				: NSLOCTEXT("FlexXR", "PanelStopped", "Procedure stopped")));
+			: (bTrainingDone
+				? NSLOCTEXT("FlexXR", "PanelTrainingDone", "Training complete")
+				: (bPassed
+					? NSLOCTEXT("FlexXR", "PanelPassed", "Procedure complete")
+					: NSLOCTEXT("FlexXR", "PanelStopped", "Procedure stopped"))));
 		CompleteEyebrowLabel->SetColorAndOpacity(FSlateColor(VerdictText));
 	}
 
@@ -831,19 +836,33 @@ void UFXR_TrainingPanel::RefreshComplete()
 		CompleteTitleLabel->SetText(Report.ProcedureName);
 	}
 
-	// One line a passed run does not need. Only a failure has something to explain.
-	const bool bTooManyMistakes = Report.FailReason == EFXR_FailReason::TooManyMistakes;
+	// One line a passed run does not need. Only a failure has something to explain, and there are
+	// three ways to fail an exam.
+	FText Reason;
+	switch (Report.FailReason)
+	{
+	case EFXR_FailReason::TooManyMistakes:
+		Reason = FText::Format(NSLOCTEXT("FlexXR", "PanelFailedMistakes", "Too many mistakes: {0} of {1}."),
+			FText::AsNumber(Report.Mistakes.Num()), FText::AsNumber(Report.MistakeLimit));
+		break;
+	case EFXR_FailReason::CriticalMistake:
+		Reason = FText::Format(NSLOCTEXT("FlexXR", "PanelFailedCritical", "Critical mistake on \u201C{0}\u201D."),
+			Report.FailedStepName);
+		break;
+	case EFXR_FailReason::Timeout:
+		Reason = FText::Format(NSLOCTEXT("FlexXR", "PanelFailedReason", "Ran out of time on \u201C{0}\u201D."),
+			Report.FailedStepName);
+		break;
+	default:
+		break;
+	}
 
 	if (ReasonLabel)
 	{
-		ReasonLabel->SetText(bTooManyMistakes
-			? FText::Format(NSLOCTEXT("FlexXR", "PanelFailedMistakes", "Too many mistakes: {0} of {1}."),
-				FText::AsNumber(Report.Mistakes.Num()), FText::AsNumber(Report.MistakeLimit))
-			: FText::Format(NSLOCTEXT("FlexXR", "PanelFailedReason", "Ran out of time on “{0}”."),
-				Report.FailedStepName));
+		ReasonLabel->SetText(Reason);
 	}
 
-	SetShown(ReasonLabel, bFailed && (bTooManyMistakes || !Report.FailedStepName.IsEmpty()));
+	SetShown(ReasonLabel, bFailed && !Reason.IsEmpty());
 
 	if (ResultStepsValue)
 	{
@@ -855,11 +874,6 @@ void UFXR_TrainingPanel::RefreshComplete()
 	if (ResultMistakesValue)
 	{
 		ResultMistakesValue->SetText(MistakeCountText(Report.Mistakes.Num(), Report.MistakeLimit));
-	}
-
-	if (ResultHintsValue)
-	{
-		ResultHintsValue->SetText(FText::AsNumber(Report.HintsUsed));
 	}
 
 	if (ResultTimeValue)
@@ -1158,36 +1172,3 @@ FText UFXR_TrainingPanel::BuildSummaryText() const
 		FXR_PanelStyle::Clock(Report.DurationSeconds));
 }
 
-UFXR_TrainingSession* UFXR_TrainingPanel::FindSessionInWorld() const
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return nullptr;
-	}
-
-	UFXR_TrainingSession* First = nullptr;
-	int32 Found = 0;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (UFXR_TrainingSession* Candidate = It->FindComponentByClass<UFXR_TrainingSession>())
-		{
-			++Found;
-			if (!First)
-			{
-				First = Candidate;
-			}
-		}
-	}
-
-	// One session is the ordinary case and wiring a panel by hand is a step someone forgets. Two is
-	// a decision the panel is not entitled to make silently.
-	if (Found > 1)
-	{
-		UE_LOG(LogFXR, Warning,
-			TEXT("%s found %d training sessions and bound the first. Call Bind To Session to choose one."),
-			*GetName(), Found);
-	}
-
-	return First;
-}
