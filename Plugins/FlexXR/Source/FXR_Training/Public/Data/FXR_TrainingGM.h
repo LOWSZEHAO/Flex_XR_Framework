@@ -42,20 +42,6 @@ struct FXR_TRAINING_API FFXR_StepAction
 	bool bAutoStartInExam = false;
 };
 
-/** A message of its own for one wrong object. */
-USTRUCT(BlueprintType)
-struct FXR_TRAINING_API FFXR_WrongObjectMessage
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
-	FName InteractionId;
-
-	/** Shown in Training. Exam shows only "Mistake 1 of 3" - a message saying what went wrong is a hint. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
-	FText Message;
-};
-
 /** Everything that happens at one step. */
 USTRUCT(BlueprintType)
 struct FXR_TRAINING_API FFXR_GMStep
@@ -71,22 +57,17 @@ struct FXR_TRAINING_API FFXR_GMStep
 	TArray<FFXR_StepAction> Events;
 
 	/**
-	 * The Interaction Ids this step is about - the gun, or the stick and the socket it goes into.
+	 * The Interaction Ids of the objects this step is about - the gun, or the stick and the socket it
+	 * goes into. Not Step Ids: an Interaction Id names an object in the level, and one object can
+	 * belong to several steps.
 	 *
-	 * Never judged wrong while this step is open. Highlighted in Training. And what Exam judges
-	 * against: touching one before its step is out of order, and touching one after is ignored,
-	 * because procedures reuse things.
+	 * Two jobs. In Training they get the highlight. In Exam they are how the judge tells the right
+	 * object from a wrong one: touching one of these while its step is open is never a mistake,
+	 * touching one before its step is out of order, and touching one after is ignored, because
+	 * procedures reuse things. Leave a step's list empty and grabbing its object counts as wrong.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
-	TArray<FName> Objects;
-
-	/**
-	 * Optional messages for specific wrong objects while this step is open. Every exposed object
-	 * that is not this step's is already wrong without being listed - this only gives one a line
-	 * of its own instead of "Wrong object."
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "InteractionId"))
-	TArray<FFXR_WrongObjectMessage> WrongObjectMessages;
+	TArray<FName> StepObjects;
 
 	/** Exam: the run fails if this step is still open after this many seconds. Zero is no limit. Ignored in Training. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
