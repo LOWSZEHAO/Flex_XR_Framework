@@ -135,15 +135,19 @@ session by itself. `BP_FXR_Pawn` now carries one `FXR_WidgetPointer` per hand, w
 needs.
 
 **The SOP runtime (ADR-004, revised by ADR-011)**
-- `UFXR_TrainingSteps` - the procedure as the trainee reads it: ids, names, instructions, in order.
+- `UFXR_TrainingSteps` - the procedure as the trainee reads it: ids, names, instructions, in order. A step
+  may have **sub-steps** (id + line of text), done strictly in order.
 - `UFXR_TrainingGM` - what happens at each step: custom events to fire on Blueprints in the level (picked
   from a dropdown of each Blueprint's own events), the step's objects (Step Objects - Interaction Ids, not Step Ids), a timeout
-  and a Critical flag. Points at the Steps asset and picks its step ids from it.
+  and a Critical flag. Points at the Steps asset and picks its step ids from it. A step with sub-steps
+  is set up per sub-step instead, so each part opens its own objects.
 - **Complete Step** - a global Blueprint node the project wires to whatever event means "done". An
-  optional Step Id makes it advance only while that step is open.
+  optional Step Id makes it advance only while that step is open; while a step with sub-steps is open,
+  it ticks off the open sub-step (by its Sub Step Id), and the step finishes with the last.
 - `FFXR_StepRunner` - the judge. No UObject, no world, no tick group. Runs the steps in order, judges every
   exposed object against them, and in Exam fails the run on a critical step, a timeout or Max Mistakes.
-  It never changes the world and never decides a step is done.
+  It never changes the world and never decides a step is done. It sees sub-steps as ordinary entries in a
+  flat list; the session folds them back into steps. Covered by automation tests (`FlexXR.Training.*`).
 - `UFXR_TrainingSession` - the part that reaches the world. Fires the GM's events as steps arrive (and, in
   Exam, the ones marked Auto Start In Exam when the run begins), highlights the step's objects in Training,
   and checks every event against the level before the run starts.
@@ -537,7 +541,7 @@ Small and recorded so they are not rediscovered as mysteries.
 3. **See the new model run**, none of which has been played: Training gating step by step and the green
    ring with its tick; Exam opening Auto Start events at the start, judging every exposed object, failing on
    a Critical step, a timeout and Max Mistakes; the GM's two dropdowns; the start-of-run warnings for a bad
-   event name or a Blueprint not in the level.
+   event name or a Blueprint not in the level; sub-steps ticking in order and their rows on the panel.
 4. **The fire-safety demo.** Phase 4's actual deliverable, built on the GM.
 5. **Close the phase.** Quest smoke test, PR into `main`, tag.
 
@@ -545,7 +549,7 @@ Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); t
 confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
 design, approved 2026-10-09; the approved design built, the font bug fixed and Exam auto-fail
 implemented, 2026-10-11; the worked example, and the Guided flow run end to end in VR preview,
-2026-10-16; the GM redesign (ADR-011), built 2026-10-16.
+2026-10-16; the GM redesign (ADR-011), built 2026-10-16; sub-steps, built and unit-tested 2026-10-16.
 
 Phase 4 and 5 matter most for the portfolio: a training demo built entirely on the framework, and a
 performance case study, are what prove the thesis.
