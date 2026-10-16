@@ -289,7 +289,7 @@ namespace
 	 * UMG itself applies: the name, and then the class.
 	 *
 	 * Names the panel declares but this layout does not use are reported as a count rather than a
-	 * problem. They are deliberate: `ProgressLabel`, `ProgressFill` and the rest exist for
+	 * problem. They are deliberate: `InstructionLabel`, `ProgressFill` and the rest exist for
 	 * simpler layouts somebody else builds.
 	 */
 	void ReportBindings(UWidgetTree& Tree)
@@ -782,11 +782,6 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 
 		Stack(Body, Label(Tree, TEXT("StepTitleLabel"), TypeHeading(), Text(),
 			FText::GetEmpty(), LineHeading, true), FMargin(0.f, 10.f, 0.f, 0.f));
-
-		// The step's instruction - for a step with sub-steps, the sentence its rows add up to. The
-		// runtime collapses it for a step without any, whose instruction is its one row.
-		Stack(Body, Label(Tree, TEXT("InstructionLabel"), TypeInstruction(), Text2(),
-			FText::GetEmpty(), LineInstruction, true), FMargin(0.f, 8.f, 0.f, 0.f));
 
 		UScrollBox* Scroll = New<UScrollBox>(Tree, TEXT("StepScroll"));
 		Stack(Body, Scroll, FMargin(0.f, 26.f, 0.f, 0.f), true);

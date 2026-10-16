@@ -122,8 +122,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 	if (ExplainTimeLabel) { ExplainTimeLabel->SetText(INVTEXT("0:12")); }
 
 	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
-	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Pull the safety pin")); }
-	if (InstructionLabel) { InstructionLabel->SetText(INVTEXT("Grip the safety pin and pull it free of the handle.")); }
+	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Grip the safety pin and pull it free of the handle.")); }
 
 	// Left on whichever body the designer chose, so flipping ProcedureBodySwitcher previews Exam.
 	if (ExamProgressLabel) { ExamProgressLabel->SetText(INVTEXT("2 / 5")); }
@@ -170,12 +169,8 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		BuildMeter(Sample.Num());
 		RefreshMeter(Sample);
 
-		// Shown only on a page with parts, as at runtime: without them the instruction is the one row.
-		SetShown(InstructionLabel, !Open.SubSteps.IsEmpty());
-
-		const TArray<FFXR_SubStepRecord> Lines = PageLines(Open);
-		BuildRows(Lines);
-		RefreshRows(Lines);
+		BuildRows(Open.SubSteps);
+		RefreshRows(Open.SubSteps);
 	}
 
 	// ── Complete ────────────────────────────────────────────────────────────────────────────────
@@ -791,21 +786,15 @@ void UFXR_TrainingPanel::RefreshProcedure()
 	const int32 Open = Snapshot.Steps.IndexOfByPredicate(
 		[](const FFXR_StepRecord& Step) { return Step.Status == EFXR_StepStatus::Active; });
 
-	// The heading is the open step's short label: the title of its page.
+	// The heading is the open step's instruction: the title of its page.
 	if (StepTitleLabel)
 	{
 		StepTitleLabel->SetText(!Snapshot.Steps.IsValidIndex(Open)
 			? FText::GetEmpty()
-			: (Snapshot.Steps[Open].DisplayName.IsEmpty()
-				? Snapshot.Steps[Open].Instruction
-				: Snapshot.Steps[Open].DisplayName));
+			: (Snapshot.Steps[Open].Instruction.IsEmpty()
+				? FText::FromName(Snapshot.Steps[Open].StepId)
+				: Snapshot.Steps[Open].Instruction));
 	}
-
-	// Under the heading only on a page with parts. A step without any shows its instruction as its
-	// single row, and saying it twice would read as a mistake.
-	SetShown(InstructionLabel, Snapshot.Steps.IsValidIndex(Open)
-		&& !Snapshot.Steps[Open].SubSteps.IsEmpty()
-		&& !Snapshot.Steps[Open].Instruction.IsEmpty());
 
 	// The meter is the whole procedure, so its length is settled when a run starts.
 	if (MeterSegments.Num() != Snapshot.Steps.Num())
@@ -818,7 +807,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 	// The list is one step's page, so it is rebuilt when the open step changes. A sub-step being
 	// ticked off only restyles it.
 	const TArray<FFXR_SubStepRecord> Lines = Snapshot.Steps.IsValidIndex(Open)
-		? PageLines(Snapshot.Steps[Open])
+		? Snapshot.Steps[Open].SubSteps
 		: TArray<FFXR_SubStepRecord>();
 
 	if (Open != PageStep || Rows.Num() != Lines.Num())
@@ -952,22 +941,6 @@ void UFXR_TrainingPanel::RefreshComplete()
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 // The meter and the page
 // ───────────────────────────────────────────────────────────────────────────────────────────────
-
-TArray<FFXR_SubStepRecord> UFXR_TrainingPanel::PageLines(const FFXR_StepRecord& Step)
-{
-	if (!Step.SubSteps.IsEmpty())
-	{
-		return Step.SubSteps;
-	}
-
-	// A step without sub-steps is a page with one line - what to do - so every page reads the same
-	// way, heading and numbered rows, whether it has parts or not.
-	FFXR_SubStepRecord Line;
-	Line.SubStepId = Step.StepId;
-	Line.DisplayName = Step.Instruction.IsEmpty() ? Step.DisplayName : Step.Instruction;
-	Line.Status = Step.Status;
-	return { Line };
-}
 
 void UFXR_TrainingPanel::BuildMeter(int32 StepCount)
 {
@@ -1106,6 +1079,10 @@ void UFXR_TrainingPanel::BuildRows(const TArray<FFXR_SubStepRecord>& Lines)
 
 void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 {
+	// A step without sub-steps is its heading and nothing else. The list's card would still draw an
+	// empty outline, so the scroll holding it goes with it.
+	SetShown(StepScroll, !Lines.IsEmpty(), ESlateVisibility::Visible);
+
 	UWidget* ScrollTo = nullptr;
 
 	for (int32 Index = 0; Index < Rows.Num() && Lines.IsValidIndex(Index); ++Index)

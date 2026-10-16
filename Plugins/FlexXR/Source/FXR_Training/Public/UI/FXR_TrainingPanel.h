@@ -347,14 +347,13 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ExamMistakesValue;
 
-	/** The open step's short label — the heading. */
+	/** The heading: the open step's instruction. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StepTitleLabel;
 
 	/**
-	 * The open step's full instruction, under the heading - for a step with sub-steps, the sentence
-	 * its rows add up to. Collapsed for a step without sub-steps, whose instruction is already its
-	 * one row and would otherwise be said twice.
+	 * The open step's instruction again. The generated panel does not use this - its heading is the
+	 * instruction - and it is kept for a layout that wants the instruction somewhere of its own.
 	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> InstructionLabel;
@@ -368,7 +367,8 @@ protected:
 
 	/**
 	 * One page per step: filled with a row per sub-step of the open step, numbered from one. A step
-	 * without sub-steps is a page with a single row, its instruction.
+	 * without sub-steps has no rows - its heading is all there is to it - and the scroll around the
+	 * list is collapsed.
 	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepList;
@@ -544,14 +544,11 @@ private:
 	/** Colour the segments for these statuses. */
 	void RefreshMeter(const TArray<FFXR_StepRecord>& Steps);
 
-	/** One list row per line of the page on show. Called when the open step changes. */
+	/** One list row per sub-step of the page on show. Called when the open step changes. */
 	void BuildRows(const TArray<FFXR_SubStepRecord>& Lines);
 
-	/** Restyle the rows for these statuses. Called whenever they change. */
+	/** Restyle the rows for these statuses, and collapse the list when there are none. */
 	void RefreshRows(const TArray<FFXR_SubStepRecord>& Lines);
-
-	/** A step's page: its sub-steps, or - when it has none - one line, its instruction. */
-	static TArray<FFXR_SubStepRecord> PageLines(const FFXR_StepRecord& Step);
 
 	/**
 	 * Fill whichever screen the designer has the switcher on with the design page's own sample

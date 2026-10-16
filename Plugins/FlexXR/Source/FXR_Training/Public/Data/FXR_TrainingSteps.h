@@ -34,11 +34,7 @@ struct FFXR_StepInfo
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
-	/** The short label - the heading on the panel while this step is open. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
-	FText DisplayName;
-
-	/** What the trainee is asked to do, in their language - the step's row in the panel's list. */
+	/** What the trainee is asked to do, in their language - the heading of the step's page on the panel. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (MultiLine = "true"))
 	FText Instruction;
 
