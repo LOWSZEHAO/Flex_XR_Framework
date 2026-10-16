@@ -837,6 +837,24 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 
 ## Changelog
 
+**v0.17 — What each mode does with time and mistakes**
+- **Guided has no timeouts.** Its help is on from the moment a step opens, so a timeout there could
+  only add a mistake for being slow, and being slow while being taught is not a finding. `Timeout
+  Seconds` keeps its meaning in the other two: Practice records the mistake and turns the highlight
+  on, Exam fails the run.
+- **"Exam has no hints" covers the panel, not only the highlight.** The panel had been showing the
+  author's mistake message, which says what went wrong, and the full step list, which in an exam is
+  the answer sheet. In Exam the Procedure screen swaps to a second body - progress and the mistake
+  count, nothing about what the steps are - and a mistake reads "Mistake 1 of 3". Same panel, same
+  asset; the answers are simply not on it.
+- **Exam gains Max Mistakes**, on the session beside Mode and shown only when Mode is Exam. The
+  mistake that reaches it ends the run. Timeouts don't count: an Exam timeout already ends the run
+  on its own. It is never applied in Guided or Practice, which exist to let people get things wrong.
+- **A failed run says why.** The report carries a fail reason - timeout or too many mistakes - and
+  the limit it was held to, so the panel explains the verdict without knowing the rules.
+- **Practice timeouts get their own line**, pointing at the highlight Practice has just switched on.
+  The wrong-action fallback had been telling a trainee who did nothing that they did something.
+
 **v0.16 — The training panel, and what Exam mode costs**
 - The panel is **four screens in one asset** — Start, Explanation, Procedure, Complete — as children
   of one Widget Switcher, and **the screen is derived rather than set**. There is no state machine to

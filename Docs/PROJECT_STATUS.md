@@ -223,6 +223,9 @@ assumed, and each has a one-line reason:
   gives the list an edge.
 - *Line clamping.* UMG has no `line-clamp`. A closed row is one line that ellipses and the open row
   wraps freely, so a very long instruction grows its row rather than being cut at four lines.
+- *The score ring's start.* The page starts the arc at 12 o'clock; `URadialSlider`'s zero is at 6,
+  and it was kept there by choice on 2026-10-16 - it reads well. `AngularOffset = 180` in the
+  builder is the change if that is ever revisited.
 
 **Candidate-selection hysteresis.** Architecture §5.4 describes a sticky-best score bonus. It is
 **documented but never implemented**. All hysteresis in the codebase is on input thresholds (grab
@@ -429,9 +432,6 @@ Small and recorded so they are not rediscovered as mysteries.
   filled by the designer preview, and one wrong grab was counted as two mistakes. Both are fixed.
 - **The panel has been seen, in the designer and in VR preview, and the type was a third too big
   until it was.** The fixes are in §7. What still has to be judged by eye is in the next three.
-- **The score ring starts at 6 o'clock; the design starts at 12.** Seen in the designer:
-  `URadialSlider`'s zero is at the bottom and it runs clockwise from there. `AngularOffset = 180` in
-  the builder would match the page. Left alone pending a decision, since it reads well either way.
 - **Row heights are left to content rather than enforced.** The design gives a closed row a 60 px
   minimum and an open one 96 px. The numeral disc is 42 px and the padding brings a closed row to
   about 62, and an open row's wrapped text exceeds 96 on its own, so no `SizeBox` was spent on it -
@@ -525,22 +525,17 @@ Small and recorded so they are not rediscovered as mysteries.
 ## 9. Next actions, in order
 
 1. **Small tweaks to the example and the panel** - planned for 2026-10-17.
-2. **Four decisions waiting on the owner**, each small once made:
-   - **Exam shows wrong-action messages.** The Message field's own tooltip says it is shown only when
-     the mode allows a hint, and nothing enforces that, so an Exam run tells the trainee what they
-     did wrong - which is a hint. Show nothing in Exam, or only that something was wrong?
-   - **A timeout in Guided or Practice shows "Not that one."** A timeout carries no message, so the
-     panel falls back to its default and tells a slow trainee they did something wrong. It wants its
-     own line, or no line.
-   - **Should a wrong action also end an Exam run?** Only a timeout does today.
-   - **The score ring's start angle** (§8).
-3. **Exercise what the example did not.** Run it in **Exam** with a `Timeout Seconds` on a step and
-   let it fail; clear **Auto Start** and press **Begin** with the laser; press **Done** and
-   **Try again** on the report; poke the panel with a fingertip.
-4. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
+2. **See the mode rules run.** Decided and built 2026-10-16 (architecture v0.17), never seen in play:
+   in **Exam** the Procedure screen should show only `EXAM IN PROGRESS`, the progress figure and the
+   mistake count, and a mistake should read "Mistake 1 of 3"; set **Max Mistakes** and reach it; put
+   a `Timeout Seconds` on a step and let Exam fail on it; in **Practice** let a step time out and
+   check the new line and the highlight; in **Guided** confirm a timeout does nothing. Then the paths
+   the example skipped: clear **Auto Start** and press **Begin**, press **Done** and **Try again**,
+   poke the panel with a fingertip.
+3. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
    `Content/TrainingExample/` is the pattern to copy. Light that level for the device from the start
    rather than with the desktop template sky (§7).
-5. **Close the phase.** Quest smoke test (the standing rule from Phase 2 onward), PR into `main`, tag.
+4. **Close the phase.** Quest smoke test (the standing rule from Phase 2 onward), PR into `main`, tag.
 
 Done: Phase 3 closed, merged and tagged `v0.4-ui`; the Quest smoke test (§6); the guidance arrow,
 confirmed in-headset 2026-10-09; the SOP runtime, the spatial UI kit and the panel (§4); the panel
