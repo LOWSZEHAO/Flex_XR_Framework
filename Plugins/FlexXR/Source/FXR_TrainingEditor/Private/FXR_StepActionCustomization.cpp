@@ -70,8 +70,11 @@ void FFXR_StepActionCustomization::CustomizeChildren(TSharedRef<IPropertyHandle>
 	const TSharedPtr<IPropertyHandle> TagHandle = StructHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FFXR_StepAction, Tag));
 	const TSharedPtr<IPropertyHandle> AutoStartHandle =
 		StructHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FFXR_StepAction, bAutoStartInExam));
+	const TSharedPtr<IPropertyHandle> ExamOnlyHandle =
+		StructHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FFXR_StepAction, bExamOnly));
 
-	if (!BlueprintHandle.IsValid() || !EventHandle.IsValid() || !TagHandle.IsValid() || !AutoStartHandle.IsValid())
+	if (!BlueprintHandle.IsValid() || !EventHandle.IsValid() || !TagHandle.IsValid()
+		|| !AutoStartHandle.IsValid() || !ExamOnlyHandle.IsValid())
 	{
 		return;
 	}
@@ -106,6 +109,7 @@ void FFXR_StepActionCustomization::CustomizeChildren(TSharedRef<IPropertyHandle>
 		];
 
 	ChildBuilder.AddProperty(AutoStartHandle.ToSharedRef());
+	ChildBuilder.AddProperty(ExamOnlyHandle.ToSharedRef());
 }
 
 void FFXR_StepActionCustomization::RefreshOptions()

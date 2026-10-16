@@ -235,13 +235,10 @@ void UFXR_TrainingSession::FireEntryEvents(int32 EntryIndex)
 
 	for (const FFXR_StepAction& Action : StepEvents[EntryIndex])
 	{
-		// Already fired when the run began.
-		if (Mode == EFXR_DeliveryMode::Exam && Action.bAutoStartInExam)
+		if (Action.FiresOnArrival(Mode))
 		{
-			continue;
+			FireEvent(Action);
 		}
-
-		FireEvent(Action);
 	}
 }
 
@@ -251,7 +248,7 @@ void UFXR_TrainingSession::FireExamStartEvents()
 	{
 		for (const FFXR_StepAction& Action : Events)
 		{
-			if (Action.bAutoStartInExam)
+			if (Action.FiresAtExamStart())
 			{
 				FireEvent(Action);
 			}

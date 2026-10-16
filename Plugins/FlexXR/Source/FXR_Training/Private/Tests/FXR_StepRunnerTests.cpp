@@ -158,6 +158,46 @@ bool FFXR_StepRunnerStepTimeoutTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_StepActionTimingTest,
+	"FlexXR.Training.GM.EventTiming",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FFXR_StepActionTimingTest::RunTest(const FString& Parameters)
+{
+	auto Make = [](bool bAutoStart, bool bExamOnly)
+	{
+		FFXR_StepAction Action;
+		Action.bAutoStartInExam = bAutoStart;
+		Action.bExamOnly = bExamOnly;
+		return Action;
+	};
+
+	constexpr EFXR_DeliveryMode Training = EFXR_DeliveryMode::Training;
+	constexpr EFXR_DeliveryMode Exam = EFXR_DeliveryMode::Exam;
+
+	const FFXR_StepAction Plain = Make(false, false);
+	TestTrue(TEXT("Plain: Training fires it as its step arrives"), Plain.FiresOnArrival(Training));
+	TestTrue(TEXT("Plain: so does Exam"), Plain.FiresOnArrival(Exam));
+	TestFalse(TEXT("Plain: not at the start of an Exam"), Plain.FiresAtExamStart());
+
+	const FFXR_StepAction AutoStart = Make(true, false);
+	TestTrue(TEXT("Auto Start: Training fires it as its step arrives"), AutoStart.FiresOnArrival(Training));
+	TestFalse(TEXT("Auto Start: Exam does not fire it again at its step"), AutoStart.FiresOnArrival(Exam));
+	TestTrue(TEXT("Auto Start: Exam fires it at the start"), AutoStart.FiresAtExamStart());
+
+	const FFXR_StepAction ExamOnly = Make(false, true);
+	TestFalse(TEXT("Exam Only: Training never fires it"), ExamOnly.FiresOnArrival(Training));
+	TestTrue(TEXT("Exam Only: Exam fires it as its step arrives"), ExamOnly.FiresOnArrival(Exam));
+	TestFalse(TEXT("Exam Only: not at the start"), ExamOnly.FiresAtExamStart());
+
+	const FFXR_StepAction Decoy = Make(true, true);
+	TestFalse(TEXT("Both: Training never fires it"), Decoy.FiresOnArrival(Training));
+	TestFalse(TEXT("Both: Exam does not fire it at its step"), Decoy.FiresOnArrival(Exam));
+	TestTrue(TEXT("Both: Exam fires it at the start"), Decoy.FiresAtExamStart());
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_TrainingGMCompileSubStepsTest,
 	"FlexXR.Training.GM.CompilesSubSteps",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

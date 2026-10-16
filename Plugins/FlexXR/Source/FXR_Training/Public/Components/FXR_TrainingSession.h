@@ -185,7 +185,7 @@ private:
 	/** The interactable with this id, via the registry. Null when nothing matches. */
 	UFXR_InteractableBase* ResolveTarget(FName InteractionId) const;
 
-	/** An entry's own events, as it opens. In Exam, those marked Auto Start In Exam are skipped. */
+	/** An entry's own events, as it opens - those FFXR_StepAction::FiresOnArrival says belong to this mode. */
 	void FireEntryEvents(int32 EntryIndex);
 
 	/** Exam: every event marked Auto Start In Exam, before the first step arrives. */
