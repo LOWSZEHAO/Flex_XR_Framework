@@ -530,9 +530,10 @@ Small and recorded so they are not rediscovered as mysteries.
    mistake count, and a mistake should read "Mistake 1 of 3"; set **Max Mistakes** and reach it; put
    a `Timeout Seconds` on a step and let Exam fail on it; in **Practice** let a step time out and
    check the new line and the highlight; in **Guided** confirm a timeout does nothing. A failed run
-   should now score **0** with an empty red ring, and a stopped one show "—". Move the example's
-   Decoy from its two steps to the graph's **Always Wrong** list and confirm it still counts once,
-   at either step. Then the paths
+   should now score **0** with an empty red ring, and a stopped one show "—". Every exposed object is now
+   judged: grab one that isn't the open step's and see **Wrong object.**, re-grab the magazine after
+   step 1 and see nothing, and grab the weapon during step 1 and find it in the report as out of
+   order. Then the paths
    the example skipped: clear **Auto Start** and press **Begin**, press **Done** and **Try again**,
    poke the panel with a fingertip.
 3. **The fire-safety demo.** Phase 4's actual deliverable, and deliberately last: the framework first.
