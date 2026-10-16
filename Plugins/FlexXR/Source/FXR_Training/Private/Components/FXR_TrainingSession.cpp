@@ -565,7 +565,6 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 
 			if (const FFXR_StepInfo* Info = GetStepInfo(Entry))
 			{
-				Fresh.DisplayName = Info->DisplayName;
 				Fresh.Instruction = Info->Instruction;
 			}
 
@@ -650,7 +649,7 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 
 		const FFXR_StepInfo* Info = GetStepInfo(Failed);
 		Report.FailedStepId = Failed.StepId;
-		Report.FailedStepName = Info && !Info->DisplayName.IsEmpty() ? Info->DisplayName : FText::FromName(Failed.StepId);
+		Report.FailedStepName = Info && !Info->Instruction.IsEmpty() ? Info->Instruction : FText::FromName(Failed.StepId);
 
 		if (Failed.IsSubStep())
 		{

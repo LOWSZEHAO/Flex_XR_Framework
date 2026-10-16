@@ -46,9 +46,6 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
-	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
-	FText DisplayName;
-
 	/**
 	 * What the trainee was asked to do. Carried into the report because a finding needs the
 	 * question as well as the answer: "four of twelve reached for the handle first" only means
@@ -147,7 +144,7 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName FailedStepId;
 
-	/** That step's label, so a panel can name it without holding the graph. */
+	/** That step's instruction, so a panel can name it without holding the assets. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText FailedStepName;
 

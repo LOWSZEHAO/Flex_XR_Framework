@@ -204,7 +204,6 @@ namespace FXR_PanelStyle
 	inline FSlateFontInfo TypeTitle()      { return Type(56, FontExtraBold(), -28); }
 	inline FSlateFontInfo TypeHeading()    { return Type(40, FontExtraBold(), -24); }
 	inline FSlateFontInfo TypeBody()       { return Type(40, FontMedium()); }
-	inline FSlateFontInfo TypeInstruction(){ return Type(24, FontMedium()); }
 	inline FSlateFontInfo TypeReason()     { return Type(24, FontMedium()); }
 	inline FSlateFontInfo TypeCrumb()      { return Type(24, FontSemiBold()); }
 	inline FSlateFontInfo TypeStatus()     { return Type(22, FontMedium()); }
@@ -235,7 +234,6 @@ namespace FXR_PanelStyle
 	constexpr float LineRow       = 1.30f / NaturalLine;
 	constexpr float LineRowActive = 1.26f / NaturalLine;
 	constexpr float LineReason    = 1.40f / NaturalLine;
-	constexpr float LineInstruction = 1.40f / NaturalLine;
 	constexpr float LineMistake   = 1.20f / NaturalLine;
 	constexpr float LineHeading   = 1.10f / NaturalLine;
 	constexpr float LineTitle     = 1.06f / NaturalLine;
