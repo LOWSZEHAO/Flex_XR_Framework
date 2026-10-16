@@ -139,8 +139,9 @@ needs.
   may have **sub-steps** (id + line of text), done strictly in order.
 - `UFXR_TrainingGM` - what happens at each step: custom events to fire on Blueprints in the level (picked
   from a dropdown of each Blueprint's own events), the step's objects (Step Objects - Interaction Ids, not Step Ids), a timeout
-  and a Critical flag. Points at the Steps asset and picks its step ids from it. A step with sub-steps
-  is set up per sub-step instead, so each part opens its own objects.
+  and a Critical flag. Points at the Steps asset and picks its step ids from it. A step's sub-steps
+  sit under it in the GM, each with its own events, objects, timeout and Critical, so each part opens
+  its own objects; the step's own row applies across all of them.
 - **Complete Step** - a global Blueprint node the project wires to whatever event means "done". An
   optional Step Id makes it advance only while that step is open; while a step with sub-steps is open,
   it ticks off the open sub-step (by its Sub Step Id), and the step finishes with the last.
