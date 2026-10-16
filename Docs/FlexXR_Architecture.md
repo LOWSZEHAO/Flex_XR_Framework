@@ -845,7 +845,7 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 **v0.20 — Training gates, Exam judges (ADR-011)**
 - **The step graph is replaced by two assets.** `UFXR_TrainingSteps` holds what the trainee reads - ids,
   names, instructions, in order. `UFXR_TrainingGM` holds what happens: per step, custom events to fire on
-  Blueprints in the level, the step's objects, wrong-object messages, a timeout and a Critical flag. The GM
+  Blueprints in the level, the step's objects, a timeout and a Critical flag. The GM
   picks step ids from a dropdown of the Steps asset, and an event's name from a dropdown of the chosen
   Blueprint's own events, so neither can be mistyped. Compile reports any disagreement between the two.
 - **The project finishes a step**, with a global **Complete Step** node wired to whatever event means "done".
@@ -859,6 +859,11 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 - **Critical steps.** In Exam, any mistake made while a Critical step is open fails the run at once.
 - **Removed:** branching and fan-out, transitions and phases, Hard-lock, hint escalation and "Hints taken",
   Practice's timeout line. "Watch, don't gate" survives as Exam's rule rather than the layer's.
+- **No wrong-object messages.** Exam hides messages and Training gates objects, so a custom line for a
+  wrong object had nowhere left to appear; it was removed the same day. Every wrong object reads
+  "Wrong object." The step's objects are named **Step Objects** to keep them apart from Step Ids.
+- `FXR_Grab` gains **On Grabbed / On Released**, fired after the grab is reported to training, so a
+  grab wired to Complete Step is judged while its step is still open.
 - Old assets load through CoreRedirects: a step graph becomes a Steps asset with its names and
   instructions kept, and Guided or Practice becomes Training.
 
