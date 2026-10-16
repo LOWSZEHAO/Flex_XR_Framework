@@ -837,6 +837,23 @@ ADRs are the written answer to "can you explain your architecture?" — consider
 
 ## Changelog
 
+**v0.18 — The score is earned by finishing; wrongs are written once**
+- **A failed run scores 0.** The score had only ever been 100 minus penalties, and penalties never
+  ask whether the run was done: an Exam failed on step one after a single slip showed 98, and a run
+  stopped at once would have shown 100. Partial credit on a failed exam is a mixed message, so a
+  failure scores nothing. A **stopped** run is not a verdict and shows no score at all - "—" rather
+  than a zero that reads as one. A run still going keeps its provisional score for live consumers.
+- **Exam no longer records a hint it never gave.** The timeout path set the hint level before
+  checking for Exam, so a failed Exam reported "Hints taken 1" and charged for it.
+- **`Always Wrong` on the step graph.** A wrong action that holds at every step - the decoy, the
+  wrong extinguisher - is written once on the graph instead of on each step. It is folded into every
+  compiled step, so the runner never learns it exists; a step naming the same object keeps its own
+  message, and an object that is also some step's right answer is reported at compile time.
+- **No strict mode, on purpose.** "Anything not in the procedure is a mistake" was considered and
+  declined: in VR people pick things up idly, and counting every touch would punish curiosity
+  rather than error. Objects only report at all when Expose to Training is ticked, which is already
+  the author choosing what can count.
+
 **v0.17 — What each mode does with time and mistakes**
 - **Guided has no timeouts.** Its help is on from the moment a step opens, so a timeout there could
   only add a mistake for being slow, and being slow while being taught is not a finding. `Timeout
