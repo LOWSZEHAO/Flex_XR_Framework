@@ -9,20 +9,18 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_RayTargetEvent, EFXR_HandSide, Hand);
 
 /**
- * UFXR_RayTarget — "you can point at me from far away".
+ * UFXR_RayTarget - marks an object as something you can point at from a distance.
  *
- * Not a laser-grab component. The laser lives on the interactor as an FXR_Core service; this only
- * marks an object as answerable by it, and behaviour composes with whatever else is on the object:
- * alone it is select/focus ("point to the correct extinguisher"), and alongside FXR_Grab it becomes
- * the distance-grab target.
+ * The ray itself belongs to the interactor; this just marks the object as a valid target. On its
+ * own it gives select/focus ("point at the right extinguisher"); with FXR_Grab it becomes a
+ * distance-grab target.
  *
- * There is deliberately no ray-driven Latch: dragging a valve open by laser feels cheap and teaches
- * a trainee nothing. Ray-*selecting* a latch object is fine; ray-*driving* one is a game-side
- * custom interactable.
+ * There's no ray-driven Latch on purpose: opening a valve with a laser feels cheap and doesn't
+ * teach anything. Selecting a latch by ray is fine; driving one by ray would be a custom
+ * interactable in the game.
  *
- * Found by tracing the FXR_Interaction channel rather than by the registry (ADR-002): a far ray has
- * to respect occlusion and hit where the mesh actually is, which is exactly the mesh-accurate case
- * the channel is reserved for.
+ * Found by tracing the FXR_Interaction channel instead of through the registry (ADR-002), since
+ * a far ray has to respect occlusion and hit the actual mesh.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_RayTarget : public UFXR_InteractableBase
@@ -32,7 +30,7 @@ class FXR_INTERACTION_API UFXR_RayTarget : public UFXR_InteractableBase
 public:
 	UFXR_RayTarget();
 
-	/** Rays, not the grab sphere, find this — so it never competes with a hand reaching for something. */
+	/** Rays, not the grab sphere, find this - so it never competes with a hand reaching for something. */
 	virtual bool IsGrabTarget() const override { return false; }
 
 	/** Pointed at, never held. */

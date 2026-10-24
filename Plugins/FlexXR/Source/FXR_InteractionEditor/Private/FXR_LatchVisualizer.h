@@ -6,8 +6,8 @@
 #include "ComponentVisualizer.h"
 
 /**
- * Viewport gizmo for UFXR_Latch. Drawn from the latch component's own transform — pivot marker,
- * motion axis, and the Min..Max travel range (a line for Linear, a swing arc for Rotational) — so
+ * Viewport gizmo for UFXR_Latch. Drawn from the latch component's own transform - pivot marker,
+ * motion axis, and the Min..Max travel range (a line for Linear, a swing arc for Rotational) - so
  * it tracks the component when you move or rotate it. Also shows the grab activation sphere.
  */
 class FFXR_LatchVisualizer : public FComponentVisualizer

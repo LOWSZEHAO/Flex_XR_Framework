@@ -9,46 +9,28 @@
 #include "Styling/SlateTypes.h"
 
 /**
- * The training panel's design system, in one place.
+ * Design tokens for the training panel: colours, sizes, fonts and brushes.
  *
- * Both halves of the panel read from here: the editor builder that lays out the Widget Blueprint,
- * and the runtime panel that builds the step rows as the procedure runs. A token defined twice is a
- * token that will disagree with itself, and a row that does not match the list it sits in is the
- * most visible kind of wrong.
+ * Shared by the editor builder (which lays out the Widget Blueprint) and the runtime panel (which
+ * builds the rows during a run), so both always match.
  *
+ * Scale: Draw Size 900 x 870 at Panel Width 90 cm gives component scale 0.1, so 1 px = 1 mm. The
+ * sizes below are in those units. To make text bigger or smaller, move the panel closer or further
+ * rather than changing the 90 cm.
  *
- * THE ONE NUMBER EVERYTHING ELSE COMES FROM
+ * The reference mockup is UI_Design/panel.html, drawn at the same numbers.
  *
- *     Draw Size 900 x 870 px at Panel Width 90 cm  ->  component scale 0.1  ->  1 px = 1 mm
- *
- * That is why the sizes below are bare numbers and still mean something physical: 56 is 5.6 cm of
- * cap height, and at a 1.5 m reading distance that is about 37 dmm, which sits in the middle of the
- * band reading studies on this hardware settle on. Change the 90 cm and every size below silently
- * becomes a different angular size - so change the panel's distance instead, which is the knob that
- * was always meant to be turned.
- *
- * The companion page is `UI_Design/panel.html`, drawn at these exact numbers. It is the spec: if
- * this file and that page disagree, the page is right.
- *
- *
- * WHAT IS DELIBERATELY NOT REPRODUCED
- *
- * The design's surface is frosted glass - `backdrop-filter: blur(30px)`. A world-space
- * `UWidgetComponent` cannot do that: there is no scene colour behind the quad for the widget to
- * read, so there is nothing to blur. What survives is the part that carries the look anyway, a
- * translucent near-black fill with a bright inner ring, and that is what Surface() and PanelRing()
- * are. Nothing here is waiting on an engine feature; the blur is simply not available and saying so
- * is cheaper than someone looking for the bug.
+ * The mockup uses a frosted-glass blur, which a world-space widget can't do (there's no scene
+ * colour behind it to blur), so the panel uses a translucent dark fill with a light inner ring.
  */
 namespace FXR_PanelStyle
 {
-	// ── colour ──────────────────────────────────────────────────────────────────────────────────
+	// -- colour ----------------------------------------------------------------------------------
 	//
-	// Every value in the design is sRGB; FLinearColor is linear, and the conversion is a curve
-	// rather than a divide. Pasting hex straight in is what makes a panel come out washed out and
-	// too bright, so the hex stays readable here and the conversion happens once.
+	// The design values are sRGB hex; FLinearColor is linear. Convert once here, otherwise the panel
+	// comes out washed out.
 
-	/** Hex the way a colour picker shows it, with alpha kept linear-independent. */
+	/** sRGB bytes to linear. Alpha is passed through unchanged. */
 	inline FLinearColor Srgb(uint8 R, uint8 G, uint8 B, float A = 1.f)
 	{
 		FLinearColor Out = FLinearColor::FromSRGBColor(FColor(R, G, B));
@@ -56,10 +38,10 @@ namespace FXR_PanelStyle
 		return Out;
 	}
 
-	/** The panel itself. Near-black and translucent, never opaque: it is a thing in a room. */
+	/** Panel background. Dark and translucent. */
 	inline FLinearColor Surface()     { return Srgb(28, 28, 30, 0.78f); }
 
-	/** The inner ring that gives the surface an edge, standing in for the glass highlight. */
+	/** Inner ring around the panel (stands in for the glass edge). */
 	inline FLinearColor PanelRing()   { return Srgb(255, 255, 255, 0.13f); }
 
 	inline FLinearColor Text()        { return Srgb(255, 255, 255); }
@@ -67,47 +49,47 @@ namespace FXR_PanelStyle
 	inline FLinearColor Text3()       { return Srgb(235, 235, 245, 0.46f); }
 	inline FLinearColor Text4()       { return Srgb(235, 235, 245, 0.26f); }
 
-	/** Dividers, and the ring around anything that is not the panel. */
+	/** Dividers, and rings around non-panel elements. */
 	inline FLinearColor Divider()     { return Srgb(255, 255, 255, 0.09f); }
 
-	/** A neutral control face. Fill2 is the ground a list sits on; Track is a bar's empty part. */
+	/** Neutral fills. Fill2 is the list background, Track is the empty part of a bar. */
 	inline FLinearColor Fill()        { return Srgb(120, 120, 128, 0.20f); }
 	inline FLinearColor Fill2()       { return Srgb(120, 120, 128, 0.13f); }
 	inline FLinearColor Track()       { return Srgb(120, 120, 128, 0.26f); }
 
-	/** The one accent. Progress, the open step, and the single affirmative button. */
+	/** The accent colour: progress, the open step, the main button. */
 	inline FLinearColor Blue()        { return Srgb(10, 132, 255); }
 	inline FLinearColor OnBlue()      { return Srgb(4, 34, 61); }
 
 	inline FLinearColor Green()       { return Srgb(48, 209, 88); }
 	inline FLinearColor OnGreen()     { return Srgb(5, 38, 26); }
 
-	/** Red is the event; Danger is red made readable as text. A pure red headline is unreadable. */
+	/** Red for failure. Danger is a lighter red for text, since pure red text is hard to read. */
 	inline FLinearColor Red()         { return Srgb(255, 69, 58); }
 	inline FLinearColor Danger()      { return Srgb(255, 138, 128); }
 
 	inline FLinearColor Amber()       { return Srgb(255, 159, 10); }
 
-	/** The explanation's own colour, so a briefing never looks like an instruction. */
+	/** Briefing colour, so it doesn't look like an instruction. */
 	inline FLinearColor Explain()     { return Srgb(255, 207, 112); }
 
-	/** The bed a mistake sits on, and the brighter rule above it. */
+	/** Mistake message background and its top rule. */
 	inline FLinearColor AlarmBed()    { return Srgb(255, 69, 58, 0.13f); }
 	inline FLinearColor AlarmRule()   { return Srgb(255, 69, 58, 0.40f); }
 
-	/** The open step's row. Tinted rather than outlined, so the list keeps one edge. */
+	/** Open row tint. */
 	inline FLinearColor ActiveRow()   { return Srgb(10, 132, 255, 0.10f); }
 
-	// ── metrics ─────────────────────────────────────────────────────────────────────────────────
+	// -- metrics ---------------------------------------------------------------------------------
 	//
-	// Millimetres, by the identity at the top of this file.
+	// In panel pixels (= mm, see above).
 
 	constexpr float PanelW        = 900.f;
 	constexpr float PanelH        = 870.f;
 	constexpr float PanelRadius   = 42.f;
 	constexpr float PanelRingW    = 2.f;
 
-	/** The horizontal margin every screen shares. Content that breaks it reads as a mistake. */
+	/** Horizontal margin shared by every screen. */
 	constexpr float Gutter        = 52.f;
 
 	constexpr float BarH          = 104.f;
@@ -115,15 +97,12 @@ namespace FXR_PanelStyle
 	constexpr float ButtonH       = 122.f;
 
 	/**
-	 * Dividers are 3 px bands, not 1 px hairlines.
-	 *
-	 * There is no temporal AA on this target and MSAA does nothing for content drawn inside a
-	 * widget, so a one-pixel rule crawls with every small head movement. Three pixels is the
-	 * thinnest line that holds still.
+	 * Dividers are 3 px instead of 1 px. Without temporal AA a 1 px line shimmers with head
+	 * movement; 3 px is the thinnest that stays stable.
 	 */
 	constexpr float RuleW         = 3.f;
 
-	/** One segment per step, riding directly under the bar instead of costing a whole block. */
+	/** Progress meter under the top bar: one segment per step. */
 	constexpr float MeterH        = 6.f;
 	constexpr float MeterGap      = 3.f;
 
@@ -134,35 +113,30 @@ namespace FXR_PanelStyle
 	constexpr float RowPadY        = 10.f;
 	constexpr float NumeralSize   = 42.f;
 
-	/** The score ring, and the width of its band. */
+	/** Score ring size and band width. */
 	constexpr float RingSize      = 200.f;
 	constexpr float RingThickness = 12.f;
 
-	// ── type ────────────────────────────────────────────────────────────────────────────────────
+	// -- type ------------------------------------------------------------------------------------
 	//
-	// Montserrat, three weights. The design asks for 500, 600 and 800 and uses no italics, so
-	// those three faces are all that is imported - an unused face is still a cooked megabyte.
+	// Montserrat in three weights (500, 600, 800). Only those three are imported to keep the cooked
+	// size down.
 
-	/** Typeface names inside the composite font. These are the strings the UFont was built with. */
+	/** Typeface names inside the composite font. */
 	inline const FName FontMedium()    { return TEXT("Medium"); }      // 500
 	inline const FName FontSemiBold()  { return TEXT("SemiBold"); }    // 600
 	inline const FName FontExtraBold() { return TEXT("ExtraBold"); }   // 800
 
 	/**
-	 * The font asset.
-	 *
-	 * Soft-loaded on purpose. A hard reference from C++ roots the asset, which is what takes the
-	 * editor down when a tool tries to replace it - the same trap the material regen script fell
-	 * into. The cost is that nothing records a dependency edge for the cooker, so `/FlexXR/UI` is
-	 * named in DirectoriesToAlwaysCook; the Fonts folder sits under it and is covered.
+	 * The font asset, soft-loaded. A hard reference from C++ roots the asset, and then the editor
+	 * crashes when a tool tries to replace it. Since there's no hard reference for the cooker to
+	 * follow, /FlexXR/UI is listed in DirectoriesToAlwaysCook.
 	 */
 	inline UFont* Font()
 	{
 		static const FSoftObjectPath Path(TEXT("/FlexXR/UI/Fonts/F_Montserrat.F_Montserrat"));
 
-		// Weak, not strong. Holding a hard pointer here would root the asset, which is the trap the
-		// material tools fell into - a rooted asset cannot be replaced, and the tool that tries
-		// takes the editor with it. Weak also means this survives the asset being reimported.
+		// Weak pointer so the asset isn't rooted and can still be reimported.
 		static TWeakObjectPtr<UFont> Cached;
 
 		if (!Cached.IsValid())
@@ -174,23 +148,15 @@ namespace FXR_PanelStyle
 	}
 
 	/**
-	 * **The design's sizes are CSS pixels. UMG's are points.**
-	 *
-	 * Slate draws a glyph at (RenderDPI / 72) x Size, with RenderDPI fixed at 96 (FontCache.cpp), so
-	 * a UMG font size is in points and a point is 4/3 of a pixel. Typing the design's 24 px in as 24
-	 * draws it at 32 - every line on the panel a third too big, which is what was still pushing the
-	 * report's last two rows off the bottom after both layout fixes. The tokens below stay in the
-	 * design's pixels, so they can be read against the page, and are converted exactly once, here.
+	 * The design sizes are CSS pixels but UMG font sizes are points. Slate renders at 96 DPI
+	 * (FontCache.cpp), so 1 pt = 4/3 px. Without this every font came out a third too big and the
+	 * report's last rows got pushed off the panel. The tokens stay in pixels and get converted here.
 	 */
 	constexpr float PxToPt = 72.f / 96.f;
 
 	/**
-	 * A font at a size in pixels and a weight.
-	 *
-	 * Letter spacing is in thousandths of an em, so the design's 0.14em is 140 and its -0.028em is
-	 * -28 - relative to the size, so it needs no conversion. Negative tracking on a large heading is
-	 * not a flourish: at 56 px the default gaps read as loose, and closing them is what makes a title
-	 * look set rather than typed.
+	 * A font at a size in pixels and a weight. Letter spacing is in 1/1000 em (0.14em = 140), so it
+	 * doesn't need converting. Large headings use negative tracking so they don't look loose.
 	 */
 	inline FSlateFontInfo Type(float SizePx, FName Weight, int32 Tracking = 0)
 	{
@@ -199,7 +165,7 @@ namespace FXR_PanelStyle
 		return Info;
 	}
 
-	//~ The type scale. Named for the job, not the size, so a change lands everywhere it should.
+	//~ Type scale, named by use rather than size.
 	inline FSlateFontInfo TypeEyebrow()    { return Type(20, FontExtraBold(), 140); }
 	inline FSlateFontInfo TypeTitle()      { return Type(56, FontExtraBold(), -28); }
 	inline FSlateFontInfo TypeHeading()    { return Type(40, FontExtraBold(), -24); }
@@ -219,17 +185,14 @@ namespace FXR_PanelStyle
 	inline FSlateFontInfo TypeTime()       { return Type(26, FontMedium()); }
 
 	/**
-	 * Montserrat's natural line height: (968 + 251 + 0) / 1000 em from its hhea table, the same in
-	 * all three weights - measured from the files, not assumed.
-	 *
-	 * It matters because the two systems measure line height from different bases. CSS
-	 * `line-height: 1.52` is 1.52 times the font size; UMG's Line Height Percentage multiplies the
-	 * font's natural line instead. Copied across unchanged, every wrapped paragraph comes out about a
-	 * fifth looser than it was drawn.
+	 * Montserrat's natural line height: (968 + 251 + 0) / 1000 em, from the hhea table (same for all
+	 * three weights). CSS line-height multiplies the font size, but UMG's Line Height Percentage
+	 * multiplies the natural line, so CSS values have to be divided by this or wrapped text comes out
+	 * about 20% too loose.
 	 */
 	constexpr float NaturalLine = 1.219f;
 
-	/** Line heights as the design writes them - multiples of the font size - converted for UMG. */
+	/** Line heights from the design (multiples of font size), converted for UMG. */
 	constexpr float LineBody      = 1.52f / NaturalLine;
 	constexpr float LineRow       = 1.30f / NaturalLine;
 	constexpr float LineRowActive = 1.26f / NaturalLine;
@@ -238,11 +201,10 @@ namespace FXR_PanelStyle
 	constexpr float LineHeading   = 1.10f / NaturalLine;
 	constexpr float LineTitle     = 1.06f / NaturalLine;
 
-	// ── brushes ─────────────────────────────────────────────────────────────────────────────────
+	// -- brushes ---------------------------------------------------------------------------------
 	//
-	// Rounded Box with no image, which is the whole reason this design needs no nine-slice
-	// textures. Corner Radii is an FVector4 of (TL, TR, BR, BL) when per-corner is wanted, and a
-	// pill is Half Height Radius rather than a number anyone has to keep in sync with a height.
+	// Rounded Box brushes, so no nine-slice textures are needed. Pills use Half Height Radius so the
+	// radius always matches the height.
 
 	/** A filled rounded rectangle. */
 	inline FSlateBrush Box(const FLinearColor& Colour, float Radius)
@@ -265,7 +227,7 @@ namespace FXR_PanelStyle
 		return Brush;
 	}
 
-	/** A pill, whose radius follows its own height so nothing has to be recomputed. */
+	/** A pill: radius follows the height. */
 	inline FSlateBrush Pill(const FLinearColor& Colour)
 	{
 		FSlateBrush Brush = Box(Colour, 0.f);
@@ -281,7 +243,7 @@ namespace FXR_PanelStyle
 		return Brush;
 	}
 
-	/** A dot. A pill of equal sides is a circle, so this needs no circle texture either. */
+	/** A circle: a pill with equal width and height. */
 	inline FSlateBrush Dot(const FLinearColor& Colour, float Diameter)
 	{
 		FSlateBrush Brush = Pill(Colour);
@@ -290,17 +252,13 @@ namespace FXR_PanelStyle
 	}
 
 	/**
-	 * A flat band, for dividers and meter segments, `Thickness` tall.
+	 * A flat band (dividers, meter segments), Thickness tall.
 	 *
-	 * **The thickness lives in the brush, and it has to.** `UImage::SetDesiredSizeOverride` looks
-	 * like the way to size an image and is not: it forwards to the live Slate widget and stores
-	 * nothing, so called on an image that has not been constructed yet - which is every image built
-	 * in code - it does nothing at all, and the image falls back to the brush's default 32 x 32. That
-	 * is how every "3 px" rule on this panel came out 32 px tall. `ImageSize` is part of the brush,
-	 * the brush is a property, and a property is saved.
+	 * The size has to go in the brush. UImage::SetDesiredSizeOverride only forwards to the live Slate
+	 * widget and doesn't store anything, so on images built in code (not constructed yet) it does
+	 * nothing and you get the default 32 x 32. That's how all the 3 px dividers ended up 32 px tall.
 	 *
-	 * The width is a token 1: every band sits in a slot that fills horizontally. On a Border the
-	 * size is ignored entirely, since a border sizes to its content.
+	 * Width is a dummy 1; bands always sit in a slot that fills horizontally.
 	 */
 	inline FSlateBrush Band(const FLinearColor& Colour, float Thickness = RuleW)
 	{
@@ -313,7 +271,7 @@ namespace FXR_PanelStyle
 		return Brush;
 	}
 
-	/** A thin pill track with a pill fill, which is every bar on the panel. */
+	/** Pill track with a pill fill, used for every bar on the panel. */
 	inline FProgressBarStyle BarStyle(const FLinearColor& TrackColour, const FLinearColor& FillColour)
 	{
 		FProgressBarStyle Style;
@@ -324,11 +282,8 @@ namespace FXR_PanelStyle
 	}
 
 	/**
-	 * A button face.
-	 *
-	 * Hovered and pressed are brightened rather than recoloured, because a laser hover on a world
-	 * panel has no cursor to explain itself: the only thing that says "this one" is the face
-	 * changing, and a hue change would read as a different kind of button instead.
+	 * A button face. Hover and press only brighten it rather than changing the hue, since with a laser
+	 * pointer there's no cursor and a colour change would look like a different kind of button.
 	 */
 	inline FButtonStyle ButtonFace(const FLinearColor& Face, const FLinearColor& Ring, float RingWidth)
 	{
@@ -345,7 +300,7 @@ namespace FXR_PanelStyle
 		return Style;
 	}
 
-	/** Seconds as m:ss. Every clock on the panel, so they cannot drift apart in format. */
+	/** Seconds as m:ss. Used by every clock on the panel. */
 	inline FText Clock(float Seconds)
 	{
 		const int32 Whole = FMath::Max(0, FMath::FloorToInt32(Seconds));

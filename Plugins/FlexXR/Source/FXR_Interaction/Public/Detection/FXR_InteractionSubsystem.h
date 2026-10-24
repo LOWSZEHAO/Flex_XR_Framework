@@ -11,7 +11,7 @@ class UFXR_InteractableBase;
 class UFXR_ScoringPolicy;
 
 /**
- * UFXR_InteractionSubsystem — the registry-based detection service (ADR-002, design 5.4).
+ * UFXR_InteractionSubsystem - the registry-based detection service (ADR-002, design 5.4).
  *
  * Every UFXR_InteractableBase auto-registers here on BeginPlay. The broad phase is a
  * registry query against activation radii (never physics overlap events); the narrow
@@ -39,7 +39,7 @@ public:
 	 */
 	UFXR_InteractableBase* FindBestCandidate(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide) const;
 
-	/** All registered interactables — for driver-side passes (pokes). Broad-phase culling is the caller's job until the spatial hash lands. */
+	/** All registered interactables - for driver-side passes (pokes). Broad-phase culling is the caller's job until the spatial hash lands. */
 	const TArray<TObjectPtr<UFXR_InteractableBase>>& GetRegistered() const { return Registered; }
 
 	/**

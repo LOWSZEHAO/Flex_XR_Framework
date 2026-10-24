@@ -8,7 +8,7 @@
 #include "FXR_Highlight.generated.h"
 
 /**
- * UFXR_Highlight — optional. Every interactable already highlights from project settings with no
+ * UFXR_Highlight - optional. Every interactable already highlights from project settings with no
  * setup at all; this exists only to customise one object (design principle 2: components customise,
  * they never switch basics on).
  *
@@ -41,8 +41,8 @@ public:
 
 protected:
 	/**
-	 * Which primitives light up. Everything glows the object as a whole; Target Mesh glows only the
-	 * driven mesh, which is what "pull *this* pin" needs when the pin is one part of an extinguisher.
+	 * Which primitives light up: Everything = the whole object, Target Mesh = only the driven mesh
+	 * (e.g. just the pin on an extinguisher).
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Highlight")
 	EFXR_HighlightScope Scope = EFXR_HighlightScope::Everything;

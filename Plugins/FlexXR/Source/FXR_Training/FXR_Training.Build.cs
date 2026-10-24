@@ -8,8 +8,7 @@ public class FXR_Training : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// Top of the chain: FXR_Training watches interaction events via FXR_UI and below.
-		// Nothing in the framework references FXR_Training — games simply never load it.
+		// Top of the chain. Nothing else in the framework depends on FXR_Training.
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",
@@ -18,16 +17,13 @@ public class FXR_Training : ModuleRules
 			"FXR_Core",
 			"FXR_Interaction",
 			"FXR_UI",
-			// UUserWidget, for the validation panel. FXR_UI already depends on UMG publicly, but a
-			// transitive dep gives headers and still fails to link.
+			// UUserWidget for the panel. FXR_UI already pulls UMG in, but a transitive dependency
+			// gives the headers and still fails to link.
 			"UMG",
-			// URadialSlider, which is the panel's score ring. An engine module rather than a
-			// plugin, and the reason the ring needs no material of its own: SRadialSlider already
-			// draws an arc, and UMG has no other way to draw one.
+			// URadialSlider for the score ring (draws the arc, so no custom material needed).
 			"AdvancedWidgets",
-			// FXR_PanelStyle.h builds FSlateBrush and FSlateFontInfo inline in a public header, so
-			// the constructors are linked here and not merely declared. UMG above gives the headers
-			// and still fails to link - the same transitive-dependency trap as always.
+			// FXR_PanelStyle.h builds FSlateBrush / FSlateFontInfo inline in a public header, so these
+			// need to be linked here directly.
 			"Slate",
 			"SlateCore"
 		});

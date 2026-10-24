@@ -29,7 +29,7 @@ void UFXR_Press::OnRegister()
 
 #if WITH_EDITOR
 	// Editor viewports tick the preview actor's real components, which is the only context where a
-	// press can move its cap on screen — a component template has neither owner nor attach parent.
+	// press can move its cap on screen - a component template has neither owner nor attach parent.
 	if (const UWorld* World = GetWorld())
 	{
 		if (!World->IsGameWorld())
@@ -64,7 +64,7 @@ void UFXR_Press::BeginPlay()
 	{
 		DrivenRestWorld = Driven->GetComponentTransform();
 
-		// A button cap is mechanism, not loose physics — driven kinematically along its travel.
+		// A button cap is mechanism, not loose physics - driven kinematically along its travel.
 		if (UPrimitiveComponent* DrivenComponent = Driven.Get())
 		{
 			if (DrivenComponent->IsSimulatingPhysics())
@@ -76,7 +76,7 @@ void UFXR_Press::BeginPlay()
 	else
 	{
 		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_Press '%s' on '%s': no driven cap resolved — attach the press UNDER the mesh it should move (the mesh must be the press's parent, or the actor's root). It will not respond to pokes."),
+			TEXT("FXR_Press '%s' on '%s': no driven cap resolved - attach the press UNDER the mesh it should move (the mesh must be the press's parent, or the actor's root). It will not respond to pokes."),
 			*GetName(), *GetNameSafe(GetOwner()));
 	}
 }
@@ -96,7 +96,7 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 	// Only fingertips over the face press it (the tip sphere may lap over the rim).
 	if (FVector2D(TipLocal.X, TipLocal.Y).SizeSquared() > FMath::Square(FaceRadius + TipRadius))
 	{
-		// Sliding off the side ends this hand's approach outright — returning must start from the
+		// Sliding off the side ends this hand's approach outright - returning must start from the
 		// front again, or a finger swinging back in below the face would re-press the button.
 		bPokeArmed[HandIndex] = false;
 		return;
@@ -115,7 +115,7 @@ void UFXR_Press::NotifyPoke(const FVector& TipLocation, float TipRadius, IFXR_In
 		return;
 	}
 
-	// Arrived from the side or behind without ever being in front — ignore, so the cap never jumps
+	// Arrived from the side or behind without ever being in front - ignore, so the cap never jumps
 	// to meet a finger that did not push it there.
 	if (!bPokeArmed[HandIndex])
 	{
@@ -156,7 +156,7 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 
 	if (bPoked)
 	{
-		// The cap follows the fingertip directly — a button under a finger must never lag it.
+		// The cap follows the fingertip directly - a button under a finger must never lag it.
 		Depth = PendingPokeDepth;
 	}
 	else
@@ -175,7 +175,7 @@ void UFXR_Press::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompo
 	}
 	PendingPokeDepth = 0.f;
 
-	// No fingertip anywhere near the face — clear both hands so the next press approaches afresh.
+	// No fingertip anywhere near the face - clear both hands so the next press approaches afresh.
 	if (!bOverFace)
 	{
 		bPokeArmed[0] = false;
@@ -279,7 +279,7 @@ void UFXR_Press::TickEditorPreview(float DeltaTime)
 		bPreviewCaptured = true;
 	}
 
-	// Ease down and back up so the motion reads as a press rather than a slide.
+	// Ease down and back up so it feels like a press, not a slide.
 	PreviewTime = FMath::Fmod(PreviewTime + DeltaTime, PreviewCycleSeconds);
 	const float Cycle = PreviewTime / PreviewCycleSeconds;
 	const float PingPong = 1.f - FMath::Abs(Cycle * 2.f - 1.f);

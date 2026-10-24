@@ -13,20 +13,18 @@ class UFXR_HandPose;
 class UFXR_InteractableBase;
 
 /**
- * UFXR_GripPoint — "a sticker on the object: hands go here, shaped like this."
+ * UFXR_GripPoint - an authored place and pose for a hand on an object.
  *
- * A SceneComponent whose transform is the authored grip pose. Add one (or several) to a
- * grabbable actor; the owning interactable scores them by hand side, priority and distance,
- * then snaps the held object (Grab) or the hand (Latch) so the grip aligns — a consistent,
- * authored hold instead of wherever the hand happened to close.
+ * Its transform is the grip pose. Add one or more to a grabbable actor; the owning interactable
+ * picks one by hand side, priority and distance, then aligns the held object (Grab) or the hand
+ * (Latch) to it, so the hold is consistent instead of wherever the hand happened to close.
  *
- * **Adding a grip point makes it the only grab surface on its owning interactable** (ADR-007):
- * presence is the switch — no grip point means the mesh is the grab surface; one or more means
- * hands attach only at the points. All grip configuration lives here, never on the interactable.
+ * If an interactable has any grip points, they become its only grab surface (ADR-007); with
+ * none, the mesh itself is the grab surface. All grip settings live here, not on the interactable.
  *
- * Ownership resolves automatically: the nearest ancestor interactable in the hierarchy, else
- * the actor's single interactable. With several interactables on one actor, set Owners
- * explicitly (a grip point may be shared, but only one owner may be enabled at a time).
+ * The owner is found automatically: the nearest interactable up the hierarchy, otherwise the
+ * actor's only interactable. With several interactables on one actor, set Owners explicitly (a
+ * grip point can be shared, but only one owner can be enabled at a time).
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_GripPoint : public USceneComponent
@@ -50,7 +48,7 @@ public:
 	/**
 	 * The interactables this grip point belongs to. Explicit Owners win; otherwise the nearest
 	 * ancestor interactable in the hierarchy, else the actor's single interactable. Ambiguity
-	 * (several interactables, no explicit owner) resolves to none — fail loudly at author time,
+	 * (several interactables, no explicit owner) resolves to none - fail loudly at author time,
 	 * never guess at runtime (ADR-007).
 	 */
 	void ResolveOwners(TArray<UFXR_InteractableBase*>& OutOwners) const;
@@ -63,12 +61,12 @@ public:
 
 	/** Rail length (cm) along the component's local X, centred on the component. 0 = point grip. */
 	/**
-	 * Rail length in world centimetres — the authored length times this component's world scale.
+	 * Rail length in world centimetres - the authored length times this component's world scale.
 	 *
 	 * Scaled, unlike the activation radius, because the two answer different questions. The radius is
 	 * hand ergonomics: a hand is a hand, so 8 cm of grab tolerance stays 8 cm however large the object
-	 * is, and shrinking a part must not make it harder to grab. The rail is *geometry* — how far along
-	 * this object a hand may slide — so scaling the object has to scale it too, or the hand slides off
+	 * is, and shrinking a part must not make it harder to grab. The rail is geometry - how far along
+	 * this object a hand may slide - so scaling the object has to scale it too, or the hand slides off
 	 * the end of the mesh it is supposedly holding.
 	 *
 	 * Read live rather than cached, so rescaling the mesh takes effect without re-adding anything.
@@ -76,13 +74,13 @@ public:
 	float GetRailLength() const { return RailLength * FMath::Abs(GetComponentScale().X); }
 
 	/**
-	 * Where on this grip a hand at WorldLocation lands: the nearest point along the rail, or simply
-	 * the component's location for a point grip. Reach, snapping and hand attachment all measure
-	 * from here, which is what lets a hand take a handrail anywhere along its length.
+	 * Where on this grip a hand at WorldLocation lands: the nearest point on the rail, or the
+	 * component location for a point grip. Reach, snapping and hand attachment all use this, which is
+	 * how a hand can grab a handrail anywhere along it.
 	 */
 	FVector GetClosestPointTo(const FVector& WorldLocation) const;
 
-	/** The authored grip pose for a hand at WorldLocation — component rotation, rail-slid location. */
+	/** The authored grip pose for a hand at WorldLocation - component rotation, rail-slid location. */
 	FTransform GetGripTransformFor(const FVector& WorldLocation) const;
 
 	int32 GetPriority() const { return Priority; }
@@ -98,7 +96,7 @@ protected:
 	/**
 	 * Owning interactables, set explicitly. Leave empty to auto-resolve (nearest ancestor
 	 * interactable, else the actor's single interactable). Required when several interactables
-	 * share this point (e.g. a door handle owned by Grab + Latch) — at most one owner may be
+	 * share this point (e.g. a door handle owned by Grab + Latch) - at most one owner may be
 	 * enabled at a time.
 	 */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|GripPoint", meta = (UseComponentPicker, AllowedClasses = "/Script/FXR_Interaction.FXR_InteractableBase"))
@@ -117,9 +115,9 @@ protected:
 	float ActivationRadius = 8.f;
 
 	/**
-	 * Rail length (cm) along this component's local X, centred on it — hands grab anywhere along a
-	 * handrail, pipe or rifle handguard and slide, instead of snapping to one spot. 0 = a single
-	 * point. The Activation Radius then measures from the rail, so it reads as the rail's thickness.
+	 * Rail length (cm) along local X, centred on the component. Hands can grab anywhere along it (a
+	 * handrail, pipe or rifle handguard) instead of snapping to one spot. 0 = single point. Activation
+	 * Radius is measured from the rail, so it acts like the rail's thickness.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.0"))
 	float RailLength = 0.f;
@@ -132,7 +130,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint", meta = (ClampMin = "0.1", EditCondition = "SnapMode == EFXR_GripSnapMode::Smooth"))
 	float SnapInterpSpeed = 10.f;
 
-	/** Optional hand pose (finger shape) formed when gripping here — applied by the hand Anim BP. */
+	/** Optional hand pose (finger shape) formed when gripping here - applied by the hand Anim BP. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint")
 	TObjectPtr<UFXR_HandPose> HandPose;
 

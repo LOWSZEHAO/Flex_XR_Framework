@@ -5,7 +5,7 @@
 
 UFXR_Highlight::UFXR_Highlight()
 {
-	// Pure configuration read by the highlight subsystem — nothing to tick.
+	// Pure configuration read by the highlight subsystem - nothing to tick.
 	PrimaryComponentTick.bCanEverTick = false;
 }
 

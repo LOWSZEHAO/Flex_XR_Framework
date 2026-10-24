@@ -35,8 +35,8 @@ EFXR_FocusState UFXR_FocusSubsystem::GetState(const UFXR_InteractableBase* Inter
 		return EFXR_FocusState::None;
 	}
 
-	// Strongest wins, and either hand counts: a mug held in one hand and reached for by the other
-	// reads as Selected, not as two competing states.
+	// Strongest state wins across both hands: an object held in one hand and reached for with the
+	// other shows as Selected.
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		if (Selected[Side].Get() == Interactable)

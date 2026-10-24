@@ -8,9 +8,8 @@ public class FXR_TrainingEditor : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// Editor-only module: authoring tools for FXR_Training. Keeps editor code out of the lean
-		// runtime modules (CODING_STANDARDS 4), and sits above FXR_Training rather than inside
-		// FXR_InteractionEditor, which must not learn that training exists either.
+		// Editor-only tools for FXR_Training. Sits above FXR_Training instead of inside
+		// FXR_InteractionEditor, which shouldn't depend on training either.
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",

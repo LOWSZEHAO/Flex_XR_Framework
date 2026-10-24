@@ -11,9 +11,9 @@ class UMaterialInterface;
 class UFXR_ScoringPolicy;
 
 /**
- * UFXR_InteractionSettings — project-wide interaction defaults, under Project Settings → FlexXR.
+ * UFXR_InteractionSettings - project-wide interaction defaults, under Project Settings -> FlexXR.
  *
- * The state→style map lives here rather than on interactables so a project restyles every highlight
+ * The state->style map lives here rather than on interactables so a project restyles every highlight
  * from one place: FXR_Training only ever says "highlight the pin, Guidance state" and never learns
  * that Guidance currently means a yellow pulse.
  *
@@ -21,7 +21,7 @@ class UFXR_ScoringPolicy;
  * one-way, and a shared settings object low enough for all of them to read would have to carry
  * types from all of them.
  */
-UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "FlexXR — Interaction"))
+UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "FlexXR - Interaction"))
 class FXR_INTERACTION_API UFXR_InteractionSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
@@ -62,11 +62,9 @@ public:
 	float HighlightIntensity = 1.f;
 
 	/**
-	 * Interactables begin to glow as a hand approaches and reach full strength at grab range.
-	 *
-	 * The alternative — every interactable lit all the time — reads as a tutorial level rather than a
-	 * product, and in a training sim it quietly removes the competency being tested: a trainee who
-	 * never has to *find* the extinguisher has not been assessed on finding it.
+	 * Interactables start glowing as a hand approaches and reach full strength at grab range. If
+	 * everything glowed all the time it would feel like a tutorial, and in training the trainee
+	 * would never have to actually find the object.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity")
 	bool bProximityHighlight = true;
@@ -75,10 +73,7 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity", meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bProximityHighlight"))
 	float ProximityRange = 35.f;
 
-	/**
-	 * Strongest an approach glow gets before the hand is actually in reach. Held below 1 on purpose:
-	 * the step up to full strength is what tells the player they can now take it.
-	 */
+	/** Max approach glow before the hand is in reach. Kept below 1 so the jump to full shows you can grab it now. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Proximity", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bProximityHighlight"))
 	float ProximityMaxAlpha = 0.45f;
 
@@ -88,7 +83,7 @@ public:
 
 	/**
 	 * How the Outline style is produced. Auto picks Mesh Hull on a mobile feature level and Post
-	 * Process elsewhere, which is also what the editor's mobile preview reports — so the Quest path
+	 * Process elsewhere, which is also what the editor's mobile preview reports - so the Quest path
 	 * can be looked at without a Quest.
 	 *
 	 * Forcing a tier is for comparing them, and for a PCVR project that wants the hull anyway: it
@@ -102,7 +97,7 @@ public:
 	 * How far the hull is pushed along the mesh's normals, in centimetres of world space.
 	 *
 	 * World space, not screen space: the post-process tier holds a constant pixel width, and this one
-	 * cannot — the shell is geometry, so a distant object's outline thins out the way the object
+	 * cannot - the shell is geometry, so a distant object's outline thins out the way the object
 	 * does. That is the honest trade for costing a draw call instead of a full-screen pass.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (ClampMin = "0.01", ClampMax = "10.0", Units = "cm"))
@@ -110,16 +105,13 @@ public:
 
 	/**
 	 * The Mesh Hull tier's material, drawn through each mesh's overlay slot. Cleared to disable the
-	 * hull, or repointed at a project's own — it only has to push vertices along their normals and
+	 * hull, or repointed at a project's own - it only has to push vertices along their normals and
 	 * mask away front faces.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
 	TSoftObjectPtr<UMaterialInterface> OutlineHullMaterial;
 
-	/**
-	 * Emissive multiplier for the Outline pass. Higher than the overlay default on purpose: the band
-	 * is thin and composited against the scene, so it needs headroom to read as a glow.
-	 */
+	/** Emissive multiplier for the Outline pass. Higher than the overlay default since the outline is thin. */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (ClampMin = "0.0"))
 	float OutlineIntensity = 3.f;
 
@@ -129,7 +121,7 @@ public:
 
 	/**
 	 * Full-screen pass that draws the Outline style. Cleared to disable outlines entirely, or
-	 * repointed at a project's own material — the stencil contract (1 Hover, 2 Guidance, 3 Selected)
+	 * repointed at a project's own material - the stencil contract (1 Hover, 2 Guidance, 3 Selected)
 	 * is all a replacement has to honour.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Outline", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))

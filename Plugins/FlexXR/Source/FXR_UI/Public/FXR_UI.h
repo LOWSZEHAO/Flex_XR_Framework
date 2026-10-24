@@ -6,11 +6,9 @@
 #include "Modules/ModuleManager.h"
 
 /**
- * FXR_UI — spatial UI and presentation.
- *
- * The spatial UI kit (panels, buttons, sliders, keypads), the single framework-wide
- * motion-design spec, the ray-targeting & focus manager, per-tier highlight rendering,
- * and diegetic guidance primitives. Depends on FXR_Interaction; unaware of FXR_Training.
+ * FXR_UI - spatial UI and presentation: world-space panels and the hand pointer for them,
+ * focus/ray targeting, highlight rendering and the guidance arrow. Depends on FXR_Interaction,
+ * doesn't know about FXR_Training.
  */
 class FFXR_UIModule : public IModuleInterface
 {

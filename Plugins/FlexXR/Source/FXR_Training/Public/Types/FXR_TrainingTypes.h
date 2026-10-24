@@ -6,40 +6,36 @@
 #include "FXR_TrainingTypes.generated.h"
 
 /**
- * How a procedure is run. The same two assets serve both: the steps the trainee reads, and the GM
- * that says what happens at each one.
+ * How a procedure is run. Both modes use the same Steps asset and GM.
  *
- * Two modes rather than three. Guided and Practice differed only in when help appeared, and both
- * let the trainee change the world ahead of the procedure - attach the part early, close the valve
- * early - after which the steps and the world disagree. Teaching should not allow that, and
- * assessment should record it. So one mode does each.
+ * There used to be three (Guided / Practice / Exam). Guided and Practice let the trainee do things
+ * ahead of the procedure, after which the steps and the world no longer matched, so I cut it down
+ * to one mode that teaches and one that tests.
  */
 UENUM(BlueprintType)
 enum class EFXR_DeliveryMode : uint8
 {
 	/**
-	 * Teaching. The GM's events open each step's objects as the step arrives, so the trainee can
-	 * only do what the procedure is on. The highlight and every instruction are shown, timeouts do
-	 * nothing, and there is no score - a run that cannot go wrong has nothing to grade.
+	 * Teaching. The GM's events open each step's objects as the step arrives, so only the current
+	 * step can be done. Highlight and instructions on, no timeouts, no score.
 	 */
 	Training,
 
 	/**
-	 * Assessment. Events marked Auto Start In Exam fire when the run begins, so the objects are
-	 * open from the start and mistakes are possible. No hints, no instructions on the panel. A
-	 * critical step, a timeout, or reaching Max Mistakes fails the run.
+	 * Assessment. Events marked Auto Start In Exam fire at the start, so objects are open early and
+	 * mistakes are possible. No hints. A critical step, a timeout or Max Mistakes fails the run.
 	 */
 	Exam
 };
 
-/** What kind of wrong this was. The taxonomy is the point: "they failed" is not a finding. */
+/** What kind of mistake it was. */
 UENUM(BlueprintType)
 enum class EFXR_MistakeKind : uint8
 {
-	/** Touched an object that is not this step's - or one the step named, with its own message. */
+	/** Touched an exposed object that no step uses. */
 	WrongAction,
 
-	/** Did something that belongs to a step that has not opened yet. */
+	/** Touched an object that belongs to a step (or sub-step) that hasn't opened yet. */
 	OutOfOrder,
 
 	/** Ran out of time on an open step. */
@@ -47,88 +43,84 @@ enum class EFXR_MistakeKind : uint8
 };
 
 /**
- * How a run ended.
- *
- * This replaces a bool, which could not tell a failure from an abandonment - and that difference is
- * the whole of what Exam mode means. A trainee who ran out of time and an instructor who closed the
- * level are not the same finding, and a report that calls both "did not reach the end" is useless
- * for the one question a training product is bought to answer.
+ * How a run ended. An enum rather than a bool so a failed exam and a session that was simply
+ * stopped don't look the same in the report.
  */
 UENUM(BlueprintType)
 enum class EFXR_SessionOutcome : uint8
 {
-	/** Still running, or never started. A mid-session report is allowed to say so. */
+	/** Still running, or never started. */
 	InProgress,
 
-	/** Ran to an end: a transition with nowhere left to go fired. */
+	/** The last step was completed. */
 	Completed,
 
-	/** Ended against the trainee. Today that means an Exam step ran past its timeout. */
+	/** Exam only: failed on a critical mistake, a timeout or Max Mistakes. */
 	Failed,
 
-	/** Stopped from outside - StopSession, end of play, a level change. Not a verdict. */
+	/** Stopped from outside (StopSession, end of play, level change). Not a result. */
 	Stopped
 };
 
-/** Why a run failed. Only meaningful when the outcome is Failed. */
+/** Why a run failed. None unless the outcome is Failed. */
 UENUM(BlueprintType)
 enum class EFXR_FailReason : uint8
 {
 	None,
 
-	/** An Exam step stayed open past its Timeout Seconds. */
+	/** A step stayed open past its Timeout Seconds. */
 	Timeout,
 
-	/** An Exam run reached the session's Max Mistakes. */
+	/** The run reached the session's Max Mistakes. */
 	TooManyMistakes,
 
-	/** A mistake was made while a step marked Critical was open. */
+	/** A mistake was made while a Critical step was open. */
 	CriticalMistake
 };
 
-/** Where a step sits in the run. */
+/** Where a step is in the run. */
 UENUM(BlueprintType)
 enum class EFXR_StepStatus : uint8
 {
-	/** Not reachable yet. */
+	/** Not reached yet. */
 	Pending,
 
-	/** Open and accepting its completing event. */
+	/** Open, waiting for Complete Step. */
 	Active,
 
 	/** Done. */
 	Complete,
 
-	/** Opened, then bypassed because a branch went elsewhere. */
+	/** Left over from the old branching graph. Nothing sets it now. */
 	Skipped
 };
 
-/** One recorded error, with enough context to be readable in a report months later. */
+/** One recorded mistake. */
 USTRUCT(BlueprintType)
 struct FFXR_Mistake
 {
 	GENERATED_BODY()
 
-	/** The step that was open when this happened. */
+	/** The step that was open when it happened. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
-	/** Its sub-step that was open, or None when the step has no sub-steps. */
+	/** The sub-step that was open, or None if the step has none. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName SubStepId;
 
-	/** What the trainee actually did. */
+	/** The object the trainee touched. None for a timeout. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName InteractionId;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_MistakeKind Kind = EFXR_MistakeKind::WrongAction;
 
-	/** Seconds from the start of the session, so a report can be read as a timeline. */
+	/** Seconds since the session started. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float TimeSeconds = 0.f;
 
-	/** Author's message for this mistake, shown when the mode allows it. */
+	/** Optional text for the panel. The runner currently leaves it empty. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText Message;
 };

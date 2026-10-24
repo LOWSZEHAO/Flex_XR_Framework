@@ -24,41 +24,37 @@ class UWidgetSwitcher;
 UENUM(BlueprintType)
 enum class EFXR_PanelScreen : uint8
 {
-	/** Nothing has happened yet. Names the procedure, states the mode, offers to begin. */
+	/** Before the run: procedure name, mode, Begin button. */
 	Start,
 
-	/** A briefing, before or between steps. Author-driven; the runner knows nothing about it. */
+	/** A briefing shown before or between steps. Driven by the project, not the runner. */
 	Explanation,
 
-	/** The run. The step list, the open step, and whatever just went wrong. */
+	/** During the run: current step, its sub-steps, mistakes. */
 	Procedure,
 
 	/** The report. */
 	Complete
 };
 
-/** What the explanation's audio is doing, which is all the panel needs to know about it. */
+/** State of the briefing's audio. The panel doesn't play it, it just shows it. */
 UENUM(BlueprintType)
 enum class EFXR_ExplainState : uint8
 {
-	/** Not played. The foot offers to play it. */
+	/** Not played yet. Shows the play button. */
 	Idle,
 
-	/** Playing. The foot is a transport: pause, a thin track, elapsed time. */
+	/** Playing. Shows pause, a progress bar and the time. */
 	Playing,
 
-	/** Heard, or read without audio. The foot offers to move on. */
+	/** Heard (or read without audio). Shows the continue button. */
 	Read
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_PanelRequest);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PanelAudioRequest, bool, bWantPlaying);
 
-/**
- * The widgets of one step row, kept so that a step change restyles the list instead of rebuilding
- * it. The row count is fixed once a graph is compiled, so there is nothing to rebuild after the
- * first time, and the alternative churns three widgets per step per change for no reason.
- */
+/** Widgets of one list row, kept so a status change restyles the row instead of rebuilding it. */
 USTRUCT()
 struct FFXR_PanelStepRow
 {
@@ -81,42 +77,22 @@ struct FFXR_PanelStepRow
 };
 
 /**
- * UFXR_TrainingPanel — the in-world surface that says what to do and what went wrong.
+ * UFXR_TrainingPanel - base class for the in-world training panel.
  *
- * Reparent a Widget Blueprint to this and it is wired: it finds the session, follows the run, and
- * drives every widget it recognises by name. No event graph is needed to make it work, and the
- * events are there for whatever should animate.
+ * Reparent a Widget Blueprint to this. It finds the session, follows the run and fills in any
+ * widget whose name matches one of the BindWidgetOptional properties below, so it works without
+ * an event graph. The BlueprintImplementableEvents are there for animation.
  *
+ * All four screens (Start, Explanation, Procedure, Complete) live in one Widget Blueprint under a
+ * Widget Switcher, so they share the same frame, bar and styles. The screen is worked out from the
+ * session state rather than tracked separately: finished -> Complete, running -> Procedure,
+ * otherwise Start. ShowExplanation overrides that until it's dismissed.
  *
- * FOUR SCREENS, ONE ASSET
+ * The panel only reads the session. The exception is Begin / Try again, which call StartSession
+ * while Buttons Drive Session is on, so a panel dropped into a level works by itself.
  *
- * Start, Explanation, Procedure and Complete all live in the same Widget Blueprint, as children of
- * one Widget Switcher, and this class decides which is up. One asset rather than four, because the
- * four share a surface, a bar, a type scale and a foot - and four assets would mean four copies of
- * all of it, drifting apart the first time one is edited.
- *
- * **The screen is derived, not set.** There is no state machine to keep in step with the session:
- * a run that is finished shows the report, a run that is going shows the procedure, and anything
- * else shows Start. An explanation is the one exception, because it is the one thing the runner has
- * no opinion about - call ShowExplanation and it takes over until it is dismissed.
- *
- *
- * IT READS THE SESSION
- *
- * Everything shown here is read from the session; the panel computes nothing about the procedure
- * and decides nothing about what a run is worth. The one place it reaches back is deliberate and
- * switchable: Begin and Try again call StartSession while `Buttons Drive Session` is set, which is
- * what makes a dropped-in panel work on its own (and the framework's rule is that a component
- * dropped in a level works). Clear the flag and the buttons only broadcast, leaving the flow to
- * whoever owns it. The request delegates fire either way.
- *
- *
- * ONE PIECE OF PRESENTATION THE GRAPH CANNOT EXPRESS
- *
- * **A complaint has to leave by itself.** The runner records a mistake as a fact at a moment in
- * time, which is right for a report and useless on a wall: left alone, the first thing a trainee
- * got wrong would stay up for the rest of the session, and a panel that always says something is
- * wrong says nothing.
+ * Mistake messages clear themselves after Mistake Dwell Seconds; otherwise the first mistake
+ * would stay on screen for the rest of the run.
  */
 UCLASS(Abstract, ClassGroup = (FlexXR))
 class FXR_TRAINING_API UFXR_TrainingPanel : public UUserWidget
@@ -126,18 +102,13 @@ class FXR_TRAINING_API UFXR_TrainingPanel : public UUserWidget
 public:
 	UFXR_TrainingPanel(const FObjectInitializer& ObjectInitializer);
 
-	/** Designer only: fills the four screens with sample content. See FillDesignPreview. */
+	/** Designer only: fills the screens with sample content (see FillDesignPreview). */
 	virtual void NativePreConstruct() override;
 
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	/**
-	 * Follow this session, releasing whatever it was following. Null just unbinds.
-	 *
-	 * Only needed for a level with more than one session running — a panel left alone finds the
-	 * single one by itself.
-	 */
+	/** Follow this session instead of the one it found. Null unbinds. Only needed with several sessions. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void BindToSession(UFXR_TrainingSession* InSession);
 
@@ -149,43 +120,37 @@ public:
 	EFXR_PanelScreen GetScreen() const { return Screen; }
 
 	/**
-	 * Put up a briefing, and keep it up until it is dismissed.
-	 *
-	 * The step graph has no explanation of its own, on purpose: the runner judges actions, and a
-	 * briefing is not an action. This is the seam for whoever does own that content — a cutscene
-	 * beat, a chapter intro, a step's own preamble — and it costs the runner nothing.
+	 * Show a briefing until it's dismissed. The runner doesn't know about briefings; this is for
+	 * whatever owns that content (an intro, a cutscene beat, a step preamble).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void ShowExplanation(const FText& Body);
 
-	/**
-	 * Reflect what the audio is doing. The panel does not play it: whatever owns the sound owns the
-	 * clock, and a panel that also played audio would be two sources of truth for one timeline.
-	 */
+	/** Mirror the briefing audio's state. The panel doesn't play audio itself. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void SetExplanationAudio(EFXR_ExplainState State, float ElapsedSeconds, float DurationSeconds);
 
-	/** Take the briefing down. The screen falls back to whatever the session is doing. */
+	/** Hide the briefing. The screen goes back to whatever the session is doing. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	void DismissExplanation();
 
-	/** What to do now. Empty before the run starts and after it ends. */
+	/** The current instruction. Empty outside a run. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetInstruction() const { return Instruction; }
 
-	/** The open step's id, for a panel that maps steps to its own art. */
+	/** The open step's id. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FName GetStepId() const { return StepId; }
 
-	/** Formatted as "2 / 7". Empty while nothing is running. */
+	/** "2 / 7". Empty when nothing is running. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetProgressText() const;
 
-	/** The same thing as 0 to 1, for a progress bar. */
+	/** Same as a 0..1 fraction, for a progress bar. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	float GetProgressFraction() const;
 
-	/** The current complaint, or empty. It clears itself after Mistake Dwell Seconds. */
+	/** The current mistake message, or empty. Clears itself after Mistake Dwell Seconds. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FText GetMistake() const { return MistakeText; }
 
@@ -195,12 +160,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	bool IsFinished() const { return bFinished; }
 
-	/** The run's report, filled in once it finishes. Score, mistakes, per-step timings. */
+	/** The finished run's report. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	FFXR_SessionReport GetReport() const { return Report; }
 
-	//~ Requests the panel makes of whoever owns the flow. They fire whether or not
-	//~ Buttons Drive Session is set, so a project can listen without giving up the default.
+	//~ Requests from the panel's buttons. They fire whether or not Buttons Drive Session is on.
 
 	/** Begin was pressed on the Start screen. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
@@ -210,77 +174,74 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
 	FFXR_PanelRequest OnRetryRequested;
 
-	/** The trainee said they had read the briefing. */
+	/** The trainee confirmed the briefing. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
 	FFXR_PanelRequest OnExplanationConfirmed;
 
-	/** Play or pause was pressed on a briefing. True wants it playing. */
+	/** Play or pause pressed on the briefing. True = play. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Training")
 	FFXR_PanelAudioRequest OnExplanationAudioToggled;
 
-	/** A step opened. Step Number is 1-based, for showing. */
+	/** A step opened. Step Number is 1-based. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "FlexXR|Training")
 	void OnStepChanged(FName InStepId, const FText& InInstruction, int32 StepNumber, int32 StepTotal);
 
-	/** Something went wrong. The message is the author's, or a fallback if they wrote none. */
+	/** A mistake happened. Message is the mistake's text, or the default message. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "FlexXR|Training")
 	void OnMistakeShown(const FFXR_Mistake& Mistake, const FText& Message);
 
-	/** The complaint's time is up. Hide whatever OnMistakeShown put on screen. */
+	/** The mistake message timed out. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "FlexXR|Training")
 	void OnMistakeCleared();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "FlexXR|Training")
 	void OnSessionComplete(const FFXR_SessionReport& InReport);
 
-	/** The panel changed screens. For whatever should animate the transition. */
+	/** The panel switched screens. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "FlexXR|Training")
 	void OnScreenChanged(EFXR_PanelScreen NewScreen);
 
 protected:
 	/**
-	 * Widgets this class drives directly, found by name.
+	 * Widgets the panel drives directly, matched by name.
 	 *
-	 * Name a widget in your Blueprint after one of these and it is filled in and kept current with
-	 * no event graph at all, which is what keeps framework logic out of Blueprint. Leave any of
-	 * them out and that part simply does not exist: **Optional** rather than required, because this
-	 * is a base class for layouts nobody has designed yet, and one that refuses to compile without
-	 * a widget named `ResultTimeValue` would be a base class people work around.
+	 * Name a widget in the Blueprint after one of these and it gets filled in and updated, no event
+	 * graph needed. They're all optional so a different layout can leave any of them out.
 	 *
-	 * Prefer these to property bindings. A bound getter runs every frame per widget whether
-	 * anything changed or not; these are written when something does.
+	 * These are written only when something changes, which is cheaper than property bindings that
+	 * run every frame.
 	 */
 
-	//~ Chrome, above the switcher and shared by the screens that have a bar.
+	//~ Top bar, shared by the screens that have it.
 
 	/** The four screens, in EFXR_PanelScreen order. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> ScreenSwitcher;
 
-	/** Collapsed on the screens that have no bar, which is Explanation and Complete. */
+	/** Hidden on Explanation and Complete. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> TopBar;
 
-	/** "Fire safety". Collapsed, with its separator, when the graph names no course. */
+	/** Course name, e.g. "Fire safety". Hidden (with its separator) when there's no course. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CrumbRootLabel;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> CrumbSeparator;
 
-	/** The procedure's own name. */
+	/** Procedure name. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CrumbLeafLabel;
 
-	/** Green while a run is going, dim otherwise. */
+	/** Green while running, grey otherwise. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> StatusPip;
 
-	/** "2 / 5" during a run, "Not started" before one. */
+	/** "2 / 5" while running, "Not started" before. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StatusLabel;
 
-	/** Filled with one segment per step: the whole procedure, while the list shows one step. */
+	/** Filled with one segment per step. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepMeter;
 
@@ -292,7 +253,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StartStepsValue;
 
-	/** The mode is stated, never offered. A trainee who can pick Guided is not sitting an exam. */
+	/** Shows the mode. The trainee can't change it here. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StartModeValue;
 
@@ -304,7 +265,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ExplanationLabel;
 
-	/** Lit while the audio plays, quiet once it has been heard. */
+	/** Lit while the audio plays. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> ExplainPip;
 
@@ -330,35 +291,29 @@ protected:
 	//~ Procedure.
 
 	/**
-	 * The procedure body, in two forms. Index 0 teaches: the heading and the step list. Index 1
-	 * examines: progress and the mistake count, nothing else.
-	 *
-	 * Exam selects 1, because in an exam the step list is the answer sheet - a trainee who can read
-	 * every instruction off the wall is being tested on reading.
+	 * Procedure body. Index 0 is the Training layout (heading + rows), index 1 the Exam layout
+	 * (progress and mistake count only, since showing the steps in an exam gives away the answers).
 	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> ProcedureBodySwitcher;
 
-	/** Exam: steps done out of the total, "2 / 5". */
+	/** Exam: steps done out of total, "2 / 5". */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ExamProgressLabel;
 
-	/** Exam: the mistake count, "1 of 3" when the session has a limit. */
+	/** Exam: mistake count, "1 of 3" when there's a limit. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ExamMistakesValue;
 
-	/** The heading: the open step's instruction. */
+	/** Heading: the open step's instruction. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StepTitleLabel;
 
-	/**
-	 * The open step's instruction again. The generated panel does not use this - its heading is the
-	 * instruction - and it is kept for a layout that wants the instruction somewhere of its own.
-	 */
+	/** The open step's instruction. Not used by the generated panel (the heading already shows it). */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> InstructionLabel;
 
-	/** "Step 2 / 7", for a layout that wants it spelled out rather than as a bar. */
+	/** "Step 2 / 7", for a layout that wants text instead of the meter. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ProgressLabel;
 
@@ -366,18 +321,17 @@ protected:
 	TObjectPtr<UProgressBar> ProgressFill;
 
 	/**
-	 * One page per step: filled with a row per sub-step of the open step, numbered from one. A step
-	 * without sub-steps has no rows - its heading is all there is to it - and the scroll around the
-	 * list is collapsed.
+	 * Filled with one row per sub-step of the open step. A step without sub-steps has no rows and the
+	 * scroll box is collapsed.
 	 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UPanelWidget> StepList;
 
-	/** Scrolled so the open row is centred, not merely on screen. */
+	/** Scrolled so the open row is centred. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> StepScroll;
 
-	/** The run's facts, or the complaint. Index 0 is normal, 1 is the mistake. */
+	/** Index 0: mode and clock. Index 1: the mistake message. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> FootSwitcher;
 
@@ -387,7 +341,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ElapsedLabel;
 
-	/** Shown only while there is a complaint, for a layout that toggles rather than switches. */
+	/** Shown only while there's a mistake message, for layouts that toggle instead of switch. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> MistakeCard;
 
@@ -396,32 +350,29 @@ protected:
 
 	//~ Complete.
 
-	/** Shown only once the run has finished, for a layout that overlays rather than switches. */
+	/** Shown only after the run, for layouts that overlay instead of switch. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> CompletionCard;
 
-	/**
-	 * The score as an arc in Exam, where only its colour carries the verdict. After Training it is
-	 * full and green around a tick instead - Training cannot go wrong, so there is nothing to grade.
-	 */
+	/** Score ring. In Exam it shows the score (colour = pass/fail). After Training it's full with a tick. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<URadialSlider> ScoreRing;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ScoreLabel;
 
-	/** Shown in the ring in place of the score once a Training run is done. */
+	/** Shown inside the ring instead of the score after a Training run. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> ScoreTick;
 
-	/** "Procedure complete" or "Procedure failed". Carries the verdict, with the ring's colour. */
+	/** "Procedure complete" / "Procedure failed". */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CompleteEyebrowLabel;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CompleteTitleLabel;
 
-	/** Why the run ended. Collapsed on a pass: a pass needs no excuse. */
+	/** Why the run failed. Hidden otherwise. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReasonLabel;
 
@@ -437,52 +388,43 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> DoneButton;
 
-	/** "Done" after a pass, "Try again" after a failure. */
+	/** "Done" after a pass, "Try again" otherwise. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> DoneLabel;
 
-	/** Steps, mistakes and elapsed time on one line, for a layout without the definition list. */
+	/** Steps, mistakes and time on one line, for layouts without the result rows. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> SummaryLabel;
 
 	//~ Settings.
 
-	/** How long a complaint stays up. Zero leaves it up until the next one; see the class comment. */
+	/** How long a mistake message stays up. 0 = until the next one. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0", Units = "s"))
 	float MistakeDwellSeconds = 4.f;
 
-	/**
-	 * Shown for a wrong object that its step gave no message of its own - which, now that every
-	 * exposed object is judged, is most of them.
-	 */
+	/** Shown when a mistake has no message of its own (which is currently always). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	FText DefaultMistakeMessage;
 
 
 	/**
-	 * Let Begin and Try again start the session themselves.
-	 *
-	 * On, so that a panel and a session dropped into a level work with nothing wired. Clear it when
-	 * something else owns the flow — a menu, a chapter manager, a cutscene — and listen for
-	 * On Begin Requested instead. The delegates fire either way.
+	 * Let Begin / Try again start the session. On by default so a panel and a session dropped into a
+	 * level just work. Turn it off if something else controls the flow and listen to On Begin
+	 * Requested instead.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training")
 	bool bButtonsDriveSession = true;
 
 #if WITH_EDITORONLY_DATA
-	/**
-	 * Show the report as a failed run while laying the panel out. The failed report is the taller
-	 * of the two - it has the reason line - so it is the one to check for fit. Editor only: it
-	 * changes the designer preview and nothing a trainee will ever see.
-	 */
+	/** Preview the report as a failed run. It's the taller version, so it's the one to check for fit. Editor only. */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewFailedRun = false;
 
-	/** Show the report as a finished Training run - the full ring and the tick. Editor only. */
+	/** Preview the report as a finished Training run (full ring + tick). Editor only. */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewTrainingRun = false;
 
-	/** Show the sample step with three sub-steps. Clear it to see a step without any - one row. Editor only. */
+	/** Preview the sample step with three sub-steps; off shows a step without any. Editor only. */
 	UPROPERTY(EditAnywhere, Category = "FlexXR|Preview")
 	bool bPreviewSubSteps = true;
 #endif
@@ -500,7 +442,7 @@ private:
 	UFUNCTION()
 	void HandleFinished(FFXR_SessionReport InReport);
 
-	//~ Button handlers. UFUNCTION because that is what OnClicked binds to.
+	//~ Button handlers (UFUNCTION so OnClicked can bind them).
 
 	UFUNCTION()
 	void HandleBeginClicked();
@@ -519,24 +461,24 @@ private:
 
 	void ClearMistake();
 
-	/** Push the current state into whichever of the bound widgets exist. */
+	/** Push the current state into whichever bound widgets exist. */
 	void Refresh();
 
-	//~ Refresh, split by screen so each one reads as the thing it draws.
+	//~ One refresh per screen.
 	void RefreshChrome();
 	void RefreshStart();
 	void RefreshExplanation();
 	void RefreshProcedure();
 	void RefreshComplete();
 
-	/** What the session's state says should be up. */
+	/** Which screen the session state calls for. */
 	EFXR_PanelScreen ResolveScreen() const;
 
-	/** Move the switcher, collapse the chrome that does not belong, and tell Blueprint. */
+	/** Switch screens, hide the chrome that doesn't belong, and notify Blueprint. */
 	void ApplyScreen(EFXR_PanelScreen NewScreen);
 
-	//~ The meter and the list take their content as data rather than reading the session, so the
-	//~ designer preview can feed them the sample procedure and draw with the code a run will use.
+	//~ The meter and rows take data instead of reading the session, so the designer preview can
+	//~ use the same code with sample data.
 
 	/** One meter segment per step. Called when a run starts. */
 	void BuildMeter(int32 StepCount);
@@ -544,40 +486,36 @@ private:
 	/** Colour the segments for these statuses. */
 	void RefreshMeter(const TArray<FFXR_StepRecord>& Steps);
 
-	/** One list row per sub-step of the page on show. Called when the open step changes. */
+	/** One row per sub-step of the open step. Called when the open step changes. */
 	void BuildRows(const TArray<FFXR_SubStepRecord>& Lines);
 
-	/** Restyle the rows for these statuses, and collapse the list when there are none. */
+	/** Restyle the rows for these statuses; collapse the list if there are none. */
 	void RefreshRows(const TArray<FFXR_SubStepRecord>& Lines);
 
 	/**
-	 * Fill whichever screen the designer has the switcher on with the design page's own sample
-	 * content, and collapse the chrome that screen does not have.
-	 *
-	 * Without it the designer shows a mostly blank layout, the step list empty, and the bar on
-	 * screens that never carry it - which made the report look 107 px shorter than it is and the
-	 * Explanation screen look like it had a header. A preview that disagrees with the runtime is a
-	 * preview that sends people chasing bugs that are not there.
+	 * Fill the screen the designer is showing with sample content and hide chrome that screen doesn't
+	 * have. Without this the designer showed an empty list and a top bar on screens that don't have
+	 * one, which made the layout look wrong when it wasn't.
 	 */
 	void FillDesignPreview();
 
-	/** Hook the buttons up once, at construction. */
+	/** Bind the buttons once, on construct. */
 	void BindButtons();
 
-	/** The elapsed clock in the foot, which is the one thing on the panel that must tick. */
+	/** The elapsed-time clock, the only thing on the panel that ticks. */
 	void StartClock();
 	void StopClock();
 
 	UFUNCTION()
 	void TickClock();
 
-	/** Steps, mistakes and elapsed time for the one-line summary. */
+	/** Steps, mistakes and time for the one-line summary. */
 	FText BuildSummaryText() const;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UFXR_TrainingSession> Session;
 
-	/** Rows of the page on show, parallel to its lines. */
+	/** Rows for the current page, parallel to its lines. */
 	UPROPERTY(Transient)
 	TArray<FFXR_PanelStepRow> Rows;
 
@@ -591,13 +529,13 @@ private:
 	FText Instruction;
 	FText MistakeText;
 
-	/** Non-empty means a briefing is up and overrides the derived screen. */
+	/** Non-empty while a briefing is showing; overrides the derived screen. */
 	FText ExplanationBody;
 
 	FFXR_SessionReport Report;
 	FName StepId;
 
-	/** The step whose page the rows were built for, or INDEX_NONE. */
+	/** The step the rows were built for, or INDEX_NONE. */
 	int32 PageStep = INDEX_NONE;
 	EFXR_PanelScreen Screen = EFXR_PanelScreen::Start;
 	EFXR_ExplainState ExplainState = EFXR_ExplainState::Idle;

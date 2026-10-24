@@ -14,12 +14,11 @@ class UFXR_GripPoint;
 class UFXR_HandPose;
 
 /**
- * UFXR_InteractableBase — shared base for FlexXR interactables (Grab, Latch, Press, ...).
+ * UFXR_InteractableBase - base class for FlexXR interactables (Grab, Latch, Press, ...).
  *
- * Per ADR-003 there is deliberately no IFXR_Interactable interface: this class's virtual
- * lifecycle IS the extension contract. Subclass it and override CanBegin / OnBegin /
- * OnUpdate / OnEnd, and inherit registry registration, the enable API, driven-component
- * resolution, and InteractionId event emission for free.
+ * There's no IFXR_Interactable interface (ADR-003); this class's virtuals are the extension
+ * point. Subclass it and override CanBegin / OnBegin / OnUpdate / OnEnd, and you get registry
+ * registration, the enable API, driven-component resolution and InteractionId events with it.
  *
  * A SceneComponent so it can be attached to (and sit at) the mesh it drives.
  */
@@ -39,7 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Interaction")
 	void SetInteractionEnabled(bool bEnabled);
 
-	/** End any current hold immediately (EFXR_EndReason::ForceReleased) — disarm, stun, cutscene rip. No-op if not held. */
+	/** End any current hold immediately (EFXR_EndReason::ForceReleased) - disarm, stun, cutscene rip. No-op if not held. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Interaction")
 	void ForceRelease();
 
@@ -56,20 +55,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Training")
 	bool IsExposedToTraining() const { return bExposeToTraining; }
 
-	//~ Extension contract (ADR-003) — override these in subclasses.
+	//~ Extension contract (ADR-003) - override these in subclasses.
 	virtual bool CanBegin(IFXR_Interactor* Interactor) const;
 	virtual void OnBegin(IFXR_Interactor* Interactor);
 	virtual void OnUpdate(IFXR_Interactor* Interactor, float DeltaTime);
 	virtual void OnEnd(EFXR_EndReason Reason);
 
-	//~ Two-hand contract — defaults are single-hand; interactables that support a second hand
+	//~ Two-hand contract - defaults are single-hand; interactables that support a second hand
 	//~ (FXR_Grab's Allow Two-Handed) override these. The driver never assumes hand roles.
 	/** Whether a second hand may join the current hold. */
 	virtual bool CanBeginSecondary(IFXR_Interactor* Interactor) const { return false; }
 	/** A second hand joined the current hold. */
 	virtual void OnBeginSecondary(IFXR_Interactor* Interactor) {}
 	/**
-	 * A specific hand let go. Default: single-hand — the hold ends. Two-hand overrides detach
+	 * A specific hand let go. Default: single-hand - the hold ends. Two-hand overrides detach
 	 * just that hand (or promote the survivor) and only end the hold when the last hand leaves.
 	 */
 	virtual void ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason) { OnEnd(Reason); }
@@ -77,7 +76,7 @@ public:
 	/** Activation radius (cm) used by the detection broad phase. */
 	float GetActivationRadius() const { return ActivationRadius; }
 
-	/** The primitive this interactable moves/affects — the highlight subsystem's Target Mesh scope. */
+	/** The primitive this interactable moves/affects - the highlight subsystem's Target Mesh scope. */
 	UPrimitiveComponent* GetDrivenComponent() const { return ResolveDrivenComponent(); }
 
 	/** Whether any debug draw / viewport gizmo is enabled. */
@@ -96,17 +95,17 @@ public:
 	void RegisterGripPoint(UFXR_GripPoint* GripPoint);
 	void UnregisterGripPoint(UFXR_GripPoint* GripPoint);
 
-	/** True if any grip point claims this interactable — grip points are then the only grab surface (ADR-007). */
+	/** True if any grip point claims this interactable - grip points are then the only grab surface (ADR-007). */
 	bool HasOwnedGripPoints() const { return OwnedGripPoints.Num() > 0; }
 
 	/**
 	 * Whether a hand's grab sphere reaches this interactable (ADR-007): with owned grip points,
-	 * the points are the only grab surface — the nearest accepting point decides; without, the
+	 * the points are the only grab surface - the nearest accepting point decides; without, the
 	 * activation radius around the driven mesh decides. OutDistanceSq scores the narrow phase.
 	 */
 	bool IsInGrabReach(const FVector& GrabCenter, float GrabRadius, EFXR_HandSide HandSide, float& OutDistanceSq) const;
 
-	/** Whether grab detection may claim this interactable — poke-driven types (Press) return false. */
+	/** Whether grab detection may claim this interactable - poke-driven types (Press) return false. */
 	virtual bool IsGrabTarget() const { return true; }
 
 	/**
@@ -123,7 +122,7 @@ public:
 	/**
 	 * While held, the world transform the hand mesh should sit at (e.g. a handle grip point), so the
 	 * hand tracks the object instead of the controller. Return false to follow the interactor grip
-	 * (the default — Grab moves the object to the hand, so the hand stays on the controller).
+	 * (the default - Grab moves the object to the hand, so the hand stays on the controller).
 	 */
 	virtual bool GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const { return false; }
 
@@ -135,7 +134,7 @@ protected:
 	UFXR_GripPoint* SelectGripPoint(IFXR_Interactor* Interactor) const;
 
 	/**
-	 * Best grip point for a hand, ignoring reach — for claims made from range, where the object is
+	 * Best grip point for a hand, ignoring reach - for claims made from range, where the object is
 	 * metres away, nothing overlaps, and the usual proximity test rejects every point.
 	 */
 	UFXR_GripPoint* SelectGripPointForHand(EFXR_HandSide Side) const;
@@ -143,7 +142,7 @@ protected:
 	/** Emit this interactable's InteractionId on the FXR event bus, if Expose to Training is set. */
 	void BroadcastInteractionEvent(EFXR_InteractionPhase Phase, IFXR_Interactor* Interactor);
 
-	/** Runtime debug draw while Draw Debug Radius is set — override to draw a type-specific shape. */
+	/** Runtime debug draw while Draw Debug Radius is set - override to draw a type-specific shape. */
 	virtual void DrawInteractionDebug() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")

@@ -64,7 +64,7 @@ void UFXR_HandInteractor::SampleHandTracking()
 		bHasValidHand = true;
 	}
 
-	// The tracked index tip is the poke probe (FXR_Press) — the real fingertip, per-user scaled.
+	// The tracked index tip is the poke probe (FXR_Press) - the real fingertip, per-user scaled.
 	bHasValidIndexTip = bIndex;
 	if (bIndex)
 	{

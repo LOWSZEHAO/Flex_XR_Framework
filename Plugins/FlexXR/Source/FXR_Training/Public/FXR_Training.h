@@ -6,13 +6,12 @@
 #include "Modules/ModuleManager.h"
 
 /**
- * FXR_Training — the optional SOP layer.
+ * FXR_Training - optional SOP / training layer.
  *
- * A procedure authored as two assets - the steps the trainee reads (UFXR_TrainingSteps) and the
- * GM that says what happens at each (UFXR_TrainingGM) - run in Training or Exam by a session that
- * fires the GM's events, judges InteractionId events from the FXR event bus, and reports. The top of
- * the dependency chain; games simply never load it. Runtime per ADR-004 and ADR-011: an engine-free
- * FFXR_StepRunner over a compiled step array.
+ * A procedure is two assets: the steps (UFXR_TrainingSteps) and the GM (UFXR_TrainingGM). A
+ * session runs it in Training or Exam mode, fires the GM's events, judges interaction events from
+ * the event bus and builds a report. Top of the module chain; games don't need to load it.
+ * See ADR-004 and ADR-011.
  */
 class FFXR_TrainingModule : public IModuleInterface
 {

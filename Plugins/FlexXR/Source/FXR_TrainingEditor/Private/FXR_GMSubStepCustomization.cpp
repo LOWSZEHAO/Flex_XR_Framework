@@ -68,8 +68,7 @@ void FFXR_GMSubStepCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> 
 				.OptionsSource(&Options)
 				.OnGenerateWidget(this, &FFXR_GMSubStepCustomization::MakeOption)
 				.OnSelectionChanged(this, &FFXR_GMSubStepCustomization::OnOptionChosen)
-				// Rebuilt on opening, so a changed Step Id above, or a sub-step added to the Steps
-				// asset since, shows without reopening the GM.
+				// Rebuilt on open, so a changed Step Id or new sub-steps show up right away.
 				.OnComboBoxOpening(this, &FFXR_GMSubStepCustomization::RefreshOptions)
 				[
 					SNew(STextBlock)
@@ -82,7 +81,7 @@ void FFXR_GMSubStepCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> 
 
 FName FFXR_GMSubStepCustomization::GetOwningStepId() const
 {
-	// This row is an element of its step's Sub Steps array, so the step is two handles up.
+	// This row is an element of the step's SubSteps array, so the step is two handles up.
 	const TSharedPtr<IPropertyHandle> Array = StructHandle.IsValid() ? StructHandle->GetParentHandle() : nullptr;
 	const TSharedPtr<IPropertyHandle> Step = Array.IsValid() ? Array->GetParentHandle() : nullptr;
 	const TSharedPtr<IPropertyHandle> StepIdHandle =
@@ -156,7 +155,7 @@ TSharedRef<SWidget> FFXR_GMSubStepCustomization::MakeOption(TSharedPtr<FName> Op
 
 void FFXR_GMSubStepCustomization::OnOptionChosen(TSharedPtr<FName> Option, ESelectInfo::Type How)
 {
-	// Direct is the combo being set from code, not by the author choosing something.
+	// Direct = set from code, not picked by the user.
 	if (Option.IsValid() && SubStepIdHandle.IsValid() && How != ESelectInfo::Direct)
 	{
 		SubStepIdHandle->SetValue(*Option);

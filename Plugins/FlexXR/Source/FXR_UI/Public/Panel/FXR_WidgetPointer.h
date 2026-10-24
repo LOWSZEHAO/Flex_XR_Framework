@@ -13,23 +13,17 @@ class UFXR_InteractorComponent;
 class UFXR_Panel;
 
 /**
- * UFXR_WidgetPointer — one hand's ability to use UMG.
+ * UFXR_WidgetPointer - lets one hand use UMG panels (hover, click, drag, scroll).
  *
- * Add one per hand to the pawn beside FXR_Interaction Driver and every FXR_Panel in the level
- * becomes usable: hover, click, drag, scroll, all of it, through Slate's own pointer. That is why
- * ordinary widgets work without being told they are in VR.
+ * Add one per hand to the pawn next to the FXR_InteractionDriver. It goes through Slate's own
+ * pointer events, so normal widgets work without changes.
  *
- * It subclasses the engine's widget interaction component to keep that pointer plumbing and replace
- * only the part that is wrong for XR — where the pointer is. The engine traces along its own
- * transform, which would be a second ray, aimed slightly differently from the one the rig already
- * casts and draws. This reads the rig's cached hit instead, so what the beam lands on and what the
- * press hits are the same answer by construction, at the cost of no extra trace.
+ * Subclasses UWidgetInteractionComponent to reuse its Slate plumbing, but instead of doing its
+ * own trace it uses the rig's cached ray hit. That way the beam and the click always agree, and
+ * there's no second trace.
  *
- * **A fingertip beats the laser.** Inside Poke Range the finger drives the panel, because a hand
- * that can touch the glass is not pointing at it — the same arbitration the driver makes between
- * near and far interaction, for the same reason.
- *
- * **It yields to interaction.** A hand holding something is not a cursor (ADR-005).
+ * Within Poke Range the fingertip takes over from the ray. A hand that's holding something
+ * doesn't act as a pointer (ADR-005).
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_UI_API UFXR_WidgetPointer : public UWidgetInteractionComponent
@@ -47,41 +41,38 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Panel")
 	UFXR_Panel* GetHoveredPanel() const { return HoveredPanel.Get(); }
 
-	/** True while the finger is driving rather than the ray — for a hand visual that reacts to it. */
+	/** True while the fingertip is driving instead of the ray. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Panel")
 	bool IsPoking() const { return bPokeDriving; }
 
 protected:
-	/** Which hand this pointer belongs to. One component per hand. */
+	/** Which hand this pointer is for. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel")
 	EFXR_HandSide Hand = EFXR_HandSide::Right;
 
-	/**
-	 * How near the fingertip has to be before it takes the panel off the laser. Zero turns touch off
-	 * and leaves the hand pointing, which is the right setting for a panel mounted out of reach.
-	 */
+	/** How close the fingertip has to be to take over from the ray. 0 disables touch (for out-of-reach panels). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel", meta = (ClampMin = "0.0", Units = "cm"))
 	float PokeRange = 8.f;
 
-	/** Select value at or above which a pointed-at widget is pressed. */
+	/** Select value at or above which the pointed-at widget is pressed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float PressThreshold = 0.5f;
 
-	/** Select value below which it is released. Kept under Press Threshold for hysteresis. */
+	/** Select value below which it's released. Lower than Press Threshold for hysteresis. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ReleaseThreshold = 0.35f;
 
 private:
-	/** Decide what this hand is on this frame and hand it to Slate. */
+	/** Work out what this hand is pointing at this frame and pass it to Slate. */
 	void UpdateSource();
 
-	/** Send or withdraw the press, after Slate has been told where the pointer is. */
+	/** Send or release the press, after the pointer position has been updated. */
 	void UpdatePress();
 
-	/** Nearest panel the fingertip is inside. Sets the arm flag while the finger is still outside. */
+	/** Nearest panel the fingertip is in. Arms the press while the finger is still in front. */
 	bool ResolvePoke(IFXR_Interactor* Interactor, FHitResult& OutHit, UFXR_Panel*& OutPanel);
 
-	/** The rig's far hit, if it landed on a panel. */
+	/** The rig's far hit, if it's on a panel. */
 	bool ResolveRay(FHitResult& OutHit, UFXR_Panel*& OutPanel) const;
 
 	IFXR_Interactor* GetInteractor() const;
@@ -96,15 +87,15 @@ private:
 
 	TWeakObjectPtr<UFXR_Panel> HoveredPanel;
 
-	/** Refilled every frame and emptied again; kept as a member so the scan never allocates. */
+	/** Scratch array reused every frame so the scan doesn't allocate. */
 	TArray<UFXR_Panel*> PanelScratch;
 
-	/** Centimetres along the panel's normal: positive is short of the glass, negative is through it. */
+	/** Cm along the panel normal: positive = in front, negative = through. */
 	float PokeDepth = 0.f;
 
 	/**
-	 * Set once the finger has been seen in front of a panel, and the only way a press is allowed.
-	 * Without it a hand reaching past the back of a floating panel would press whatever is on it.
+	 * Set once the finger has been seen in front of the panel; a press is only allowed after that.
+	 * Stops a hand reaching around the back of a floating panel from pressing it.
 	 */
 	bool bPokeArmed = false;
 

@@ -9,11 +9,11 @@
 class IHandTracker;
 
 /**
- * UFXR_HandInteractor — articulated hand-tracking input source.
+ * UFXR_HandInteractor - articulated hand-tracking input source.
  *
  * Samples OpenXR hand joints each tick: the palm keypoint drives the tracked pose, thumb-tip /
  * index-tip separation drives Select (grab pinch), and thumb-tip / middle-tip separation drives
- * Navigate (locomotion pinch) — two fingers so grabbing and moving are never the same gesture.
+ * Navigate (locomotion pinch) - two fingers so grabbing and moving are never the same gesture.
  * Falls back to this component's transform when no valid hand data is present.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))

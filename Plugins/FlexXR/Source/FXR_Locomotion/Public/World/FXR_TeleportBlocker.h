@@ -9,15 +9,15 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_TeleportBlockerEvent);
 
 /**
- * UFXR_TeleportBlocker — a no-teleport region (a world component).
+ * UFXR_TeleportBlocker - a no-teleport region (a world component).
  *
- * Any teleport target falling inside the box is rejected regardless of the validation mode — a
+ * Any teleport target falling inside the box is rejected regardless of the validation mode - a
  * blocker overrides NavMesh, Surface Angle, Anchors, everything. Use it to fence off hazards,
  * pits, or off-limits areas. Self-registers into the teleport registry.
  *
  * For a warning visual, add a Static Mesh Component under it in the Blueprint and drive that from
- * On Aim / On Exit to tell the player *why* they cannot go there. Usually there is none, and only
- * the debug box marks it out. Give any such child mesh no collision — blocking is decided against
+ * On Aim / On Exit to tell the player why they cannot go there. Usually there is none, and only
+ * the debug box marks it out. Give any such child mesh no collision - blocking is decided against
  * Box Extent, never by stopping the arc.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
@@ -53,7 +53,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|TeleportBlocker", meta = (ClampMin = "1.0"))
 	FVector BoxExtent = FVector(100.f, 100.f, 100.f);
 
-	/** Draw the blocked box — in the level viewport as well as in play. */
+	/** Draw the blocked box - in the level viewport as well as in play. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|TeleportBlocker|Debug")
 	bool bDrawDebug = false;
 

@@ -48,15 +48,14 @@ bool UFXR_GuidanceArrow::ResolveTarget(FVector& OutLocation) const
 		return false;
 	}
 
-	// A component target wins and is re-read every frame, so guidance survives the thing moving —
-	// a cart being wheeled to its bay is still the place to go.
+	// A component target takes priority and is re-read every frame, so the arrow follows it if it moves.
 	if (const USceneComponent* Target = TargetComponent.Get())
 	{
 		OutLocation = Target->GetComponentLocation();
 		return true;
 	}
 
-	// A component that has been destroyed is not a stale location to keep pointing at.
+	// Target component was destroyed: stop instead of pointing at its old location.
 	if (TargetComponent.IsExplicitlyNull())
 	{
 		OutLocation = TargetLocation;
@@ -98,8 +97,8 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 	{
 		const FVector CameraLocation = Cam->GetComponentLocation();
 
-		// Horizontal only, both for the test and the arrow itself. A target directly overhead is not
-		// a direction anyone can walk, and an arrow that pitches at the floor reads as broken.
+		// Horizontal only, for both the check and the arrow. A target straight above isn't somewhere you
+		// can walk, and an arrow pitched at the floor looks broken.
 		FVector ToTarget = Target - CameraLocation;
 		const float GroundDistance = ToTarget.Size2D();
 		ToTarget.Z = 0.f;
@@ -109,15 +108,14 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		Facing.Z = 0.f;
 		Facing = Facing.GetSafeNormal();
 
-		// Redundant in two ways, and both mean the same thing: the player does not need telling.
+		// Either way the player doesn't need the arrow any more.
 		const bool bArrived = GroundDistance <= ArriveRadius;
 		const float AngleOff = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Facing, Heading), -1.f, 1.f)));
 		const bool bAlreadyLooking = AngleOff <= HideWithinAngle;
 
 		bWanted = !Heading.IsNearlyZero() && !bArrived && !bAlreadyLooking;
 
-		// Anchored on the camera's yaw rather than its full rotation, so the arrow holds still while
-		// the player looks up and down instead of swimming around the view.
+		// Follow the camera's yaw only, so the arrow stays put when the player looks up and down.
 		const FRotator YawOnly(0.f, Cam->GetComponentRotation().Yaw, 0.f);
 		Anchor = CameraLocation + YawOnly.RotateVector(FVector(Distance, LateralOffset, 0.f)) + FVector(0.f, 0.f, HeightOffset);
 	}
@@ -145,12 +143,10 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		return;
 	}
 
-	// The fade is geometric: the arrow grows in rather than dissolving, which an opaque unlit
-	// material cannot do anyway, and which reads as arriving rather than materialising.
+	// Fade by scaling, since the material is opaque unlit and can't fade its alpha.
 	const float Eased = FFXR_Motion::EaseFade(Alpha);
 
-	// A Blueprint wins when one is set. Anything a single static mesh cannot be lives here: a
-	// particle trail, an animated marker, something that spins.
+	// A Visual Class Blueprint takes priority when set (particles, animated markers, etc.).
 	if (VisualClass)
 	{
 		if (!VisualActor && !bVisualSpawnAttempted)
@@ -161,14 +157,14 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 				FActorSpawnParameters Params;
 				Params.Owner = Owner;
 				Params.Instigator = Owner->GetInstigator();
-				// Transient so it never lands in a save, and always-spawn because guidance is a
-				// picture: refusing to appear because something is in the way would be nonsense.
+				// Transient so it's never saved; always spawn, since it's purely visual and shouldn't fail
+				// because of an overlap.
 				Params.ObjectFlags |= RF_Transient;
 				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 				VisualActor = World->SpawnActor<AActor>(VisualClass, Anchor, FRotator::ZeroRotator, Params);
 				if (VisualActor)
 				{
-					// Kept so the fade multiplies the author's scale instead of overwriting it.
+					// Keep the Blueprint's own scale so the fade multiplies it.
 					VisualBaseScale = VisualActor->GetActorScale3D();
 				}
 			}
@@ -179,7 +175,7 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 			return; // spawn failed once; do not thrash trying again every frame
 		}
 
-		// Actors face +X by UE convention, so a Blueprint needs no axis setting of its own.
+		// Actors face +X by convention, so no axis setting is needed for a Blueprint.
 		VisualActor->SetActorLocationAndRotation(Anchor, FRotationMatrix::MakeFromX(Heading).Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
 		VisualActor->SetActorScale3D(VisualBaseScale * Eased);
 		VisualActor->SetActorHiddenInGame(false);
@@ -193,20 +189,20 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		return; // cleared on purpose draws nothing; guidance state is unaffected
 	}
 
-	// Built on first use, like the locomotion arc and the far-ray beam: a pawn that never receives
-	// guidance costs nothing.
+	// Created on first use (like the locomotion arc and the ray beam), so a pawn that never shows
+	// guidance doesn't pay for it.
 	if (!Arrow)
 	{
 		Arrow = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
 		Arrow->SetupAttachment(Owner->GetRootComponent());
-		// Movable and absolute: a runtime component defaults to Static mobility and silently discards
-		// every transform update, and absolute keeps the rig's own scale out of a size in centimetres.
+		// Movable (runtime components default to Static and ignore transform updates) and absolute
+		// scale, so the rig's scale doesn't affect a size in cm.
 		Arrow->SetMobility(EComponentMobility::Movable);
 		Arrow->SetAbsolute(true, true, true);
 		Arrow->SetCastShadow(false);
 		Arrow->SetStaticMesh(Mesh);
-		// Cleared after the mesh is assigned, which brings its own body setup with it. The arrow is a
-		// picture; it must never block a trace, catch a poke, or stop a thrown object.
+		// Clear collision after assigning the mesh (the mesh brings its own body setup). The arrow must
+		// never block traces, pokes or thrown objects.
 		Arrow->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 		Arrow->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Arrow->SetGenerateOverlapEvents(false);
@@ -225,8 +221,7 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 				Arrow->SetMaterial(0, Material);
 			}
 
-			// Guidance's colour, from the same state map the highlight reads. An arrow that disagreed
-			// with the glow at the end of it would be two vocabularies for one instruction.
+			// Use the Guidance colour from the same state map the highlight uses, so they always match.
 			if (ArrowMID)
 			{
 				if (const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get())
@@ -237,8 +232,7 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 		}
 	}
 
-	// Size from the mesh's own bounds, so Arrow Size is honestly centimetres whatever mesh is set,
-	// measured along whichever axis the mesh actually points down.
+	// Size from the mesh bounds along its forward axis, so Arrow Size really is in cm for any mesh.
 	const FVector Extent = Mesh->GetBounds().BoxExtent;
 	float MeshLength = KINDA_SMALL_NUMBER;
 	float MeshGirth = KINDA_SMALL_NUMBER;
@@ -301,8 +295,8 @@ void UFXR_GuidanceArrow::UpdateArrow(float DeltaTime)
 
 void UFXR_GuidanceArrow::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// The static mesh component is transient and goes with the owner, but a spawned actor is our
-	// own and has to be cleaned up or it outlives the pawn.
+	// The mesh component is transient and dies with the owner, but a spawned actor has to be
+	// destroyed explicitly.
 	if (VisualActor)
 	{
 		VisualActor->Destroy();

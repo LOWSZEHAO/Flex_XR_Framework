@@ -7,26 +7,18 @@
 #include "FXR_PanelBuilder.generated.h"
 
 /**
- * UFXR_PanelBuilder — generates WBP_FXR_TrainingPanel, the framework's default training panel, and
- * the font it is set in.
+ * UFXR_PanelBuilder - generates WBP_FXR_TrainingPanel (the default training panel) and its font.
  *
- * So the framework ships a readable panel rather than an empty parent class and a paragraph telling
- * you to build one. The layout is code because the design *is* a set of decisions worth keeping
- * under version control and worth explaining; the tokens live in `FXR_PanelStyle.h` and the shape
- * each screen takes is explained where it is built.
+ * The layout is built in code so it's versioned and reproducible. Sizes and colours come from
+ * FXR_PanelStyle.h; the reference mockup is UI_Design/panel.html.
  *
- * The design it builds is `UI_Design/panel.html`, drawn at the panel's real size. If the two
- * disagree, the page is right.
+ * This has to be C++. A widget blueprint's tree (UWidgetBlueprint::WidgetTree,
+ * UWidgetTree::RootWidget) isn't exposed to Python, UWidgetTree has no UFUNCTIONs, and
+ * ConstructWidget is a template. Python can create the asset but can't fill it.
  *
- * **Why this is C++ rather than a Python tool like the material generator.** It cannot be Python. A
- * widget blueprint's contents live in `UWidgetBlueprint::WidgetTree` and `UWidgetTree::RootWidget`,
- * both bare `UPROPERTY()`s with no edit or blueprint flag, so neither is exported to script, and
- * `UWidgetTree` has no `UFUNCTION` at all. `ConstructWidget` is a C++ template, which settles it.
- * Python can create the asset and then do nothing with it.
- *
- * Reached from the editor console as:
+ * Run from the editor console:
  *     unreal.FXR_PanelBuilder.build_default_training_panel(False)
- * or through Tools/make_fxr_training_panel.py, which is that line plus the reporting.
+ * or through Tools/make_fxr_training_panel.py.
  */
 UCLASS()
 class UFXR_PanelBuilder : public UBlueprintFunctionLibrary
@@ -35,33 +27,24 @@ class UFXR_PanelBuilder : public UBlueprintFunctionLibrary
 
 public:
 	/**
-	 * Build the default panel at /FlexXR/UI/WBP_FXR_TrainingPanel.
+	 * Build the panel at /FlexXR/UI/WBP_FXR_TrainingPanel. Imports the font first if needed (without
+	 * it every glyph renders as a box). Won't overwrite an existing panel unless bOverwrite is set,
+	 * so hand tweaks aren't lost.
 	 *
-	 * Imports the font first if it is missing, because a panel without it renders every glyph as a
-	 * missing-glyph box — which is not a subtle failure, but is a confusing one.
-	 *
-	 * Refuses to overwrite unless asked. The point of generating a panel is that someone then tunes
-	 * it, and a regenerate that silently discarded that tuning would be worse than no generator.
-	 *
-	 * @return true when an asset was written. False is also the answer when one already existed.
+	 * @return true if an asset was written (false also when it already existed).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	static bool BuildDefaultTrainingPanel(bool bOverwrite = false);
 
 	/**
-	 * Import Montserrat from the plugin's Resources/Fonts and compose it into
-	 * /FlexXR/UI/Fonts/F_Montserrat, with Medium, SemiBold and ExtraBold as its three typefaces.
+	 * Import Montserrat from Resources/Fonts into /FlexXR/UI/Fonts/F_Montserrat with three faces:
+	 * Medium, SemiBold and ExtraBold (the only weights the design uses).
 	 *
-	 * Three faces, not the family: the design uses 500, 600 and 800 and no italics, and an unused
-	 * face is still a cooked megabyte. The composite is a Runtime font — Offline caching is the old
-	 * UFont path and bakes a texture at fixed sizes, which is the wrong trade for a panel whose
-	 * type is read at a distance that varies.
+	 * Runtime font cache rather than Offline, since the panel is read at varying distances. Face
+	 * data is embedded, so the .ttf files are only needed to reimport (they stay in the repo with
+	 * the OFL licence).
 	 *
-	 * The face data is embedded in the asset (`Inline`), so the .ttf files are needed only to
-	 * reimport. They stay in the repo for that and because the SIL Open Font License travels with
-	 * the font.
-	 *
-	 * @return true when the composite font exists afterwards.
+	 * @return true if the font exists afterwards.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Training")
 	static bool ImportPanelFonts(bool bOverwrite = false);

@@ -16,17 +16,14 @@ class UStaticMeshComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SocketEvent, UFXR_Grab*, Object);
 
 /**
- * UFXR_Socket — a snap zone: "this object belongs here".
+ * UFXR_Socket - a snap zone where an object belongs.
  *
- * Pairs with FXR_Grab. Carry an accepted object near the socket and a ghost shows where it would
- * land; let go and it seats. Re-grab pulls it back out. Seating emits this component's
- * InteractionId, which is what makes "docked the extinguisher on its wall mount" a validatable
- * SOP step rather than something a training author has to detect by hand.
+ * Works with FXR_Grab. Bring an accepted object close and a ghost shows where it will go; let go
+ * and it seats. Grabbing it again pulls it out. Seating sends this component's InteractionId, so
+ * "put the extinguisher back on its mount" can be a training step without any custom detection.
  *
- * The socket's own transform is the seat pose — place the component where the object's origin
- * should end up, and point it the way the object should face.
- *
- * Not itself grabbable: a socket receives, it is never picked up.
+ * The socket's transform is the seat pose: place it where the object's origin should end up,
+ * facing the way the object should face. A socket can't be grabbed itself.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Socket : public UFXR_InteractableBase
@@ -53,7 +50,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Socket")
 	bool IsOccupied() const { return Socketed.IsValid(); }
 
-	/** Let go of whatever is seated — the way out of a Lock In socket. */
+	/** Let go of whatever is seated - the way out of a Lock In socket. */
 	UFUNCTION(BlueprintCallable, Category = "Socket")
 	void Eject();
 
@@ -69,7 +66,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Socket")
 	FFXR_SocketEvent OnSocketed;
 
-	/** The seated object left — grabbed back out, or ejected. */
+	/** The seated object left - grabbed back out, or ejected. */
 	UPROPERTY(BlueprintAssignable, Category = "Socket")
 	FFXR_SocketEvent OnRemoved;
 
@@ -94,7 +91,7 @@ protected:
 #endif
 
 	/**
-	 * Actor tags this socket accepts. Empty accepts any grabbable object — which is right for a
+	 * Actor tags this socket accepts. Empty accepts any grabbable object - which is right for a
 	 * generic shelf and wrong for a wall mount that should only take an extinguisher.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
@@ -111,7 +108,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
 	bool bAutoSnap = false;
 
-	/** Require the object to be facing roughly the right way before it will seat — plugs, keys, tools in a rack. */
+	/** Require the object to be facing roughly the right way before it will seat - plugs, keys, tools in a rack. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
 	bool bRequireAlignment = false;
 
@@ -126,10 +123,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
 	bool bLockIn = false;
 
-	/**
-	 * How long the object takes to settle into the seat pose. Eased rather than teleported: an object
-	 * that jumps into place reads as a glitch, and the short travel is what sells the docking.
-	 */
+	/** How long the object takes to slide into place. Eased so it doesn't just teleport. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket", meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s"))
 	float SeatDuration = 0.25f;
 
@@ -138,7 +132,7 @@ protected:
 	EFXR_SocketGhostMode GhostMode = EFXR_SocketGhostMode::OnApproach;
 
 	/**
-	 * Actor whose shape the preview takes when nothing is being carried — required by Always, which
+	 * Actor whose shape the preview takes when nothing is being carried - required by Always, which
 	 * has no approaching object to borrow from. Every static mesh on it is drawn, so an extinguisher
 	 * previews as body, pin, handle and hose rather than one part of itself.
 	 *
@@ -150,7 +144,7 @@ protected:
 	TSoftClassPtr<AActor> GhostActor;
 
 	/**
-	 * Component tags left out of the preview — an effect mesh, a collision proxy, a part that should
+	 * Component tags left out of the preview - an effect mesh, a collision proxy, a part that should
 	 * read as missing. Components already hidden are skipped regardless, so this is only for things
 	 * that are visible on the real object but unwanted on its ghost.
 	 */
@@ -172,7 +166,7 @@ private:
 	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
 	FTransform GetSeatTransform(const UFXR_Grab* Object) const;
 
-	/** Tick only while something is moving — an idle socket costs nothing. */
+	/** Tick only while something is moving - an idle socket costs nothing. */
 	void RefreshTickState();
 	void ApplyGhostAlpha();
 
@@ -189,7 +183,7 @@ private:
 	/** Collect the pieces of the preview from the carried object, else from the Ghost Actor class. */
 	void GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPart>& OutParts) const;
 
-	/** Pieces of a live actor — exact, including anything a construction script built. */
+	/** Pieces of a live actor - exact, including anything a construction script built. */
 	void GatherFromActor(const UFXR_Grab* Object, TArray<FGhostPart>& OutParts) const;
 
 	/** Pieces of a class, read from its component templates rather than by spawning one. */

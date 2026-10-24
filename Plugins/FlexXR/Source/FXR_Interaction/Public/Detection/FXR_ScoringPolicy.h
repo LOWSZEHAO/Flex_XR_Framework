@@ -10,10 +10,10 @@
 class UFXR_InteractableBase;
 
 /**
- * UFXR_ScoringPolicy — decides which of several in-reach interactables a hand actually takes.
+ * UFXR_ScoringPolicy - decides which of several in-reach interactables a hand actually takes.
  *
- * The one seam in the narrow phase (ADR-010). Subclass it, point Project Settings → FlexXR —
- * Interaction → Scoring Policy at the subclass, and the detection subsystem asks it instead. The
+ * The one seam in the narrow phase (ADR-010). Subclass it, point Project Settings -> FlexXR -
+ * Interaction -> Scoring Policy at the subclass, and the detection subsystem asks it instead. The
  * default ranks by distance, which is the behaviour with no policy set at all.
  *
  * A policy object rather than a virtual on the subsystem: a subsystem cannot be cleanly substituted
@@ -21,8 +21,8 @@ class UFXR_InteractableBase;
  * lookup stops finding it the moment a project subclasses it. Working around that means an array
  * copy per lookup, and the detection path is required to be allocation-free.
  *
- * Ranking only, deliberately — no veto. Whether an interactable is eligible at all is already
- * answered by IsGrabTarget / IsInteractionEnabled / CanBegin, and two rejection paths can disagree.
+ * Ranking only, no veto. Eligibility is already handled by IsGrabTarget / IsInteractionEnabled /
+ * CanBegin, and a second rejection path could disagree with them.
  */
 UCLASS(Blueprintable, ClassGroup = (FlexXR))
 class FXR_INTERACTION_API UFXR_ScoringPolicy : public UObject
@@ -31,7 +31,7 @@ class FXR_INTERACTION_API UFXR_ScoringPolicy : public UObject
 
 public:
 	/**
-	 * Rank one candidate that has already passed its reach test. **Lower wins.**
+	 * Rank one candidate that has already passed its reach test. Lower wins.
 	 *
 	 * ReachDistanceSq is what the reach test measured: the squared distance to the closest point on
 	 * the accepting grip point, not to the object's origin. Weight it, ignore it, or replace it with

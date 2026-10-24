@@ -8,36 +8,30 @@
 
 class APlayerCameraManager;
 
-/** Which way a panel turns to be read. */
+/** How a panel turns to face the player. */
 UENUM(BlueprintType)
 enum class EFXR_PanelFacing : uint8
 {
-	/** Stays where it was placed — a machine readout, a wall sign, anything mounted on something. */
+	/** Doesn't turn. For anything mounted: machine readouts, wall signs. */
 	Fixed      UMETA(DisplayName = "Fixed"),
 
-	/** Turns to the player but stays upright. Text never tilts, which is most of what makes it readable. */
+	/** Turns to face the player but stays upright, so text never tilts. */
 	YawOnly    UMETA(DisplayName = "Face Player (upright)"),
 
-	/** Turns fully, pitch included. For a panel well above or below eye level. */
+	/** Turns fully, including pitch. For panels well above or below eye level. */
 	Full       UMETA(DisplayName = "Face Player (fully)")
 };
 
 /**
- * UFXR_Panel — a UMG widget you can point at and touch.
+ * UFXR_Panel - a world-space UMG widget you can point at with a ray or press with a finger.
  *
- * **The kit deliberately does not reimplement buttons, sliders and keypads.** Slate already has
- * them, and a 3D framework that rewrote them would ship worse ones that no designer recognises.
- * What UMG has no answer for is everything around the widget: a surface in the world a laser can
- * hit and a finger can push, sized in centimetres instead of pixels, that turns to face the player
- * and fades instead of appearing. That is this component. What goes inside it is ordinary UMG, and
- * a designer's existing widgets work unchanged.
+ * It doesn't reimplement buttons or sliders; UMG already has those and they work as-is inside the
+ * panel. This component handles the VR side: sizing in centimetres, facing the player, fading,
+ * and being hittable by the hand ray and fingertip without any collision setup. The rig's
+ * UFXR_WidgetPointer finds it automatically.
  *
- * Drop it on an actor, set Widget Class, and it is pointable — no collision to configure and no
- * input to route. The rig's UFXR_WidgetPointer finds it.
- *
- * The widget's visible face is the component's **+X** axis, which is also where a poke has to come
- * from. Both this component and the pointer read that from one place, so a panel cannot be pressed
- * through its own back.
+ * The front face is the component's +X. The pointer uses the same axis, so you can't press a
+ * panel from behind.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_UI_API UFXR_Panel : public UWidgetComponent
@@ -56,32 +50,25 @@ public:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
-	/** Show or hide the panel. It fades, at the framework's one fade duration. */
+	/** Show or hide the panel with a fade (uses the shared fade duration from Motion settings). */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Panel")
 	void SetPanelVisible(bool bNewVisible);
 
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Panel")
 	bool IsPanelVisible() const { return bWantVisible; }
 
-	/** How far through its fade the panel is, 0 to 1. */
+	/** Fade progress, 0 to 1. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Panel")
 	float GetPanelAlpha() const { return Alpha; }
 
-	/**
-	 * Whether a press should reach the widget right now. A panel still fading in, or already on its
-	 * way out, refuses one: a button that answers while it is half gone is how a trainee presses the
-	 * thing that replaced it.
-	 */
+	/** Whether presses are accepted right now. Not while fading in or out, so you can't hit a half-gone button. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Panel")
 	bool IsPointable() const;
 
 	/**
-	 * Where a fingertip lands on this panel, if it is close enough to the front and inside the
-	 * widget's rectangle.
-	 *
-	 * OutDepth is centimetres along the panel's normal: positive is still in front of the glass,
-	 * negative is through it. The caller decides what counts as a press, because only the caller
-	 * knows whether the finger arrived from the front.
+	 * Where a fingertip touches this panel, if it's close to the front and inside the widget area.
+	 * OutDepth is cm along the normal: positive = in front, negative = through. The caller decides
+	 * what counts as a press since it knows which side the finger came from.
 	 */
 	bool TracePoke(const FVector& TipWorld, float Range, FHitResult& OutHit, float& OutDepth);
 
@@ -90,12 +77,9 @@ public:
 
 protected:
 	/**
-	 * How wide the panel is in the world, in centimetres, driven into the component's scale. This is
-	 * the measurement that matters in a headset and the one UMG cannot express: Draw Size is the
-	 * widget's *resolution*, and at scale 1 a 600-pixel widget is six metres across, which is why
-	 * every VR project ends up with a hand-tuned scale of 0.06-something.
-	 *
-	 * Set it to 0 to manage the scale yourself. It is relative, so a scaled parent scales the panel.
+	 * Panel width in the world, in cm, applied to the component scale. Draw Size is the widget's
+	 * resolution, so at scale 1 a 600 px widget is 6 m wide; this saves hand-tuning the scale.
+	 * Set to 0 to manage the scale yourself. Relative, so a scaled parent still scales the panel.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel", meta = (ClampMin = "0.0", Units = "cm"))
 	float PanelWidth = 40.f;
@@ -103,28 +87,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel")
 	EFXR_PanelFacing Facing = EFXR_PanelFacing::Fixed;
 
-	/** Whether the panel is up when play begins. Starting hidden costs no fade. */
+	/** Visible when play begins. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel")
 	bool bStartVisible = true;
 
 	/**
-	 * Light the rig's pointer beam while this panel is aimed at, by marking the actor as a ray
-	 * target. Without it the beam stays dark over UI — it only shows for things that will answer —
-	 * and a laser you cannot see is one you cannot aim.
-	 *
-	 * Clear it for a panel that is only ever read, or one on an actor that is already a ray target.
+	 * Mark the actor as a ray target so the pointer beam shows while aiming at the panel (the beam
+	 * otherwise only shows over interactable things). Turn off for read-only panels or actors that
+	 * are already ray targets.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Panel")
 	bool bPointerBeam = true;
 
 private:
-	/** Drive PanelWidth into the component scale, unless it is zero or nothing has changed. */
+	/** Apply PanelWidth to the component scale, unless it's 0 or unchanged. */
 	void ApplyPanelWidth();
 
 	void UpdateFacing();
 	void UpdateFade(float DeltaTime);
 
-	/** The player's eye. In VR this is the HMD, not the pawn. */
+	/** The player's view point (the HMD in VR, not the pawn). */
 	APlayerCameraManager* GetCameraManager() const;
 
 	UPROPERTY(Transient)

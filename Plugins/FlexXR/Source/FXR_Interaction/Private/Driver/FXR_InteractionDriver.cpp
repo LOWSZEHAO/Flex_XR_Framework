@@ -24,7 +24,7 @@ UFXR_InteractionDriver::UFXR_InteractionDriver()
 	PrimaryComponentTick.bCanEverTick = true;
 
 	// Ship with the plugin so a bare driver draws a pointer. The tube and ring are the same meshes
-	// the teleport arc uses — a beam is a stretched tube, and the endpoint marker is the same ring.
+	// the teleport arc uses - a beam is a stretched tube, and the endpoint marker is the same ring.
 	RayMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment")));
 	RayCursorMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle")));
 	RayMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Ray.M_FXR_Ray")));
@@ -79,8 +79,8 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 	UFXR_InteractableBase* Near = nullptr;
 	if (!HeldNow && Interactor && Subsystem)
 	{
-		// The same query the grab claim uses, run every frame instead of only on the rising edge —
-		// which is what makes the object that lights up provably the object you would take.
+		// Same query the grab uses, but run every frame, so the object that lights up is always the
+		// one you'd actually grab.
 		FVector GrabCenter;
 		float GrabRadius = 0.f;
 		Interactor->GetGrabSphere(GrabCenter, GrabRadius);
@@ -95,7 +95,7 @@ void UFXR_InteractionDriver::PublishFocus(EFXR_HandSide Side, const TWeakObjectP
 	UFXR_RayTarget* RayNow = Cast<UFXR_RayTarget>(Far);
 	UpdateAimed(Side, Aimed, RayNow);
 
-	// A distance-grabbable object hovers from range too, so what lights up is what the press takes —
+	// A distance-grabbable object hovers from range too, so what lights up is what the press takes -
 	// the same promise near hover makes.
 	Focus->SetHovered(Side, Near ? Near : Far);
 
@@ -119,7 +119,7 @@ void UFXR_InteractionDriver::DrivePokes(EFXR_HandSide Side)
 		return;
 	}
 
-	// A hand that owns a hold isn't a poking finger — its fingers are wrapped around something.
+	// A hand that owns a hold isn't a poking finger - its fingers are wrapped around something.
 	if (GetHeldInteractable(Side))
 	{
 		return;
@@ -179,7 +179,7 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 	{
 		if (!Current->IsHeld())
 		{
-			// The interactable ended the hold itself (ForceRelease, or disabled mid-grab) — just drop it.
+			// The interactable ended the hold itself (ForceRelease, or disabled mid-grab) - just drop it.
 			Held = nullptr;
 		}
 		else if (Select < ReleaseThreshold)
@@ -190,7 +190,7 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 			UFXR_Socket* Receiver = PreviewSocket.Get();
 
 			// Role-aware: a two-hand hold detaches just this hand (or promotes the survivor);
-			// single-hand ends the interaction. The interactable decides — the driver has no roles.
+			// single-hand ends the interaction. The interactable decides - the driver has no roles.
 			Current->ReleaseHand(Interactor, EFXR_EndReason::Released);
 			Held = nullptr;
 
@@ -215,7 +215,7 @@ void UFXR_InteractionDriver::DriveHand(EFXR_HandSide Side, TWeakObjectPtr<UFXR_I
 		float GrabRadius = 0.f;
 		Interactor->GetGrabSphere(GrabCenter, GrabRadius);
 
-		// Joining the other hand's hold wins over starting a fresh grab — reaching for an object
+		// Joining the other hand's hold wins over starting a fresh grab - reaching for an object
 		// you are already holding is nearly always intentional (rifle foregrip, two-hand carry).
 		TWeakObjectPtr<UFXR_InteractableBase>& OtherHeld = (Side == EFXR_HandSide::Left) ? RightHeld : LeftHeld;
 		if (UFXR_InteractableBase* Other = OtherHeld.Get())
@@ -446,7 +446,7 @@ void UFXR_InteractionDriver::DriveProximity(EFXR_HandSide Side, bool bHolding, U
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
 
 	// A hand that is holding something is not approaching anything, and an object already in reach
-	// is Hovered outright — the ramp only covers the stretch before that.
+	// is Hovered outright - the ramp only covers the stretch before that.
 	if (bHolding || Near || !Interactor || !Subsystem || !Settings || !Settings->bProximityHighlight)
 	{
 		Highlight->SetProximity(Side, nullptr, 0.f);
@@ -478,10 +478,8 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 {
 	FRayVisual& Visual = RayVisuals[Side == EFXR_HandSide::Left ? 0 : 1];
 
-	// Shown while the hand is free and, by default, only while it is aimed at something that will
-	// answer. A beam that is always on says nothing; one that arrives as the hand finds a target
-	// says exactly what the press will do — and it can never point at nothing, because it is drawn
-	// from the same answer the logic just used.
+	// Shown while the hand is free and (by default) only while aimed at something that will respond.
+	// It's drawn from the same hit the logic just used, so it can't point somewhere the press won't go.
 	IFXR_Interactor* Interactor = GetActiveInteractor(Side);
 	const bool bHasReason = (RayVisibility == EFXR_RayVisibility::Always) ||
 		(RayVisibility == EFXR_RayVisibility::OnTarget && FarTarget != nullptr);
@@ -511,13 +509,13 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		return; // cleared on purpose draws nothing; the ray itself still works
 	}
 
-	// Built on first use, like the locomotion arc — a rig that never points costs nothing.
+	// Built on first use, like the locomotion arc - a rig that never points costs nothing.
 	if (!Visual.Beam.IsValid())
 	{
 		UStaticMeshComponent* Beam = NewObject<UStaticMeshComponent>(Owner, NAME_None, RF_Transient);
 		Beam->SetupAttachment(Owner->GetRootComponent());
 		// Movable, and absolute. A component built at runtime defaults to Static mobility, which
-		// silently discards every transform update — the beam was being aimed each frame and ignoring
+		// silently discards every transform update - the beam was being aimed each frame and ignoring
 		// it. Absolute keeps the rig own scale out of a thickness measured in centimetres.
 		Beam->SetMobility(EComponentMobility::Movable);
 		Beam->SetAbsolute(true, true, true);
@@ -525,7 +523,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		Beam->SetStaticMesh(BeamMesh);
 		// Collision cleared after the mesh is assigned, not before: SetStaticMesh brings the mesh's own
 		// body setup with it, so anything set earlier is arguing with a body that does not exist yet.
-		// The beam is a picture of a trace, never a participant in one — it must not block the trace
+		// The beam is a picture of a trace, never a participant in one - it must not block the trace
 		// that positions it, catch a poke, or stop a thrown object in mid-air.
 		Beam->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 		Beam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -562,8 +560,7 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 	Interactor->GetFarRay(Origin, Direction);
 	Direction = Direction.GetSafeNormal();
 
-	// Stops at whatever the ray actually hit, so the beam reads as touching the world rather than
-	// passing through it. The same cached hit the claim and the hover use — one trace, one truth.
+	// Ends at the actual hit point, using the same cached hit as the grab claim and hover (one trace).
 	FHitResult Hit;
 	const bool bHit = GetFarHit(Side, Hit);
 	const float Length = bHit ? Hit.Distance : RayLength;
@@ -576,9 +573,8 @@ void UFXR_InteractionDriver::DriveRayVisual(EFXR_HandSide Side, bool bBusyNear, 
 		const FVector MeshExtent = BeamMesh->GetBounds().BoxExtent;
 		const float MeshLength = FMath::Max(MeshExtent.X * 2.f, KINDA_SMALL_NUMBER);
 		const float MeshRadius = FMath::Max(MeshExtent.Y, KINDA_SMALL_NUMBER);
-		// The fade is geometric: an opaque beam cannot fade its opacity, so it thins to nothing
-		// instead. On a tube this narrow that reads as the beam retracting rather than dissolving,
-		// which is the better motion anyway — nothing pops on or off.
+		// Fade by thinning the beam, since an opaque material can't fade its opacity. On a thin tube it
+		// looks like the beam retracting, which works fine.
 		const float Eased = FFXR_Motion::EaseFade(Visual.Alpha);
 		const float Thickness = (RayWidth * 0.5f * Eased) / MeshRadius;
 

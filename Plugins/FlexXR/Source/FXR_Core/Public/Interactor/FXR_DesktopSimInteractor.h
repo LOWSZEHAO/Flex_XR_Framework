@@ -7,7 +7,7 @@
 #include "FXR_DesktopSimInteractor.generated.h"
 
 /**
- * UFXR_DesktopSimInteractor — mouse/keyboard input source for PIE without a headset.
+ * UFXR_DesktopSimInteractor - mouse/keyboard input source for PIE without a headset.
  *
  * Poses come from this component's transform (the pawn drives it from the mouse); Select
  * and Use are pushed in by the pawn's desktop-sim input. Gives interaction the same

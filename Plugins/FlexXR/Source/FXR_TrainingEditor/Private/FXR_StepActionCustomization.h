@@ -9,12 +9,11 @@
 class IPropertyHandle;
 
 /**
- * Details for one GM event: pick a Blueprint, then pick one of its events from a list.
+ * Details panel for a GM event: pick a Blueprint, then pick one of its events from a dropdown.
  *
- * The event is a name the GM calls by reflection, so a typed one is a typo waiting to surface at
- * step nine. A dropdown built from the chosen Blueprint makes the wrong name impossible to enter -
- * which is why it is worth a customization rather than a GetOptions on the GM: the list depends on
- * the Blueprint picked in the same row, and GetOptions can only see the asset, not the row.
+ * The GM calls the event by name through reflection, so a typo would only show up at runtime. A
+ * customization is needed (not GetOptions) because the list depends on the Blueprint picked in the
+ * same row, and GetOptions only sees the asset.
  */
 class FFXR_StepActionCustomization : public IPropertyTypeCustomization
 {
@@ -28,7 +27,7 @@ public:
 		IPropertyTypeCustomizationUtils& Utils) override;
 
 private:
-	/** Rebuild the list from whatever Blueprint is chosen now. */
+	/** Rebuild the list from the currently selected Blueprint. */
 	void RefreshOptions();
 
 	FText GetEventText() const;

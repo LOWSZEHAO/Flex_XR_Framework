@@ -5,7 +5,7 @@
 
 namespace
 {
-	/** Sentinel for "this never happened", so a report can tell an entry that never opened from one at t=0. */
+	/** Marks "never happened", so an entry that never opened isn't confused with one opened at t=0. */
 	constexpr float NeverHappened = -1.f;
 }
 
@@ -21,7 +21,7 @@ void FFXR_StepRunner::Start(TArray<FFXR_CompiledStep>&& InEntries, EFXR_Delivery
 	FailedEntry = INDEX_NONE;
 	FailReason = EFXR_FailReason::None;
 
-	// Held only in Exam. Training cannot fail, so a limit there would be a number with nothing to do.
+	// Only Exam has a mistake limit.
 	MaxMistakes = InMode == EFXR_DeliveryMode::Exam ? FMath::Max(0, InMaxMistakes) : 0;
 
 	const int32 Count = Entries.Num();
@@ -87,9 +87,8 @@ bool FFXR_StepRunner::CompleteStep(FName Id)
 		return false;
 	}
 
-	// Named, and not the open one: an event firing at a step it does not belong to. Doing nothing
-	// is the whole point - it is what lets "On Grabbed -> Complete Step" be wired once and trusted.
-	// A step with sub-steps is finished through them, so its own id never matches while one is open.
+	// An id that isn't the open entry's: ignore it. This is what makes it safe to wire
+	// "On Grabbed -> Complete Step" once. A step with sub-steps never matches its own id here.
 	if (!Id.IsNone() && Entries[Current].GetCompletionId() != Id)
 	{
 		return false;
@@ -136,8 +135,8 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// A mistake is counted once per action, on its start. A grab arrives as Began and then Ended;
-	// the release of a wrong grab is the same mistake, not a second one.
+	// Count a mistake once, on Began. A wrong grab also sends Ended when released; that isn't a
+	// second mistake.
 	if (Event.Phase != EFXR_InteractionPhase::Began || Event.InteractionId.IsNone())
 	{
 		return;
@@ -145,18 +144,16 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 
 	const FFXR_CompiledStep& Open = Entries[Current];
 
-	// 1. The open entry's own object is never wrong.
+	// 1. The open entry's own object is never a mistake.
 	if (UsesObject(Open, Event.InteractionId))
 	{
 		return;
 	}
 
-	// 2. Used by an entry that has finished: ignored. Procedures reuse things, and it outranks
-	//    out-of-order so that an object a finished entry used and a later one needs again reads as
-	//    one in use rather than one reached for early.
-	// 3. Needed by an entry not yet open: out of order - the finding a gated world can never produce.
-	//    Sub-steps are entries like any other, so the pin before the extinguisher is out of order
-	//    even inside one step.
+	// 2. Used by an entry that's already finished: ignore. Procedures reuse objects, and this wins
+	//    over out-of-order so an object used earlier and needed again later isn't flagged.
+	// 3. Needed by an entry that isn't open yet: out of order. Sub-steps count as entries, so
+	//    picking up the pin before the extinguisher is out of order even within one step.
 	bool bNeededLater = false;
 	for (int32 Index = 0; Index < Entries.Num(); ++Index)
 	{
@@ -181,8 +178,8 @@ void FFXR_StepRunner::HandleEvent(const FFXR_InteractionEvent& Event)
 		return;
 	}
 
-	// 4. Anything else exposed is the wrong object. No list to keep: an object only reaches this
-	//    runner when its author ticked Expose to Training, which is already the choice of what counts.
+	// 4. Anything else that's exposed is the wrong object. Only objects with Expose to Training
+	//    reach the runner, so there's no separate list to maintain.
 	RecordMistake(Event.InteractionId, EFXR_MistakeKind::WrongAction, FText::GetEmpty());
 }
 
@@ -199,8 +196,7 @@ void FFXR_StepRunner::RecordMistake(FName InteractionId, EFXR_MistakeKind Kind, 
 	Mistake.TimeSeconds = Elapsed;
 	Mistake.Message = Message;
 
-	// Attributed to the entry that was open, so a report can say which part of the procedure is the
-	// one people get wrong.
+	// Per-entry count, so the report can show which part people get wrong.
 	if (MistakeCounts.IsValidIndex(Current))
 	{
 		++MistakeCounts[Current];
@@ -211,9 +207,8 @@ void FFXR_StepRunner::RecordMistake(FName InteractionId, EFXR_MistakeKind Kind, 
 		OnMistake(Mistake);
 	}
 
-	// Training records the mistake and moves on: it is teaching, and there is nothing to fail. Exam
-	// judges it after it has been reported, so anything listening hears the mistake and then the
-	// verdict in that order. A timeout is left to Tick, which fails the run on it by itself.
+	// Training just records it. Exam checks for failure after reporting the mistake, so listeners
+	// see the mistake before the result. Timeouts are failed by Tick directly.
 	if (Mode != EFXR_DeliveryMode::Exam || Kind == EFXR_MistakeKind::Timeout)
 	{
 		return;
@@ -238,14 +233,13 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 	Elapsed += DeltaSeconds;
 
-	// Timeouts are an Exam rule. Training is teaching, and being slow while being taught is not a
-	// finding.
+	// Timeouts only apply in Exam.
 	if (Mode != EFXR_DeliveryMode::Exam || !Entries.IsValidIndex(Current))
 	{
 		return;
 	}
 
-	// Two clocks: the open entry's own, and its step's, which keeps running across sub-steps.
+	// Two timers: the entry's own, and the step's, which keeps running across sub-steps.
 	const FFXR_CompiledStep& Open = Entries[Current];
 	const bool bEntryOver = Open.TimeoutSeconds > 0.f && Elapsed - OpenedAt[Current] >= Open.TimeoutSeconds;
 	const bool bStepOver = Open.StepTimeoutSeconds > 0.f && Elapsed - StepOpenedAt >= Open.StepTimeoutSeconds;
@@ -259,7 +253,7 @@ void FFXR_StepRunner::Tick(float DeltaSeconds)
 
 void FFXR_StepRunner::Fail(int32 EntryIndex, EFXR_FailReason Reason)
 {
-	// A run is judged once. Two routes to failure in the same frame must not report twice.
+	// Only fail once, even if two failure conditions hit in the same frame.
 	if (!bRunning)
 	{
 		return;
@@ -270,8 +264,8 @@ void FFXR_StepRunner::Fail(int32 EntryIndex, EFXR_FailReason Reason)
 	FailedEntry = EntryIndex;
 	FailReason = Reason;
 
-	// Closed, but not Complete. The entry is left Active because that is what it was - open, and
-	// never finished - while the close time is recorded because the run ended on it.
+	// The entry stays Active (it was never finished), but gets a close time because the run
+	// ended on it.
 	if (ClosedAt.IsValidIndex(EntryIndex))
 	{
 		ClosedAt[EntryIndex] = Elapsed;

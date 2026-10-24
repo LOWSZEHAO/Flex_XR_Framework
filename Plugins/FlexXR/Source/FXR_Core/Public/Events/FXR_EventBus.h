@@ -7,19 +7,18 @@
 #include "Events/FXR_InteractionEvent.h"
 #include "FXR_EventBus.generated.h"
 
-/** Native (C++) subscription — used by hot consumers such as the SOP step runner. */
+/** Native (C++) subscription - used by hot consumers such as the SOP step runner. */
 DECLARE_MULTICAST_DELEGATE_OneParam(FFXR_OnInteractionEventNative, const FFXR_InteractionEvent&);
 
-/** Blueprint-facing subscription — the binding surface for game / quest systems. */
+/** Blueprint-facing subscription - the binding surface for game / quest systems. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_OnInteractionEventDynamic, const FFXR_InteractionEvent&, Event);
 
 /**
- * UFXR_EventBus — world-scoped hub for InteractionId events (architecture §5.6 / §11).
+ * UFXR_EventBus - world-scoped hub for InteractionId events.
  *
- * Lives in FXR_Core so producers (FXR_Interaction) and consumers (FXR_Training, or a
- * game's quest system) share one contract without breaking the one-way module
- * dependency. Broadcasts to both a native multicast (hot C++ consumers) and a
- * Blueprint-assignable multicast (the binding surface).
+ * Lives in FXR_Core so producers (FXR_Interaction) and consumers (FXR_Training, or a game's
+ * quest system) can share it without breaking the one-way module dependencies. Broadcasts to a
+ * native multicast for C++ listeners and a Blueprint-assignable one.
  */
 UCLASS()
 class FXR_CORE_API UFXR_EventBus : public UWorldSubsystem
@@ -33,7 +32,7 @@ public:
 	/** Native multicast, for C++ subscribers on hot paths. */
 	FFXR_OnInteractionEventNative& OnInteractionEvent() { return NativeEvent; }
 
-	/** Blueprint-assignable multicast — the binding surface. */
+	/** Blueprint-assignable multicast - the binding surface. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Events")
 	FFXR_OnInteractionEventDynamic OnInteractionEventBP;
 

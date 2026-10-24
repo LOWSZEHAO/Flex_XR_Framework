@@ -28,7 +28,7 @@
 
 namespace
 {
-	// Snap fires past the high threshold and rearms only after re-centring below the low one — so a
+	// Snap fires past the high threshold and rearms only after re-centring below the low one - so a
 	// single flick is exactly one snap rather than a spin.
 	constexpr float TurnSnapThreshold = 0.8f;
 	constexpr float TurnRearmThreshold = 0.3f;
@@ -51,12 +51,10 @@ UFXR_Locomotion::UFXR_Locomotion()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 
-	// Enabled and automatic by default (design principle 2): comfort and the aim reticle ship with
-	// assets, so both work on a bare component instead of quietly needing content authored first.
-	// Referenced by path rather than loaded here. A hard default pulls teleport art into memory at
-	// startup for every project whether or not it ever teleports, and — the part that actually bites
-	// — roots the asset, so tooling cannot rebuild it: MaterialEditingLibrary asserts on !IsRooted()
-	// and takes the editor down with it.
+	// Comfort vignette and aim reticle work out of the box with plugin assets. They're referenced
+	// by path, not loaded here: a hard default would load teleport art at startup in every project
+	// and root the asset, and MaterialEditingLibrary asserts on !IsRooted(), which crashes the
+	// editor when the material tool rebuilds it.
 	VignetteMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/FlexXR/Materials/M_FXR_Vignette.M_FXR_Vignette")));
 	ReticleMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_Reticle.SM_FXR_Reticle")));
 	ArcMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/FlexXR/Meshes/SM_FXR_ArcSegment.SM_FXR_ArcSegment")));
@@ -70,7 +68,7 @@ void UFXR_Locomotion::BeginPlay()
 
 	if (AActor* Owner = GetOwner())
 	{
-		// Cache the rig's interactors (aim source) and interaction driver (yielding) once — they are
+		// Cache the rig's interactors (aim source) and interaction driver (yielding) once - they are
 		// created with the pawn and never added at runtime; only their active/held state changes.
 		TArray<UFXR_InteractorComponent*> Found;
 		Owner->GetComponents<UFXR_InteractorComponent>(Found);
@@ -120,7 +118,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	SmoothTurnFactor = 0.f;
 
 	// Capability fallback (ADR-005): tracked hands have no thumbstick, so teleport is gesture-driven
-	// and anything needing a stick is unavailable. Documented, not silent — a hand set to Smooth
+	// and anything needing a stick is unavailable. Documented, not silent - a hand set to Smooth
 	// Move on hand tracking simply cannot move, and saying nothing would read as a broken build.
 	const bool bLeftTracked = IsHandTracking(EFXR_HandSide::Left);
 	const bool bRightTracked = IsHandTracking(EFXR_HandSide::Right);
@@ -135,7 +133,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			const bool bGesture = (bLeftTracked && LeftHandMovement == EFXR_HandMovement::Teleport)
 				|| (bRightTracked && RightHandMovement == EFXR_HandMovement::Teleport);
 
-			UE_LOG(LogFXR, Log, TEXT("FXR_Locomotion: tracked hands active — %s (ADR-005 capability rule)."),
+			UE_LOG(LogFXR, Log, TEXT("FXR_Locomotion: tracked hands active - %s (ADR-005 capability rule)."),
 				bGesture ? TEXT("gesture teleport + rotation-on-landing") : TEXT("no gesture is bound"));
 
 			UE_CLOG(bStranded, LogFXR, Warning,
@@ -151,7 +149,7 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	const bool bWasClimbing = bClimbing[0] || bClimbing[1];
 	const bool bClimbingNow = ProcessClimb(DeltaTime);
 
-	// Letting go of the last hold above the floor starts a fall — the one place the rig has gravity.
+	// Letting go of the last hold above the floor starts a fall - the one place the rig has gravity.
 	if (bWasClimbing && !bClimbingNow)
 	{
 		bClimbFalling = true;
@@ -246,7 +244,7 @@ void UFXR_Locomotion::SetTurnEnabled(bool bEnabled)
 
 bool UFXR_Locomotion::TeleportToLocation(const FVector& Location, FRotator Rotation)
 {
-	// Scripted move: no aim/validation, no transition — used by SOP "MoveTo" steps and game script.
+	// Scripted move: no aim/validation, no transition - used by SOP "MoveTo" steps and game script.
 	// The caller named a rotation, so it is always applied regardless of the Landing Rotation mode.
 	TargetLocation = Location;
 	TargetFacingYaw = Rotation.Yaw;
@@ -268,13 +266,13 @@ void UFXR_Locomotion::TryBindInput()
 	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
 	if (!PC)
 	{
-		return; // not possessed yet — retry next tick
+		return; // not possessed yet - retry next tick
 	}
 
 	UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(Pawn->InputComponent);
 	if (!EnhancedInput)
 	{
-		return; // input component not ready — retry next tick
+		return; // input component not ready - retry next tick
 	}
 
 	if (LocomotionContext)
@@ -380,7 +378,7 @@ void UFXR_Locomotion::ApplyStick(EFXR_HandSide Side, FVector2D Axis)
 		return;
 	}
 
-	// Once the arc is up, only re-centring the stick commits. Falling back below the *forward*
+	// Once the arc is up, only re-centring the stick commits. Falling back below the forward
 	// threshold must not, or swinging the stick sideways to choose a landing facing would fire the
 	// teleport the moment it left centre-forward.
 	if (Axis.SizeSquared() < FMath::Square(TeleportReleaseMagnitude))
@@ -432,7 +430,7 @@ bool UFXR_Locomotion::ProcessClimb(float DeltaTime)
 		return false;
 	}
 
-	// If the driving hand let go, the survivor takes over — and re-anchors, or the rig would snap
+	// If the driving hand let go, the survivor takes over - and re-anchors, or the rig would snap
 	// by however far that hand has moved since it grabbed.
 	if (!bClimbing[static_cast<int32>(ClimbDriver)])
 	{
@@ -448,8 +446,8 @@ bool UFXR_Locomotion::ProcessClimb(float DeltaTime)
 		Origin->AddWorldOffset(Correction, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
-	// Climbing is self-inflicted motion the player is driving with their own arm, so it reads as
-	// comfortable; the vignette is left to smooth move and dash.
+	// No vignette for climbing: the player is moving themselves with their own arm, which is
+	// comfortable. Vignette is only for smooth move and dash.
 	bClimbFalling = false;
 	ClimbFallSpeed = 0.f;
 	return true;
@@ -505,7 +503,7 @@ void UFXR_Locomotion::ProcessTurn(float DeltaTime)
 		return;
 	}
 
-	// Each hand turns in its own mode, so both are polled — one may snap while the other strafes.
+	// Each hand turns in its own mode, so both are polled - one may snap while the other strafes.
 	ProcessTurnForHand(EFXR_HandSide::Left, DeltaTime);
 	ProcessTurnForHand(EFXR_HandSide::Right, DeltaTime);
 }
@@ -680,7 +678,7 @@ void UFXR_Locomotion::ApplyVignetteToMaterial()
 		UMaterialInterface* Source = VignetteMaterial.LoadSynchronous();
 		if (!Source)
 		{
-			return; // no material assigned — the game binds Get Vignette Intensity to its own overlay instead
+			return; // no material assigned - the game binds Get Vignette Intensity to its own overlay instead
 		}
 
 		const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
@@ -714,19 +712,18 @@ void UFXR_Locomotion::ProcessHandTeleportGesture()
 		return;
 	}
 
-	// Yield to interaction (ADR-005). Reach is deliberately *not* consulted: the locomotion pinch
-	// is a different finger from the grab pinch, so standing next to a prop no longer has to cost
-	// you the ability to travel.
+	// Yield to interaction (ADR-005), but without a reach check: the locomotion pinch uses a
+	// different finger from the grab pinch, so standing next to a prop doesn't block travel.
 	if (!bLocomotionEnabled || !bTeleportEnabled || IsHandBusy(GestureSide))
 	{
 		if (Phase == ETeleportPhase::Aiming)
 		{
-			Phase = ETeleportPhase::Idle; // grabbed something / disabled mid-aim → cancel
+			Phase = ETeleportPhase::Idle; // grabbed something / disabled mid-aim -> cancel
 		}
 		return;
 	}
 
-	// Pinch and hold raises the arc, releasing it teleports — the same shape as pushing and
+	// Pinch and hold raises the arc, releasing it teleports - the same shape as pushing and
 	// releasing a thumbstick, so both input paths behave identically once the arc is up. An
 	// invalid target on release simply cancels, which is how a player backs out.
 	const bool bPinch = Hand->GetNavigateValue() >= HandPinchThreshold;
@@ -771,7 +768,7 @@ void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
 	if (Origin && HMD)
 	{
 		// Rotate the origin about the HMD's vertical axis: the head keeps its world position, the
-		// world yaws around it — the room-scale-correct pivot (ADR-006), same as landing rotation.
+		// world yaws around it - the room-scale-correct pivot (ADR-006), same as landing rotation.
 		const FVector Pivot = HMD->GetComponentLocation();
 		const FQuat DeltaQ(FVector::UpVector, FMath::DegreesToRadians(DeltaYawDegrees));
 		const FVector NewLocation = Pivot + DeltaQ.RotateVector(Origin->GetComponentLocation() - Pivot);
@@ -780,7 +777,7 @@ void UFXR_Locomotion::ApplyYaw(float DeltaYawDegrees)
 	}
 	else
 	{
-		// Fallback rotates about the pawn root, not the head — same tradeoff as the ADR-006 fallback.
+		// Fallback rotates about the pawn root, not the head - same tradeoff as the ADR-006 fallback.
 		Owner->AddActorWorldRotation(FRotator(0.f, DeltaYawDegrees, 0.f));
 	}
 }
@@ -804,8 +801,8 @@ void UFXR_Locomotion::UpdateAim()
 		break;
 
 	case EFXR_LandingRotation::ThumbstickChoose:
-		// Only a deliberately deflected stick asks for a facing; centred means "leave me as I am",
-		// which is also what a tracked hand does, having no stick to report.
+		// Only a clearly deflected stick picks a facing; centred means keep the current one (also what
+		// tracked hands get, since they have no stick).
 		bApplyLandingFacing = ResolveThumbstickFacing(TargetFacingYaw);
 		break;
 
@@ -962,7 +959,7 @@ bool UFXR_Locomotion::PredictAndValidate(FVector& OutTarget, bool& OutValid, flo
 		}
 	}
 
-	// The reticle marks the *surface*, not the destination. NavMesh projection moves the target onto
+	// The reticle marks the surface, not the destination. NavMesh projection moves the target onto
 	// the nav surface, which is baked above the floor, so drawing the ring there leaves it hovering
 	// however high this level's nav settings put it. An anchor is its own visual spot.
 	ReticleLocation = HitAnchor ? OutTarget : HitLocation;
@@ -1004,7 +1001,7 @@ void UFXR_Locomotion::CommitTeleport()
 {
 	if (!bTargetValid)
 	{
-		Phase = ETeleportPhase::Idle; // aimed at an invalid spot — cancel
+		Phase = ETeleportPhase::Idle; // aimed at an invalid spot - cancel
 		return;
 	}
 
@@ -1019,7 +1016,7 @@ void UFXR_Locomotion::CommitTeleport()
 	if (Transition == EFXR_TeleportTransition::Dash && Duration > KINDA_SMALL_NUMBER)
 	{
 		// Dash keeps the world visible and slides the play space there, so the endpoints are worked
-		// out once, up front — recomputing per frame would chase a target that keeps moving with you.
+		// out once, up front - recomputing per frame would chase a target that keeps moving with you.
 		const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
 		const USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
 		const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
@@ -1036,7 +1033,7 @@ void UFXR_Locomotion::CommitTeleport()
 			Phase = ETeleportPhase::Dashing;
 			return;
 		}
-		// No rig interface to slide — fall through and cut instead of doing nothing.
+		// No rig interface to slide - fall through and cut instead of doing nothing.
 	}
 
 	if (Duration > KINDA_SMALL_NUMBER)
@@ -1079,7 +1076,7 @@ void UFXR_Locomotion::TickDash(float DeltaTime)
 		return;
 	}
 
-	// Eased so the dash starts and ends soft; a linear slide reads as a lurch at both ends.
+	// Eased so the dash starts and stops smoothly instead of lurching.
 	const FVector Position = FMath::Lerp(DashStartOrigin, DashEndOrigin, FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f));
 	Origin->SetWorldLocation(Position, false, nullptr, ETeleportType::TeleportPhysics);
 
@@ -1130,7 +1127,7 @@ void UFXR_Locomotion::ExecuteMove()
 		Origin->SetWorldLocation(NewOrigin, false, nullptr, ETeleportType::TeleportPhysics);
 
 		// Landing rotation about the HMD (ADR-006). FaceArc and Thumbstick Choose both arrive here
-		// already resolved into TargetFacingYaw during aim, and a scripted move sets it outright —
+		// already resolved into TargetFacingYaw during aim, and a scripted move sets it outright -
 		// so this only asks whether a facing was requested, not which mode requested it.
 		if (bApplyLandingFacing)
 		{
@@ -1143,7 +1140,7 @@ void UFXR_Locomotion::ExecuteMove()
 		Owner->SetActorLocation(TargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
 		if (!bLoggedMissingOwner)
 		{
-			UE_LOG(LogFXR, Warning, TEXT("FXR_Locomotion on '%s': owner does not implement IFXR_LocomotionOwner — falling back to SetActorLocation; the HMD will not land precisely on target (ADR-006). Implement the interface on your pawn."), *GetNameSafe(Owner));
+			UE_LOG(LogFXR, Warning, TEXT("FXR_Locomotion on '%s': owner does not implement IFXR_LocomotionOwner - falling back to SetActorLocation; the HMD will not land precisely on target (ADR-006). Implement the interface on your pawn."), *GetNameSafe(Owner));
 			bLoggedMissingOwner = true;
 		}
 	}
@@ -1263,8 +1260,8 @@ void UFXR_Locomotion::UpdateReticle(bool bVisible) const
 	// Nudged clear of the surface it marks, or a flat reticle z-fights the floor it lies on.
 	const FVector Location = ReticleLocation + FVector(0.f, 0.f, ReticleGroundOffset);
 
-	// Faces the landing yaw so a directional reticle shows which way you will be looking; that is
-	// the whole point of Face Arc and Thumbstick Choose being visible before you commit.
+	// Face the landing yaw so the reticle shows which way you'll be facing (needed for Face Arc
+	// and Thumbstick Choose).
 	const FRotator Rotation(0.f, bApplyLandingFacing ? TargetFacingYaw : 0.f, 0.f);
 	ReticleComponent->SetWorldLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
 	ReticleComponent->SetWorldScale3D(FVector(ReticleScale));
