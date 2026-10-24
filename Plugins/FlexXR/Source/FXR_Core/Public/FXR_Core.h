@@ -6,13 +6,11 @@
 #include "Modules/ModuleManager.h"
 
 /**
- * FXR_Core — FlexXR platform layer.
+ * FXR_Core - FlexXR platform layer, the bottom of the module chain
+ * (FXR_Training -> FXR_UI / FXR_Locomotion -> FXR_Interaction -> FXR_Core).
  *
- * The lowest module in the FlexXR dependency chain
- * (FXR_Training -> FXR_UI -> FXR_Interaction -> FXR_Core). Home of the OpenXR
- * abstraction, runtime device-capability detection, the IFXR_Interactor input
- * interface, input mapping, the EFXR_Mode (VR / MR) flags, and the FXR event bus.
- * References nothing above it.
+ * OpenXR abstraction, device-capability detection, the IFXR_Interactor input interface, input
+ * mapping, the VR / MR mode flags and the event bus. Doesn't reference anything above it.
  */
 class FFXR_CoreModule : public IModuleInterface
 {

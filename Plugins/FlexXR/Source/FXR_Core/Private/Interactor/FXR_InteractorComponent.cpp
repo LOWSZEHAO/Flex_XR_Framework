@@ -26,10 +26,10 @@ FTransform UFXR_InteractorComponent::GetAimTransform() const
 		return Source;
 	}
 
-	// The aim component is authored by dragging it, but its *relative* transform is what counts: the
+	// The aim component is authored by dragging it, but its relative transform is what counts: the
 	// ray has to leave the hand wherever the hand actually is, and a tracked hand's pose comes from
 	// joint data rather than from where a component sits in the rig. Scale is dropped because a ray
-	// has no size — only an origin and a direction.
+	// has no size - only an origin and a direction.
 	FTransform Offset = AimSource->GetRelativeTransform();
 	Offset.SetScale3D(FVector::OneVector);
 	return Offset * Source;

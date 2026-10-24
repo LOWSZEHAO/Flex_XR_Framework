@@ -15,10 +15,10 @@ class UFXR_LocomotionOwner : public UInterface
 };
 
 /**
- * IFXR_LocomotionOwner — the rig contract FXR_Locomotion needs (ADR-006). The pawn exposes its
+ * IFXR_LocomotionOwner - the rig contract FXR_Locomotion needs (ADR-006). The pawn exposes its
  * tracking-space origin (the component room-scale teleport relocates) and its HMD component
  * (whose horizontal position must land on the teleport target). FXR_Locomotion queries this and
- * never casts to a concrete pawn class, so it works with any project's pawn — including a game
+ * never casts to a concrete pawn class, so it works with any project's pawn - including a game
  * team's own ACharacter subclass.
  *
  * Plain C++ virtuals (not BlueprintNativeEvent): queried on locomotion hot paths, and the pawn
@@ -29,9 +29,9 @@ class IFXR_LocomotionOwner
 	GENERATED_BODY()
 
 public:
-	/** Play-space / tracking-space origin — the component room-scale teleport relocates. */
+	/** Play-space / tracking-space origin - the component room-scale teleport relocates. */
 	virtual USceneComponent* GetTrackingOriginComponent() const = 0;
 
-	/** HMD / camera component — its horizontal world position is what lands on the target. */
+	/** HMD / camera component - its horizontal world position is what lands on the target. */
 	virtual USceneComponent* GetHMDComponent() const = 0;
 };

@@ -96,3 +96,22 @@ UFXR_InteractionSubsystem* UFXR_InteractionSubsystem::Get(const UObject* WorldCo
 
 	return nullptr;
 }
+
+UFXR_InteractableBase* UFXR_InteractionSubsystem::FindByInteractionId(FName InteractionId) const
+{
+	if (InteractionId.IsNone())
+	{
+		return nullptr;
+	}
+
+	for (const TObjectPtr<UFXR_InteractableBase>& Interactable : Registered)
+	{
+		// Only interactables that opted in carry a meaningful id, so the flag is the filter.
+		if (Interactable && Interactable->IsExposedToTraining() && Interactable->GetInteractionId() == InteractionId)
+		{
+			return Interactable;
+		}
+	}
+
+	return nullptr;
+}

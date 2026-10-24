@@ -49,7 +49,7 @@ void UFXR_InteractableBase::DrawInteractionDebug() const
 	const FColor Color = bHeld ? FColor::Green : (bInteractionEnabled ? FColor::Orange : FColor::Red);
 	if (HasOwnedGripPoints())
 	{
-		// Grip points are the only grab surface (ADR-007) — show state on them, not a
+		// Grip points are the only grab surface (ADR-007) - show state on them, not a
 		// misleading mesh radius.
 		for (const TWeakObjectPtr<UFXR_GripPoint>& WeakPoint : OwnedGripPoints)
 		{
@@ -180,7 +180,7 @@ UFXR_GripPoint* UFXR_InteractableBase::SelectGripPoint(IFXR_Interactor* Interact
 
 	const EFXR_HandSide Side = Interactor->GetHandSide();
 
-	// A grip point is in reach when the hand's grab sphere overlaps its activation sphere —
+	// A grip point is in reach when the hand's grab sphere overlaps its activation sphere -
 	// same convention as the detection broad phase (Reach = point radius + grab radius).
 	FVector GrabCenter;
 	float GrabRadius = 0.f;
@@ -232,7 +232,7 @@ UPrimitiveComponent* UFXR_InteractableBase::ResolveDrivenComponent() const
 		return RootPrimitive;
 	}
 
-	// Neither the attach parent nor the root is a primitive — the ordinary case of a component
+	// Neither the attach parent nor the root is a primitive - the ordinary case of a component
 	// dropped straight under a bare DefaultSceneRoot. Fall back to the actor's own body rather than
 	// resolving to nothing, which would silently make the interactable do nothing at all. A
 	// simulating primitive wins, since that is the object's physical body and what a throw acts on.
@@ -302,9 +302,8 @@ bool UFXR_InteractableBase::CanEditChange(const FProperty* InProperty) const
 
 UFXR_GripPoint* UFXR_InteractableBase::SelectGripPointForHand(EFXR_HandSide Side) const
 {
-	// Hand filter and priority only. Reach is deliberately not consulted: this exists for claims made
-	// from across the room, where no grip point overlaps anything and the proximity test that serves
-	// a normal grab would reject all of them and leave the object flying to its own origin instead.
+	// Hand filter and priority only, no reach check. This is for distance grabs, where nothing
+	// overlaps and the normal proximity test would reject every grip point.
 	UFXR_GripPoint* Best = nullptr;
 	int32 BestPriority = TNumericLimits<int32>::Min();
 

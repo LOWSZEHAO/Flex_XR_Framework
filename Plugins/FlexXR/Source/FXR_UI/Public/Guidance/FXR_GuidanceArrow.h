@@ -14,8 +14,7 @@ class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
 
-/** Which of a mesh's local axes points along the arrow. The engine cone points +Z; an arrow
- *  modelled in most DCC packages points +X. Without this a custom mesh aims sideways. */
+/** Which local axis of the mesh points forward. The engine cone points +Z; most DCC arrows point +X. */
 UENUM(BlueprintType)
 enum class EFXR_MeshAxis : uint8
 {
@@ -28,23 +27,16 @@ enum class EFXR_MeshAxis : uint8
 };
 
 /**
- * UFXR_GuidanceArrow — "the thing you need is not here; it is that way."
+ * UFXR_GuidanceArrow - an arrow that points the player toward something off-screen.
  *
- * The one guidance problem highlighting cannot solve. A highlight only reaches what is already on
- * screen, so an extinguisher behind the player is invisible to it no matter how brightly it glows.
+ * Highlighting only helps once the object is in view; this covers the case where it's behind
+ * the player. Add it to the pawn and give it a target. It's a world-space arrow floating below
+ * eye level, not a HUD element, so it doesn't break presence.
  *
- * Drop it on the pawn beside FXR_Interaction Driver and point it at something. Diegetic on purpose:
- * a world-space arrow floating below the eye line, not a HUD element welded to the view — a screen-
- * locked marker would break presence, and in a training sim it makes an assessment read as a
- * tutorial.
+ * It hides itself once the target is within Hide Within Angle of the view direction, or closer
+ * than Arrive Radius.
  *
- * **It hides itself as soon as it is redundant** — once the target is inside Hide Within Angle of
- * where the player is already looking, or closer than Arrive Radius. An arrow that stays up after
- * you have found the thing is just clutter, and the same reasoning keeps the far-ray pointer off
- * until it has something to point at.
- *
- * Lives in FXR_UI, so a game that never loads FXR_Training can use it for objectives. Training
- * consumes this; it does not own it.
+ * Lives in FXR_UI so games can use it for objectives without the training module.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_UI_API UFXR_GuidanceArrow : public UActorComponent
@@ -65,7 +57,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Guidance")
 	void PointToComponent(USceneComponent* Target);
 
-	/** Stop pointing. The arrow fades rather than vanishing. */
+	/** Stop pointing. Fades out. */
 	UFUNCTION(BlueprintCallable, Category = "FlexXR|Guidance")
 	void ClearGuidance();
 
@@ -77,55 +69,51 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "10.0", Units = "cm"))
 	float Distance = 70.f;
 
-	/** How far below eye level it sits — negative is down, out of the way of what the player is reading. */
+	/** Offset below eye level (negative = down), so it stays out of the way. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (Units = "cm"))
 	float HeightOffset = -30.f;
 
-	/** Sideways from centre, positive is to the player's right. Zero keeps it straight ahead. */
+	/** Sideways offset, positive = player's right. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (Units = "cm"))
 	float LateralOffset = 0.f;
 
-	/** Arrow length in centimetres, taken from the mesh's own bounds rather than an assumed authoring scale. */
+	/** Arrow length in cm, measured from the mesh bounds. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.5", Units = "cm"))
 	float ArrowSize = 8.f;
 
-	/**
-	 * Hide once the target is within this angle of where the player is already looking. They have
-	 * found it; the arrow has nothing left to say.
-	 */
+	/** Hide once the target is within this angle of where the player is looking. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.0", ClampMax = "90.0", Units = "deg"))
 	float HideWithinAngle = 30.f;
 
-	/** Hide once the player is this close. Arrival is its own answer. */
+	/** Hide once the player is this close. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance", meta = (ClampMin = "0.0", Units = "cm"))
 	float ArriveRadius = 120.f;
 
-	//~ Ship with the plugin so a bare component draws. Soft: a hard default roots the asset through
-	//~ this CDO, which makes it unrebuildable from tooling.
+	//~ Defaults that ship with the plugin. Soft references, since a hard default in the CDO roots
+	//~ the asset and then tools can't rebuild it.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
 	TSoftObjectPtr<UStaticMesh> ArrowMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
 	TSoftObjectPtr<UMaterialInterface> ArrowMaterial;
 
-	/** Which way the mesh points. Only used by Arrow Mesh; a Visual Class orients itself. */
+	/** Which way the mesh points. Only used with Arrow Mesh. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
 	EFXR_MeshAxis MeshForwardAxis = EFXR_MeshAxis::Z;
 
 	/**
-	 * Drop a Blueprint here to use it as the arrow instead of Arrow Mesh, for anything a single
-	 * static mesh cannot be: a particle trail, an animated marker, a spinning ring. It is spawned
-	 * on first use and driven by this component, so give it no collision and let it face +X.
-	 * Its own scale is kept and multiplied by the fade, so Arrow Size does not apply to it.
+	 * Optional Blueprint to use instead of Arrow Mesh (particles, an animated marker, etc.). Spawned
+	 * on first use and driven by this component; it should face +X and have no collision. Its own
+	 * scale is kept and multiplied by the fade, so Arrow Size doesn't apply.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Guidance")
 	TSubclassOf<AActor> VisualClass;
 
 private:
-	/** Where the arrow should be pointing this frame, or false if nothing. */
+	/** Where the arrow should point this frame, or false if nowhere. */
 	bool ResolveTarget(FVector& OutLocation) const;
 
-	/** The pawn's camera, cached — the arrow is placed relative to the head, not the actor. */
+	/** Cached pawn camera. The arrow is placed relative to the head. */
 	UCameraComponent* GetCamera() const;
 
 	void UpdateArrow(float DeltaTime);
@@ -139,10 +127,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> VisualActor;
 
-	/** The Blueprint's own authored scale, kept so the fade multiplies it instead of replacing it. */
+	/** The Blueprint's own scale, so the fade multiplies it instead of replacing it. */
 	FVector VisualBaseScale = FVector::OneVector;
 
-	/** One shot: a Visual Class that fails to spawn must not be retried every frame. */
+	/** Only try spawning the Visual Class once, so a failure isn't retried every frame. */
 	bool bVisualSpawnAttempted = false;
 
 	UPROPERTY(Transient)

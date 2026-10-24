@@ -38,7 +38,7 @@ void FFXR_LatchVisualizer::DrawVisualization(const UActorComponent* Component, c
 
 	const bool bFull = Latch->IsFullDebug();
 
-	// Grab zone (registry detection): on the latch's grip points when it owns any (ADR-007 —
+	// Grab zone (registry detection): on the latch's grip points when it owns any (ADR-007 -
 	// they are then the only grab surface), else the activation radius around the driven mesh.
 	if (bFull)
 	{
@@ -95,7 +95,7 @@ void FFXR_LatchVisualizer::DrawVisualization(const UActorComponent* Component, c
 		float Radius = RefDir.Size();
 		if (Radius < 5.f)
 		{
-			// Mesh sits on the axis — fall back to a representative radius perpendicular to the axis.
+			// Mesh sits on the axis - fall back to a representative radius perpendicular to the axis.
 			RefDir = ComponentXf.GetRotation().RotateVector(FVector::ForwardVector);
 			RefDir = RefDir - AxisWorld * FVector::DotProduct(RefDir, AxisWorld);
 			Radius = 20.f;
@@ -124,7 +124,7 @@ void FFXR_LatchVisualizer::DrawVisualization(const UActorComponent* Component, c
 		PDI->DrawLine(Pivot, Pivot + RotMin.RotateVector(RefDir) * Radius, MinColor, SDPG_World, 1.5f);
 		PDI->DrawLine(Pivot, Pivot + RotMax.RotateVector(RefDir) * Radius, MaxColor, SDPG_World, 1.5f);
 
-		// Arrowheads at each limit, tangent to the arc, pointing away from rest — the swing direction.
+		// Arrowheads at each limit, tangent to the arc, pointing away from rest - the swing direction.
 		auto ArcTangent = [&AxisWorld](const FVector& RadialDir)
 		{
 			return FVector::CrossProduct(AxisWorld, RadialDir).GetSafeNormal();

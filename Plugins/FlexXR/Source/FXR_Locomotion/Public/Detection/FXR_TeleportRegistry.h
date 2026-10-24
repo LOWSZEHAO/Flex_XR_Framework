@@ -10,7 +10,7 @@ class UFXR_TeleportAnchor;
 class UFXR_TeleportBlocker;
 
 /**
- * UFXR_TeleportRegistry — world registry of teleport anchors and blockers (ADR-002 pattern).
+ * UFXR_TeleportRegistry - world registry of teleport anchors and blockers (ADR-002 pattern).
  *
  * Anchors and blockers self-register on BeginPlay; the locomotion component queries this each aim
  * frame instead of scanning the level. Linear scan for the first pass (matching the interaction
@@ -30,7 +30,7 @@ public:
 	/** Nearest anchor whose snap radius contains Location, or null. */
 	UFXR_TeleportAnchor* FindAnchorNear(const FVector& Location) const;
 
-	/** The first registered blocker containing Location, or null — named so its events can fire. */
+	/** The first registered blocker containing Location, or null - named so its events can fire. */
 	UFXR_TeleportBlocker* FindBlockerAt(const FVector& Location) const;
 
 	/** True if Location is inside any registered blocker. */

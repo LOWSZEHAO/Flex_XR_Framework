@@ -20,7 +20,7 @@ class UFXR_XRSubsystem;
 class IFXR_Interactor;
 
 /**
- * AFXR_Pawn — the FlexXR VR / MR rig.
+ * AFXR_Pawn - the FlexXR VR / MR rig.
  *
  * A camera plus two hand roots hosting the controller and tracked-hand interactors, with
  * a desktop-sim fallback. On play it resolves device capabilities via UFXR_XRSubsystem,
@@ -40,7 +40,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
-	//~ IFXR_LocomotionOwner (ADR-006 room-scale origin) — the rig moved by teleport is VROrigin,
+	//~ IFXR_LocomotionOwner (ADR-006 room-scale origin) - the rig moved by teleport is VROrigin,
 	//~ the HMD whose horizontal position lands on target is Camera.
 	virtual USceneComponent* GetTrackingOriginComponent() const override;
 	virtual USceneComponent* GetHMDComponent() const override;
@@ -83,11 +83,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_HandInteractor> RightHand;
 
-	/** Where the left hand's far ray leaves it — drag this to aim the pointer. Wired to both left interactors. */
+	/** Where the left hand's far ray leaves it - drag this to aim the pointer. Wired to both left interactors. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_RayOrigin> LeftRay;
 
-	/** Where the right hand's far ray leaves it — drag this to aim the pointer. Wired to both right interactors. */
+	/** Where the right hand's far ray leaves it - drag this to aim the pointer. Wired to both right interactors. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlexXR|Interactors")
 	TObjectPtr<UFXR_RayOrigin> RightRay;
 

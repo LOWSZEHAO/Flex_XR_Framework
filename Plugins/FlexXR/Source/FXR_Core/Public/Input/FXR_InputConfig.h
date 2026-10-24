@@ -10,7 +10,7 @@ class UInputMappingContext;
 class UInputAction;
 
 /**
- * UFXR_InputConfig — data-driven EnhancedInput binding for FlexXR interactors.
+ * UFXR_InputConfig - data-driven EnhancedInput binding for FlexXR interactors.
  *
  * Holds the mapping context plus per-hand Select and Use actions so controller mapping
  * (grip/trigger <-> Select/Use) is authored as data, not hardcoded, and the left and
@@ -31,19 +31,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	int32 MappingPriority = 0;
 
-	/** Select (grab) — left hand (grip on controllers). */
+	/** Select (grab) - left hand (grip on controllers). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	TObjectPtr<UInputAction> SelectActionLeft;
 
-	/** Select (grab) — right hand (grip on controllers). */
+	/** Select (grab) - right hand (grip on controllers). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	TObjectPtr<UInputAction> SelectActionRight;
 
-	/** Use — left hand (trigger on controllers). */
+	/** Use - left hand (trigger on controllers). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	TObjectPtr<UInputAction> UseActionLeft;
 
-	/** Use — right hand (trigger on controllers). */
+	/** Use - right hand (trigger on controllers). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Input")
 	TObjectPtr<UInputAction> UseActionRight;
 };

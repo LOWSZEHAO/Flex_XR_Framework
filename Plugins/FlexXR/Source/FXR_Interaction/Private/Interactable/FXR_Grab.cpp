@@ -74,6 +74,9 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 		TrackedLinearVelocity = FVector::ZeroVector;
 		TrackedAngularVelocity = FVector::ZeroVector;
 	}
+
+	// Last, so anything listening finds the object already held.
+	OnGrabbed.Broadcast();
 }
 
 void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
@@ -141,7 +144,7 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		SetHeldTransform(HeldOffset * Interactor->GetGripTransform());
 	}
 
-	// Use (trigger) edges + analog value while held — the "hold grip, pull trigger" case (guns, flashlights).
+	// Use (trigger) edges + analog value while held - the "hold grip, pull trigger" case (guns, flashlights).
 	CurrentUseValue = Interactor->GetUseValue();
 	if (!bUsing && CurrentUseValue >= UseThreshold)
 	{
@@ -160,8 +163,8 @@ void UFXR_Grab::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		const FVector NewLocation = GetHeldTransform().GetLocation();
 		const FQuat NewRotation = GetHeldTransform().GetRotation();
 
-		// While the framework is settling the object — a grip snap, the two-hand join, or the return
-		// to a promoted hand — the object moves on its own. That is not a throw, and handing that
+		// While the framework is settling the object - a grip snap, the two-hand join, or the return
+		// to a promoted hand - the object moves on its own. That is not a throw, and handing that
 		// speed to physics on release would fling it away.
 		const bool bSettling = (SnapAlpha < 1.f) || (TwoHandBlend < 1.f);
 		if (bSettling)
@@ -206,7 +209,7 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 		}
 	}
 
-	// Releasing while the trigger is down still ends the use — never strand a latched OnUseStarted.
+	// Releasing while the trigger is down still ends the use - never strand a latched OnUseStarted.
 	if (bUsing)
 	{
 		bUsing = false;
@@ -230,6 +233,9 @@ void UFXR_Grab::OnEnd(EFXR_EndReason Reason)
 	TrackedLinearVelocity = FVector::ZeroVector;
 	TrackedAngularVelocity = FVector::ZeroVector;
 	Super::OnEnd(Reason);
+
+	// After the base has ended the hold, so a listener sees an object that is no longer held.
+	OnReleased.Broadcast();
 }
 
 bool UFXR_Grab::CanBeginSecondary(IFXR_Interactor* Interactor) const
@@ -247,7 +253,7 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 
 	SecondaryInteractor = Interactor;
 
-	// The second hand's grip point (hand-side filtered — e.g. a LeftOnly foregrip) both shapes the
+	// The second hand's grip point (hand-side filtered - e.g. a LeftOnly foregrip) both shapes the
 	// fingers and becomes the handle the object aims at.
 	UFXR_GripPoint* GripPoint = SelectGripPoint(Interactor);
 	SecondaryGripPoint = GripPoint;
@@ -257,7 +263,7 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 	bHasSecondaryGrip = false;
 	UpdateGripLocals();
 
-	// Capture the grip-to-grip axis in object space — the reference the two-hand rotation is built
+	// Capture the grip-to-grip axis in object space - the reference the two-hand rotation is built
 	// against, so the object keeps the orientation it was grabbed with rather than snapping to one.
 	const FVector LocalDelta = (SecondaryGripLocal - PrimaryGripLocal).GetSafeNormal();
 	if (!LocalDelta.IsNearlyZero())
@@ -269,8 +275,8 @@ void UFXR_Grab::OnBeginSecondary(IFXR_Interactor* Interactor)
 	// Finish any in-flight snap: from here the two-hand solve owns the pose.
 	SnapAlpha = 1.f;
 
-	// The hands rarely land exactly on the solved pose, so ease the correction in — snapping the
-	// object the instant the second hand closes reads as a jerk.
+	// The hands rarely land exactly on the solved pose, so ease the correction in instead of
+	// snapping the object when the second hand closes.
 	TwoHandBlend = 0.f;
 	TwoHandJoinOffset = FTransform::Identity;
 	if (const UPrimitiveComponent* Driven = HeldComponent.Get())
@@ -295,7 +301,7 @@ void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
 	// Primary off while a second hand holds on: the survivor is promoted and carries the hold.
 	if (SecondaryInteractor)
 	{
-		// The trigger hand left — never strand a latched use.
+		// The trigger hand left - never strand a latched use.
 		if (bUsing)
 		{
 			bUsing = false;
@@ -317,7 +323,7 @@ void UFXR_Grab::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Reason)
 		return;
 	}
 
-	// Last hand off — the hold ends (single-hand behaviour).
+	// Last hand off - the hold ends (single-hand behaviour).
 	OnEnd(Reason);
 }
 
@@ -388,19 +394,19 @@ FTransform UFXR_Grab::MakeTwoHandTransform() const
 	const FVector WorldAxis = (HandB - HandA).GetSafeNormal();
 	if (WorldAxis.IsNearlyZero() || (SecondaryGripLocal - PrimaryGripLocal).IsNearlyZero())
 	{
-		return Base; // Hands (or their grips) coincide — degenerate; hold the one-hand pose.
+		return Base; // Hands (or their grips) coincide - degenerate; hold the one-hand pose.
 	}
 
-	// Roll about the hand-to-hand line is the one thing two points cannot determine, so take it
-	// from both wrists: twisting either hand rolls the object, as it would in the hand.
+	// Two points can't determine roll around the hand-to-hand line, so take it from both wrists:
+	// twisting either hand rolls the object.
 	FVector UpReference = (PrimaryGrip.GetRotation().GetUpVector() + SecondaryGrip.GetRotation().GetUpVector()).GetSafeNormal();
 	if (UpReference.IsNearlyZero())
 	{
 		UpReference = FVector::UpVector;
 	}
 
-	// Align the object's grip-to-grip axis with the hands' line, then place it so the two midpoints
-	// coincide. Symmetric by construction: neither hand is privileged, so either may drive.
+	// Align the object's grip-to-grip axis with the line between the hands, then match the two
+	// midpoints. Symmetric, so either hand can drive.
 	const FQuat WorldFrame = FRotationMatrix::MakeFromXZ(WorldAxis, UpReference).ToQuat();
 	const FQuat Rotation = WorldFrame * TwoHandLocalFrame.Inverse();
 
@@ -414,11 +420,9 @@ FTransform UFXR_Grab::MakeTwoHandTransform() const
 
 bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const
 {
-	// The second hand glues to its handle, so it reads as gripping the object rather than hovering
-	// beside it. The first hand keeps the controller pose — the object was brought to that hand.
-	// Either hand glues to its own grip point. Gluing only the second one made the pair inconsistent:
-	// one hand rode the object while the other rode the controller, so they visibly parted as the
-	// object turned — and a promoted survivor would snap back to the controller when the other let go.
+	// Each hand snaps to its own grip point. Originally only the second hand did, and the two hands
+	// drifted apart as the object turned; the remaining hand also jumped back to the controller when
+	// the other let go.
 	const IFXR_Interactor* Interactor = nullptr;
 	const UFXR_GripPoint* GripPoint = nullptr;
 
@@ -429,7 +433,7 @@ bool UFXR_Grab::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransf
 	}
 	else if (PrimaryInteractor && PrimaryInteractor->GetHandSide() == Side && bPrimaryAttached)
 	{
-		// Only once any snap has finished — during a Smooth snap the object is still travelling to
+		// Only once any snap has finished - during a Smooth snap the object is still travelling to
 		// the hand, and the hand should wait for it rather than fly out to meet it.
 		Interactor = PrimaryInteractor;
 		GripPoint = PrimaryGripPoint.Get();
@@ -453,7 +457,7 @@ void UFXR_Grab::ReanchorToPrimary()
 
 	const FTransform PrimaryGrip = PrimaryInteractor->GetGripTransform();
 
-	// Where the object sits right now relative to the surviving hand — the start of the return.
+	// Where the object sits right now relative to the surviving hand - the start of the return.
 	SnapProceduralOffset = GetHeldTransform().GetRelativeTransform(PrimaryGrip);
 
 	const UFXR_GripPoint* GripPoint = PrimaryGripPoint.Get();
@@ -525,7 +529,7 @@ FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) con
 	FTransform Target = Grip;
 	// Chosen by hand and priority, not by reach: at this distance nothing overlaps, so the ordinary
 	// selection rejects every point, and the flight then aims at the object's own origin regardless
-	// of which hand called it — which is exactly the "it ignores which hand I used" symptom.
+	// of which hand called it - which is exactly the "it ignores which hand I used" symptom.
 	if (UFXR_GripPoint* GripPoint = SelectGripPointForHand(Interactor->GetHandSide()))
 	{
 		const FTransform PointRelative = GripPoint->GetComponentTransform().GetRelativeTransform(GetHeldTransform());
@@ -533,7 +537,7 @@ FTransform UFXR_Grab::ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) con
 	}
 
 	// Position and rotation come from the hand; scale stays the object's own. Composing the grip's
-	// scale in would resize the object as it flew, and it would land at the wrong size — the same
+	// scale in would resize the object as it flew, and it would land at the wrong size - the same
 	// mistake the socket seat pose made.
 	Target.SetScale3D(GetHeldTransform().GetScale3D());
 	return Target;
@@ -551,8 +555,7 @@ void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
 	FlightElapsed += DeltaTime;
 	const float Alpha = FMath::Clamp(FlightElapsed / FMath::Max(DistanceGrabDuration, KINDA_SMALL_NUMBER), 0.f, 1.f);
 
-	// Eased rather than linear: a constant-velocity slide reads as a conveyor belt, while easing out
-	// lets the object settle into the hand. Re-aimed every frame, so it tracks a hand that moves.
+	// Eased, not linear, so the object settles into the hand. Re-aimed every frame to follow the hand.
 	const float Eased = FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f);
 	FTransform Current;
 	Current.Blend(FlightStart, ComputeDistanceGrabTarget(Interactor), Eased);
@@ -560,8 +563,8 @@ void UFXR_Grab::TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime)
 
 	if (Alpha >= 1.f)
 	{
-		// Arrived: hand over to the ordinary hold, which is what makes grip points, pose blending,
-		// two-hand and throw behave identically whether the object was reached for or summoned.
+		// Arrived: switch to a normal hold, so grip points, poses, two-hand and throwing all work the
+		// same as for an object picked up by hand.
 		bFlying = false;
 		OnBegin(Interactor);
 	}
@@ -593,8 +596,8 @@ void UFXR_Grab::SetHeldTransform(const FTransform& NewTransform)
 	}
 
 	// Scale is never written by a hold. Grip offsets are composed transforms, and a snapped grip
-	// divides the object's scale by its own — the grip point is attached beneath the mesh, so it
-	// inherits it — leaving an offset of scale 1 that then overwrites whatever the mesh was authored
+	// divides the object's scale by its own - the grip point is attached beneath the mesh, so it
+	// inherits it - leaving an offset of scale 1 that then overwrites whatever the mesh was authored
 	// at. A cube built at 0.2 became a 1.0 cube the instant it was picked up.
 	//
 	// Fixed here rather than in each composition, because every path lands here: snap, smooth,
@@ -619,7 +622,7 @@ bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
 	}
 
 	// The driven mesh and whatever hangs beneath it. That is the same set physics treats as one body,
-	// so what travels with the hold is exactly what falls with it on release — a mesh parked beside
+	// so what travels with the hold is exactly what falls with it on release - a mesh parked beside
 	// the driven one rather than under it belongs to neither.
 	const USceneComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
 	return Driven && (Component == Driven || Component->IsAttachedTo(Driven));

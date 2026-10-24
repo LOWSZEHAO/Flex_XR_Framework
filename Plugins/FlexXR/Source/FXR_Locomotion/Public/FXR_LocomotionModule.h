@@ -6,7 +6,7 @@
 #include "Modules/ModuleManager.h"
 
 /**
- * FXR_Locomotion — moving the player.
+ * FXR_Locomotion - moving the player.
  *
  * One pawn component (UFXR_Locomotion, ADR-005) arbitrating teleport, smooth move, turn, and
  * climbing, plus FXR_TeleportAnchor / FXR_TeleportBlocker world components. A sibling of FXR_UI,

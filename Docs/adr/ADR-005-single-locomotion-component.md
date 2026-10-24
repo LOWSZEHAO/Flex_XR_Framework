@@ -1,15 +1,15 @@
-# ADR-005 — Single `FXR_Locomotion` component with a mode arbiter
+# ADR-005 - Single `FXR_Locomotion` component with a mode arbiter
 
-**Status:** Accepted · **Date:** 2026-07 · **Phase:** 2.5
+**Status:** Accepted | **Date:** 2026-07 | **Phase:** 2.5
 
 ## Context
 FlexXR must support teleport, smooth movement, snap/smooth turning, climbing, and comfort vignetting. The
-obvious decomposition — one component per mode (`FXR_Teleport`, `FXR_SmoothMove`, `FXR_Turn`, `FXR_Climb`) —
+obvious decomposition - one component per mode (`FXR_Teleport`, `FXR_SmoothMove`, `FXR_Turn`, `FXR_Climb`) - 
 matches how most VR templates ship, and superficially matches FlexXR's own "one component per behavior" rule.
 
 ## Decision
 Ship **one** `FXR_Locomotion` pawn component containing all modes, gated by checkboxes and driven by presets.
-`FXR_TeleportAnchor` and `FXR_TeleportBlocker` remain separate — they are *world* components, not pawn modes.
+`FXR_TeleportAnchor` and `FXR_TeleportBlocker` remain separate - they are *world* components, not pawn modes.
 
 ## Rationale
 The modes are not independent; they **must arbitrate**:
@@ -18,9 +18,9 @@ The modes are not independent; they **must arbitrate**:
 - Comfort settings (vignette) are global across all modes.
 - Hand ownership is shared: a hand aiming a teleport arc cannot simultaneously drive movement, and a hand
   holding an interactable may drive neither.
-- Capability fallback (tracked hands → teleport only) is a decision *about the whole set*, not per mode.
+- Capability fallback (tracked hands -> teleport only) is a decision *about the whole set*, not per mode.
 
-Separate components would require an arbiter object to referee them — at which point the arbiter is the real
+Separate components would require an arbiter object to referee them - at which point the arbiter is the real
 component and the others are its internals. This is the same reasoning that made two-handed grab a checkbox on
 `FXR_Grab` rather than a `FXR_TwoHand` component: **do not surface internal architecture as user-facing
 components.**

@@ -9,7 +9,7 @@ public class FXR_Locomotion : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		// One-way dependency: FXR_Locomotion is a sibling of FXR_UI, above FXR_Interaction.
-		// It may reference FXR_Interaction (climbing reuses FXR_Grab) and FXR_Core — never
+		// It may reference FXR_Interaction (climbing reuses FXR_Grab) and FXR_Core - never
 		// FXR_UI or FXR_Training.
 		PublicDependencyModuleNames.AddRange(new string[]
 		{

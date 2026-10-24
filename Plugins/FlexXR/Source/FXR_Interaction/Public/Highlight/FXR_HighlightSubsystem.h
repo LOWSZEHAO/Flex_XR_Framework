@@ -28,7 +28,7 @@ struct FFXR_OverlayRecord
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> Instance = nullptr;
 
-	/** Parent the instance was made from — a mesh that switches between hull and overlay needs a new one. */
+	/** Parent the instance was made from - a mesh that switches between hull and overlay needs a new one. */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> Source = nullptr;
 };
@@ -48,19 +48,16 @@ struct FFXR_HighlightRecord
 };
 
 /**
- * UFXR_HighlightSubsystem — turns semantic states into drawn highlights (design 5.6).
+ * UFXR_HighlightSubsystem - turns highlight states into drawn highlights.
  *
- * It lives here, not on UFXR_Highlight, because the *default* highlight must work on an interactable
- * that has no highlight component at all. The optional component only supplies overrides when one
- * happens to be present.
+ * It's a subsystem rather than living on UFXR_Highlight so the default highlight works on
+ * interactables that don't have a highlight component. The component only adds overrides.
  *
- * Hover and Selected arrive from the focus subsystem. Guidance is set deliberately by a training
- * step or game script and is sticky until cleared — it is an instruction, not a consequence of where
- * the player's hands are.
+ * Hover and Selected come from the focus subsystem. Guidance is set by a training step or game
+ * script and stays until cleared.
  *
- * Tickable because highlights fade rather than pop: an outline that appears at full strength on one
- * frame and vanishes on the next reads as a flicker, especially in a headset where the hand is never
- * perfectly still on the edge of a hover.
+ * Tickable because highlights fade in and out; instant on/off flickers in a headset when the
+ * hand is on the edge of a hover.
  */
 UCLASS()
 class FXR_INTERACTION_API UFXR_HighlightSubsystem : public UTickableWorldSubsystem
@@ -85,7 +82,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Highlight")
 	EFXR_HighlightState GetHighlightState(const UFXR_InteractableBase* Interactable) const;
 
-	/** How far this interactable has faded in, 0..1 — for tests and for anything syncing to the fade. */
+	/** How far this interactable has faded in, 0..1 - for tests and for anything syncing to the fade. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Highlight")
 	float GetHighlightAlpha(const UFXR_InteractableBase* Interactable) const;
 
@@ -93,7 +90,7 @@ public:
 	 * A hand is approaching this interactable, Alpha 0..1 by distance. Null clears that hand.
 	 *
 	 * Kept separate from Hover: hover means "you can take this", and that promise would be diluted if
-	 * an object 35 cm away counted as hovered — the far ray suppression reads it, for one.
+	 * an object 35 cm away counted as hovered - the far ray suppression reads it, for one.
 	 */
 	void SetProximity(EFXR_HandSide Hand, UFXR_InteractableBase* Interactable, float Alpha);
 
@@ -102,7 +99,7 @@ public:
 	/**
 	 * Stencil value for a state and fade level, packed as State + Level * 4.
 	 *
-	 * The outline is one full-screen pass, so it can read nothing per object except this byte — and
+	 * The outline is one full-screen pass, so it can read nothing per object except this byte - and
 	 * it needs both which state to colour and how far faded it is. Two bits of state (1 Hover,
 	 * 2 Guidance, 3 Selected) leave six for the fade, and 64 levels is finer than the eye resolves
 	 * across a 150 ms fade.
@@ -141,7 +138,7 @@ private:
 	void ApplyOverlay(UMeshComponent* Mesh, EFXR_HighlightStyle Style, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config);
 
 	/**
-	 * Draw the Outline style as an inverted hull on this mesh — the Mesh Hull tier. Shares the overlay
+	 * Draw the Outline style as an inverted hull on this mesh - the Mesh Hull tier. Shares the overlay
 	 * slot with Inner Blink and Sweep, which is safe because an interactable draws one style at a time.
 	 */
 	void ApplyHull(UMeshComponent* Mesh, EFXR_HighlightState State, float Alpha, const UFXR_Highlight* Config);
@@ -150,16 +147,16 @@ private:
 	void ClearOverlay(UMeshComponent* Mesh);
 
 	// Guidance is authored state, so it is stored rather than derived. Hover and Selected are not
-	// stored at all — the focus subsystem already owns them and a second copy could drift.
+	// stored at all - the focus subsystem already owns them and a second copy could drift.
 	TSet<TWeakObjectPtr<UFXR_InteractableBase>> Guided;
 
 	// What each hand is currently approaching, and how strongly. Per hand rather than a set, because
-	// only the nearest candidate glows — a cloud of dimly lit objects is the noise this design avoids.
+	// only the nearest candidate glows - a cloud of dimly lit objects is the noise this design avoids.
 	TWeakObjectPtr<UFXR_InteractableBase> ProximityTarget[2];
 	float ProximityAlpha[2] = { 0.f, 0.f };
 
-	// Everything currently drawing or fading out. An entry leaves only once it has faded to nothing,
-	// which is what keeps a released highlight from cutting off mid-fade.
+	// Everything drawing or fading out. Entries are removed once fully faded, so a released
+	// highlight finishes its fade.
 	UPROPERTY(Transient)
 	TMap<TWeakObjectPtr<UFXR_InteractableBase>, FFXR_HighlightRecord> Active;
 

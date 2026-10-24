@@ -69,7 +69,7 @@ void FFXR_InteractionEditorModule::StartupModule()
 	}
 	{
 		// The per-hand ray origin draws its own beam, so it stays visible while it is the thing being
-		// dragged — selecting a component hides every other component's visualizer.
+		// dragged - selecting a component hides every other component's visualizer.
 		TSharedPtr<FComponentVisualizer> Visualizer = MakeShared<FFXR_RayOriginVisualizer>();
 		GUnrealEd->RegisterComponentVisualizer(UFXR_RayOrigin::StaticClass()->GetFName(), Visualizer);
 		Visualizer->OnRegister();

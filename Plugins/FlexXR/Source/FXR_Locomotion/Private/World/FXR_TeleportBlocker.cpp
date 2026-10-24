@@ -6,7 +6,7 @@
 
 UFXR_TeleportBlocker::UFXR_TeleportBlocker()
 {
-	// Tick exists only for the optional debug draw, and runs in the editor too — a blocked volume
+	// Tick exists only for the optional debug draw, and runs in the editor too - a blocked volume
 	// is invisible by nature, so it has to be visible while placing it.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;

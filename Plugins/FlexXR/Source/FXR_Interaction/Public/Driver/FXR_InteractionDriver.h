@@ -20,7 +20,7 @@ class UFXR_RayTarget;
 class UFXR_Socket;
 
 /**
- * UFXR_InteractionDriver — the per-rig service that turns interactor input into grabs.
+ * UFXR_InteractionDriver - the per-rig service that turns interactor input into grabs.
  *
  * Add it to AFXR_Pawn. Each tick, for both hands, it reads the active interactor's Select
  * value: crossing the grab threshold claims the best candidate from the detection
@@ -47,6 +47,13 @@ public:
 	/** The ray target the given hand is currently pointing at, or null. */
 	UFXR_RayTarget* GetAimedRayTarget(EFXR_HandSide Side) const;
 
+	/**
+	 * What this hand's far ray is resting on this frame, whatever it is - a ray target, a spatial
+	 * panel, or plain world geometry. Published from the one trace the rig casts, so a consumer
+	 * that wants the surface rather than the interactable never casts a second one.
+	 */
+	bool GetAimHit(EFXR_HandSide Side, FHitResult& OutHit) const { return GetFarHit(Side, OutHit); }
+
 protected:
 	/** Select value at or above which a grab is claimed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Interaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -57,10 +64,9 @@ protected:
 	float ReleaseThreshold = 0.35f;
 
 	/**
-	 * When this rig draws its pointer beam. On Target by default: the hover highlight already says
-	 * what a press would take, so a beam that is permanently lit adds noise rather than information,
-	 * and it reads as a menu cursor in a scene that is not a menu. Aiming still works, because
-	 * acquisition is coarse — you point the hand, the beam arrives, and it refines from there.
+	 * When the pointer beam is drawn. On Target by default: the hover highlight already shows what
+	 * a press would hit, and an always-on beam looks like a menu cursor. Aiming still works since the
+	 * beam appears as soon as the hand points at something.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Far Interaction")
 	EFXR_RayVisibility RayVisibility = EFXR_RayVisibility::OnTarget;

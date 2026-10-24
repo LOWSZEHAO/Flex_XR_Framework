@@ -24,8 +24,8 @@ void UFXR_GripPoint::BeginPlay()
 	Super::BeginPlay();
 	SetComponentTickEnabled(bDrawDebug);
 
-	// Attach to the owning interactables' grip registries (ADR-007). Ambiguity resolved to none
-	// on purpose — an unowned point never registers, and the author-time validation names it.
+	// Register with the owning interactables (ADR-007). If ownership is ambiguous it registers with
+	// none; the author-time validation reports it.
 	TArray<UFXR_InteractableBase*> ResolvedOwners;
 	ResolveOwners(ResolvedOwners);
 	for (UFXR_InteractableBase* Owner : ResolvedOwners)
@@ -37,7 +37,7 @@ void UFXR_GripPoint::BeginPlay()
 	if (ResolvedOwners.Num() == 0)
 	{
 		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_GripPoint '%s' on '%s': no owning interactable resolved — the point is inert. Parent it under an interactable, keep a single interactable on the actor, or set Owners explicitly."),
+			TEXT("FXR_GripPoint '%s' on '%s': no owning interactable resolved - the point is inert. Parent it under an interactable, keep a single interactable on the actor, or set Owners explicitly."),
 			*GetName(), *GetNameSafe(GetOwner()));
 	}
 }
@@ -183,7 +183,7 @@ void UFXR_GripPoint::CheckForErrors()
 		if (Candidates.Num() == 0)
 		{
 			UE_LOG(LogFXR, Warning,
-				TEXT("FXR_GripPoint '%s' on '%s': the actor has no interactable — the grip point will never register."),
+				TEXT("FXR_GripPoint '%s' on '%s': the actor has no interactable - the grip point will never register."),
 				*GetName(), *OwnerActor->GetName());
 		}
 		else
@@ -195,7 +195,7 @@ void UFXR_GripPoint::CheckForErrors()
 				Names += Candidate->GetName();
 			}
 			UE_LOG(LogFXR, Error,
-				TEXT("FXR_GripPoint '%s' on '%s': ambiguous ownership — several interactables (%s) and no explicit Owners. Set Owners, or parent the point under its interactable."),
+				TEXT("FXR_GripPoint '%s' on '%s': ambiguous ownership - several interactables (%s) and no explicit Owners. Set Owners, or parent the point under its interactable."),
 				*GetName(), *OwnerActor->GetName(), *Names);
 		}
 		return;
@@ -210,7 +210,7 @@ void UFXR_GripPoint::CheckForErrors()
 	if (EnabledOwners > 1)
 	{
 		UE_LOG(LogFXR, Error,
-			TEXT("FXR_GripPoint '%s' on '%s': %d owners are enabled simultaneously — a shared grip point allows at most one enabled owner at a time. Disable all but one by default and switch at runtime."),
+			TEXT("FXR_GripPoint '%s' on '%s': %d owners are enabled simultaneously - a shared grip point allows at most one enabled owner at a time. Disable all but one by default and switch at runtime."),
 			*GetName(), *OwnerActor->GetName(), EnabledOwners);
 	}
 }

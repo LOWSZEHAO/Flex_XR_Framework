@@ -14,23 +14,25 @@ class UFXR_HandPose;
 /** Broadcast on the use-input edges of a held FXR_Grab (trigger pull / index-squeeze). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabUseDelegate);
 
+/** Broadcast when an FXR_Grab is picked up or let go. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_GrabEvent);
+
 /**
- * UFXR_Grab — free 6-DOF grab.
+ * UFXR_Grab - free 6-DOF grab.
  *
- * Kinematic-while-held (ADR-001): on grab the driven primitive stops simulating and
- * follows the interactor's grip pose; on release it resumes physics. This is the first
- * pass of the solver behaviour (SetWorldTransform for now); a later slice swaps in the
- * kinematic-target constraint solver and release velocity.
+ * Kinematic while held, physics on release (ADR-001): when grabbed, the bodies it carries stop
+ * simulating and follow the hand's grip pose; on release physics is restored and the hand's
+ * velocity is passed on for throwing.
  *
- * Built-in use events (§4 FXR_Grab) cover the "hold grip, pull trigger" 80% case: while held,
- * the holding hand's Use value drives OnUseStarted / OnUseEnded and an analog UseValue, so a
- * gun or flashlight needs only this component — no separate FXR_Use.
+ * Use events are built in for the "hold grip, pull trigger" case: while held, the hand's Use
+ * value drives OnUseStarted / OnUseEnded and an analog UseValue, so a gun or flashlight only
+ * needs this component.
  *
- * Two-handed hold is a checkbox, not a component (§4). With Allow Two-Handed a second hand joins
- * the hold and glues to its grip point; Two Hand Mode then decides whether it steers. Shared
- * solves both hands symmetrically — the object's grip-to-grip axis follows the line between them,
- * so either hand can drive (a broom sweeps from whichever hand moves). Support lets the second
- * hand hold on without reorienting anything. Either hand may leave; the survivor carries on.
+ * Two-handed hold is a checkbox. With Allow Two-Handed a second hand can join and snaps to its
+ * grip point; Two Hand Mode decides whether it steers. Shared solves both hands symmetrically
+ * (the grip-to-grip axis follows the line between the hands, so either hand can drive, like a
+ * broom). Support lets the second hand hold on without steering. Either hand can let go and the
+ * other keeps holding.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Grab : public UFXR_InteractableBase
@@ -66,12 +68,12 @@ public:
 
 	/**
 	 * Claim from range: the object flies to the hand and then becomes an ordinary hold, so everything
-	 * downstream — grip point, pose blend, two-hand, throw — is the same code path as reaching for it.
+	 * downstream - grip point, pose blend, two-hand, throw - is the same code path as reaching for it.
 	 */
 	void BeginDistanceGrab(IFXR_Interactor* Interactor);
 
 	/**
-	 * Tell this object what its physics state was before something else parked it kinematic — a socket
+	 * Tell this object what its physics state was before something else parked it kinematic - a socket
 	 * seating it. Without this a later grab reads the parked body, concludes it never simulated, and
 	 * the object can never fall again after release.
 	 */
@@ -79,22 +81,22 @@ public:
 
 	/**
 	 * Park every simulating body this object's hold would carry, and hand them all back. Public
-	 * because a socket parks the same set for a different reason, and it must be the same set —
+	 * because a socket parks the same set for a different reason, and it must be the same set -
 	 * otherwise a loose part stays simulating and falls off whatever it was docked to.
 	 */
 	void ParkPhysics();
 	void RestorePhysics();
 
-	/** World transform of whatever this hold moves — the actor, or just the driven mesh. */
+	/** World transform of whatever this hold moves - the actor, or just the driven mesh. */
 	FTransform GetHeldTransform() const;
 
 	/** Move it. Used by the hold itself and by anything that places the object, such as a socket. */
 	void SetHeldTransform(const FTransform& NewTransform);
 
-	/** Whether this component travels with the hold, which is what a preview has to mirror. */
+	/** Whether this component moves with the hold (the socket preview needs to match this). */
 	bool MovesComponent(const USceneComponent* Component) const;
 
-	/** Analog use value 0..1 from the holding hand (0 when not held) — bind for variable triggers. */
+	/** Analog use value 0..1 from the holding hand (0 when not held) - bind for variable triggers. */
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
 	float GetUseValue() const { return CurrentUseValue; }
 
@@ -102,7 +104,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Grab|Use")
 	bool IsUsing() const { return bUsing; }
 
-	/** Use crossed Use Threshold while held — "pull the trigger" (fire, toggle the light). */
+	/** Use crossed Use Threshold while held - "pull the trigger" (fire, toggle the light). */
 	UPROPERTY(BlueprintAssignable, Category = "Grab|Use")
 	FFXR_GrabUseDelegate OnUseStarted;
 
@@ -110,15 +112,29 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Grab|Use")
 	FFXR_GrabUseDelegate OnUseEnded;
 
+	/**
+	 * Picked up - once per hold, after the object is in the hand. A second hand joining does not
+	 * fire it again.
+	 *
+	 * Training's event bus has already heard the grab by now, which matters when this is wired to
+	 * Complete Step: the grab is judged while its step is still open, so the right object is never
+	 * counted as a wrong one on its way to finishing the step.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Grab")
+	FFXR_GrabEvent OnGrabbed;
+
+	/** Let go - dropped, thrown, or taken from the hand. Once per hold, after physics is handed back. */
+	UPROPERTY(BlueprintAssignable, Category = "Grab")
+	FFXR_GrabEvent OnReleased;
+
 protected:
-	/** Multiplier on the hand's tracked velocity handed to the object on release — tune throw strength. */
+	/** Multiplier on the hand's tracked velocity handed to the object on release - tune throw strength. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab", meta = (ClampMin = "0.0"))
 	float ThrowVelocityScale = 1.f;
 
 	/**
-	 * Let this object be pulled to the hand from across the room. Off by default: being able to yank
-	 * something you cannot reach changes how it feels, and in a training sim it can quietly delete the
-	 * physical performance the exercise is meant to teach — so it is a deliberate tick, per object.
+	 * Allow pulling this object to the hand from a distance. Off by default; it changes the feel,
+	 * and in training it can skip the physical part the exercise is supposed to teach.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Distance")
 	bool bDistanceGrab = false;
@@ -131,8 +147,8 @@ protected:
 	float DistanceGrabDuration = 0.3f;
 
 	/**
-	 * Let a second hand join the hold to aim the object (rifles, big tools, steering). Off by
-	 * default: for an ordinary prop a second hand swinging the aim reads as a glitch, not a feature.
+	 * Let a second hand join to aim the object (rifles, large tools). Off by default, since on a
+	 * normal prop a second hand swinging it around looks like a bug.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|TwoHand")
 	bool bAllowTwoHanded = false;
@@ -145,7 +161,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float UseThreshold = 0.5f;
 
-	/** Use value below which OnUseEnded fires — keep under Use Threshold for hysteresis. */
+	/** Use value below which OnUseEnded fires - keep under Use Threshold for hysteresis. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Use", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float UseReleaseThreshold = 0.35f;
 
@@ -157,15 +173,15 @@ private:
 	/**
 	 * Two-hand pose, solved symmetrically: the object's grip-to-grip axis is aligned to the line
 	 * between the hands, their midpoints are matched, and roll comes from both wrists. Neither hand
-	 * is an anchor, so moving either one does the natural thing — a broom sweeps whichever hand
-	 * drives it — and no role ever has to switch mid-hold.
+	 * is an anchor, so moving either one does the natural thing - a broom sweeps whichever hand
+	 * drives it - and no role ever has to switch mid-hold.
 	 */
 	FTransform MakeTwoHandTransform() const;
 	/** Pose the object would be held in, so a distance grab arrives already seated. */
 	FTransform ComputeDistanceGrabTarget(IFXR_Interactor* Interactor) const;
 	/** Advance the distance-grab flight, handing over to the ordinary hold on arrival. */
 	void TickDistanceGrab(IFXR_Interactor* Interactor, float DeltaTime);
-	/** Re-resolve where each hand holds the object — a rail slides under the hand, a point grip does not. */
+	/** Re-resolve where each hand holds the object - a rail slides under the hand, a point grip does not. */
 	void UpdateGripLocals();
 	/** Re-anchor the single-hand offset to the primary grip so hand transitions never pop the object. */
 	void ReanchorToPrimary();
@@ -177,7 +193,7 @@ private:
 	float SnapInterpSpeed = 10.f;
 	bool bRestorePhysics = false;
 
-	// Distance-grab flight. Interpolated from elapsed time and the live hand pose — deterministic, so
+	// Distance-grab flight. Interpolated from elapsed time and the live hand pose - deterministic, so
 	// an SOP replay reproduces it, which a physics impulse toward the hand would not (ADR-001).
 	bool bFlying = false;
 	float FlightElapsed = 0.f;
@@ -199,13 +215,13 @@ private:
 	/**
 	 * Place every parked body against the held frame. A component that has simulated stops following
 	 * its parent by attachment even once it is kinematic again, so moving the actor alone leaves it
-	 * behind — it has to be driven explicitly, which the solver does for everything else anyway.
+	 * behind - it has to be driven explicitly, which the solver does for everything else anyway.
 	 */
 	void PlaceParkedBodies(const FTransform& HeldFrame);
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 
-	// Two-hand state. Raw interactor pointers are held only while attached — they live on the
+	// Two-hand state. Raw interactor pointers are held only while attached - they live on the
 	// pawn rig and every release path (hand, force, disable) clears them before the hold ends.
 	IFXR_Interactor* PrimaryInteractor = nullptr;
 	IFXR_Interactor* SecondaryInteractor = nullptr;
@@ -219,7 +235,7 @@ private:
 	FVector PrimaryGripLocal = FVector::ZeroVector;
 	FVector SecondaryGripLocal = FVector::ZeroVector;
 	bool bHasSecondaryGrip = false;
-	/** Object-space frame of the grip-to-grip axis, captured on join — the two-hand rotation reference. */
+	/** Object-space frame of the grip-to-grip axis, captured on join - the two-hand rotation reference. */
 	FQuat TwoHandLocalFrame = FQuat::Identity;
 
 	// Whether the primary hand mesh currently rides its grip point. Sticky: once attached it stays

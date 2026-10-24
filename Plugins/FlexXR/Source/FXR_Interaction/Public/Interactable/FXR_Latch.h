@@ -18,11 +18,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_LatchValueChanged, float, Latch
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_LatchStateChanged, int32, NewState);
 
 /**
- * UFXR_Latch — constrained motion (doors, levers, valves, drawers).
+ * UFXR_Latch - constrained motion (doors, levers, valves, drawers).
  *
- * The component's own transform IS the pivot; drag it to the hinge/rail. Kinematic-while-held
- * (ADR-001): the hand is projected onto the constraint via FFXR_ConstraintSolver — an angle
- * about, or a distance along, the chosen local axis — clamped to [MinLimit, MaxLimit], and the
+ * The component's own transform is the pivot; place it on the hinge/rail. Kinematic while held
+ * (ADR-001): the hand is projected onto the constraint via FFXR_ConstraintSolver - an angle
+ * about, or a distance along, the chosen local axis - clamped to [MinLimit, MaxLimit], and the
  * driven mesh is driven to match. Rest transforms are cached at BeginPlay so a latch parented
  * under the mesh it moves never orbits its own pivot. The driven mesh should not simulate physics.
  *
@@ -48,18 +48,18 @@ public:
 
 	//~ Accessors for the viewport gizmo / gameplay queries.
 	EFXR_LatchMotion GetMotionType() const { return MotionType; }
-	/** Lower travel limit — degrees (Rotational) or cm (Linear). May be negative. */
+	/** Lower travel limit - degrees (Rotational) or cm (Linear). May be negative. */
 	float GetMinLimit() const { return MinLimit; }
-	/** Upper travel limit — degrees (Rotational) or cm (Linear). May be negative. */
+	/** Upper travel limit - degrees (Rotational) or cm (Linear). May be negative. */
 	float GetMaxLimit() const { return MaxLimit; }
 	/** Unit motion axis in the component's own local space. */
 	FVector GetMotionAxisLocalUnit() const { return AxisUnitFor(MotionAxis); }
 
-	/** Constrained value in native units — degrees (Rotational) or cm (Linear). */
+	/** Constrained value in native units - degrees (Rotational) or cm (Linear). */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Latch")
 	float GetValue() const { return CurrentValue; }
 
-	/** Normalized position 0..1 across [Min, Max] — the value most gameplay / training binds to. */
+	/** Normalized position 0..1 across [Min, Max] - the value most gameplay / training binds to. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Latch")
 	float GetLatchValue() const;
 
@@ -82,15 +82,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	EFXR_LatchAxis MotionAxis = EFXR_LatchAxis::Z;
 
-	/** Lower limit — degrees (Rotational) or cm (Linear). Negative moves opposite the axis; 0 = the authored rest pose, so Min < 0 < Max swings both ways from rest. */
+	/** Lower limit - degrees (Rotational) or cm (Linear). Negative moves opposite the axis; 0 = the authored rest pose, so Min < 0 < Max swings both ways from rest. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float MinLimit = 0.f;
 
-	/** Upper limit — degrees (Rotational) or cm (Linear). May be negative; keep it above Min Limit. */
+	/** Upper limit - degrees (Rotational) or cm (Linear). May be negative; keep it above Min Limit. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float MaxLimit = 110.f;
 
-	/** Value the latch holds at BeginPlay — degrees (Rotational) or cm (Linear). Clamped to [Min, Max]; 0 = the authored rest pose. Snap-to-states rounds it to the nearest state. */
+	/** Value the latch holds at BeginPlay - degrees (Rotational) or cm (Linear). Clamped to [Min, Max]; 0 = the authored rest pose. Snap-to-states rounds it to the nearest state. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch")
 	float StartValue = 0.f;
 
@@ -110,7 +110,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch|States")
 	bool bSnapToStates = false;
 
-	/** Number of evenly-spaced states across [Min, Max] — 2 = two-position, 3 = three-way, and so on. */
+	/** Number of evenly-spaced states across [Min, Max] - 2 = two-position, 3 = three-way, and so on. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Latch|States", meta = (ClampMin = "2", EditCondition = "bSnapToStates"))
 	int32 NumStates = 2;
 

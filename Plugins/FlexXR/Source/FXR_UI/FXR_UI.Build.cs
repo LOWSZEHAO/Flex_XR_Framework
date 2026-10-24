@@ -14,8 +14,8 @@ public class FXR_UI : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			// Directly references UFXR_MotionSettings and FFXR_Motion. A transitive public dep through
-			// FXR_Interaction gives header access but still fails to link.
+			// Uses UFXR_MotionSettings / FFXR_Motion directly; the transitive dependency through
+			// FXR_Interaction gives headers but doesn't link.
 			"FXR_Core",
 			"FXR_Interaction",
 			"UMG"
@@ -23,6 +23,8 @@ public class FXR_UI : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// EKeys::LeftMouseButton, used to send a hand's press to Slate.
+			"InputCore",
 			"Slate",
 			"SlateCore"
 		});

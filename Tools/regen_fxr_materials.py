@@ -23,7 +23,7 @@ def clear_expressions(mat):
     """Empty a material's graph, and verify it actually emptied.
 
     delete_all_material_expressions silently leaves nodes behind. Every rebuild then stacked a fresh
-    copy on top of the survivors while the material's inputs stayed wired to the *old* chain — so the
+    copy on top of the survivors while the material's inputs stayed wired to the *old* chain - so the
     graph grew duplicate parameters, edits appeared to do nothing, and a material could report
     "rebuilt" with zero errors while rendering from a version nobody had authored. Deleting one by
     one afterwards is what actually clears it.
@@ -55,13 +55,13 @@ def new_material(name, blend=None, shading=None, domain=None, two_sided=False):
 
     # Deleted and recreated, so the graph is provably empty. Rebuilding in place looked like the
     # careful option and was the opposite: clearing leaves nodes behind, every rebuild stacked a
-    # fresh copy on the survivors, and the material's inputs stayed wired to the *old* chain — so
+    # fresh copy on the survivors, and the material's inputs stayed wired to the *old* chain - so
     # edits appeared to do nothing and a material rendered from a version nobody had authored.
     #
     # Safe only because every reference to these is now soft. A hard reference from a CDO roots the
     # asset, and deleting a rooted asset takes the editor down: that is exactly what happened when
     # UFXR_Socket held M_FXR_Ghost through ConstructorHelpers. If that ever returns, this crashes
-    # again — hence the fallback below rather than an assumption.
+    # again - hence the fallback below rather than an assumption.
     if unreal.EditorAssetLibrary.does_asset_exist(full):
         try:
             unreal.EditorAssetLibrary.delete_asset(full)
@@ -134,7 +134,7 @@ def finish(mat, full):
 #
 # The stencil carries BOTH the highlight state and how far it has faded: State + Level * 4, with
 # state 1 Hover / 2 Guidance / 3 Selected and level 0..63. One full-screen pass can read nothing
-# else per object, and it needs both — which colour, and how strong.
+# else per object, and it needs both - which colour, and how strong.
 # ---------------------------------------------------------------------------------------------
 def build_outline():
     mat, full = new_material('M_FXR_Outline', domain=unreal.MaterialDomain.MD_POST_PROCESS)
@@ -265,7 +265,7 @@ def build_outline():
 
 
 # ---------------------------------------------------------------------------------------------
-# M_FXR_HighlightOverlay — Inner Blink and Sweep, one material chosen by a scalar (a dynamic
+# M_FXR_HighlightOverlay - Inner Blink and Sweep, one material chosen by a scalar (a dynamic
 # instance can set scalars at runtime but cannot flip static switches).
 # ---------------------------------------------------------------------------------------------
 def build_overlay():
@@ -369,7 +369,7 @@ def build_overlay():
 
 
 # ---------------------------------------------------------------------------------------------
-# M_FXR_Ghost — FXR_Socket's placement preview.
+# M_FXR_Ghost - FXR_Socket's placement preview.
 # ---------------------------------------------------------------------------------------------
 def build_ghost():
     mat, full = new_material('M_FXR_Ghost',
@@ -409,12 +409,12 @@ def build_ghost():
 
 
 # ---------------------------------------------------------------------------------------------
-# M_FXR_Ray — the far-interaction pointer beam, drawn on the arc-segment tube.
+# M_FXR_Ray - the far-interaction pointer beam, drawn on the arc-segment tube.
 # ---------------------------------------------------------------------------------------------
 def build_ray():
     # Opaque, not translucent and not additive. Both of those compiled cleanly, reported no errors and
     # rendered nothing at all on this mesh, while a plain unlit opaque material on the very same
-    # component drew immediately — and pushing emissive to 60 did not bring the additive version back,
+    # component drew immediately - and pushing emissive to 60 did not bring the additive version back,
     # so it was never exposure. A pointer reads as a solid emissive tube in every shipping VR title
     # anyway, so this drops the fragile path rather than keeping a fade the renderer will not draw.
     # The fade lives in the geometry instead: the driver thins the beam to nothing.
@@ -426,7 +426,7 @@ def build_ray():
     colour = vector(mat, 'RayColor', 0.45, 0.8, 1.0, -900, -300)
     rgb = mask(mat, colour, '', -650, -300, True, 'ray colour mask')
     # 1.0, not 2. Unlit emissive above 1 clips after tonemapping, and the beam came out white
-    # instead of cyan — the same trap the highlight overlay hit. Intensity here is for pushing a
+    # instead of cyan - the same trap the highlight overlay hit. Intensity here is for pushing a
     # beam through a bright scene deliberately, not a default.
     intensity = scalar(mat, 'RayIntensity', 1.0, -900, -140)
 
@@ -444,7 +444,7 @@ def build_ray():
 #
 # The Mesh Hull tier of the Outline style: the mesh drawn a second time through its overlay slot,
 # pushed out along its own normals, with front faces masked away so only the back of the shell
-# survives — which is exactly the silhouette. Costs a draw call per highlighted mesh rather than a
+# survives - which is exactly the silhouette. Costs a draw call per highlighted mesh rather than a
 # full-screen pass, which is the right trade on a tiler.
 #
 # TwoSidedSign is the whole trick: +1 on front faces, -1 on back faces, so masking on it keeps the
@@ -466,7 +466,7 @@ def build_outline_hull():
 
     # Along the vertex normal, in world units. The subsystem folds the fade into this value, so a
     # thickness of zero leaves the shell exactly on the surface where the mesh's own front faces
-    # hide it — that is the fade-out, since a masked material has no opacity to fade.
+    # hide it - that is the fade-out, since a masked material has no opacity to fade.
     normal = node(mat, unreal.MaterialExpressionVertexNormalWS, -900, 60)
     thickness = scalar(mat, 'HullThickness', 0.5, -900, 220)
     offset = node(mat, unreal.MaterialExpressionMultiply, -560, 100)
@@ -495,7 +495,7 @@ def build_outline_hull():
 # M_FXR_Arrow
 #
 # The guidance arrow. Opaque unlit for the same reason the ray is: translucent and additive both
-# compiled clean and rendered nothing on a plugin mesh, and the fade is geometric anyway — the
+# compiled clean and rendered nothing on a plugin mesh, and the fade is geometric anyway - the
 # arrow grows in rather than dissolving.
 #
 # Colour is a parameter rather than a constant because the component drives it from the Guidance

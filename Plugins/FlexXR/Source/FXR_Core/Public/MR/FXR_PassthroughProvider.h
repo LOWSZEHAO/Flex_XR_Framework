@@ -5,12 +5,10 @@
 #include "CoreMinimal.h"
 
 /**
- * IFXR_PassthroughProvider — the MR-readiness seam for camera passthrough (architecture §10).
+ * IFXR_PassthroughProvider - placeholder interface for camera passthrough (planned MR phase).
  *
- * The abstraction behind which an OpenXR passthrough implementation will sit in the MR
- * phase, so EFXR_Mode::MR has a home in FXR_Core today. Native (non-UObject) interface;
- * there is no runtime implementation yet — this exists so higher layers can compile
- * against a stable seam.
+ * An OpenXR passthrough implementation will sit behind this, so EFXR_Mode::MR already has a home
+ * in FXR_Core. No implementation yet.
  */
 class FXR_CORE_API IFXR_PassthroughProvider
 {

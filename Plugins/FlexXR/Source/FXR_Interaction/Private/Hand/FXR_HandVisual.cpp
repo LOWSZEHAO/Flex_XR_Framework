@@ -45,7 +45,7 @@ void UFXR_HandVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 			}
 		}
 
-		// Follow location + rotation only, preserving this mesh's authored scale — a negative
+		// Follow location + rotation only, preserving this mesh's authored scale - a negative
 		// scale (mirroring the right-hand mesh into a left hand) must survive the follow.
 		const FTransform Target = Offset * GripSource;
 		SetWorldLocationAndRotation(Target.GetLocation(), Target.GetRotation());

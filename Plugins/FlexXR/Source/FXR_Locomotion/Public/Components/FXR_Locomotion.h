@@ -27,16 +27,16 @@ class IFXR_Interactor;
 struct FInputActionValue;
 
 /**
- * UFXR_Locomotion — the single locomotion component (ADR-005): teleport, smooth move, turn, and
+ * UFXR_Locomotion - the single locomotion component (ADR-005): teleport, smooth move, turn, and
  * comfort, arbitrated internally rather than split into four components.
  *
  * The control layout is described per hand rather than per mode, because a thumbstick has only two
- * axes to give: forward is that hand's movement (teleport or smooth move — never both), sideways is
+ * axes to give: forward is that hand's movement (teleport or smooth move - never both), sideways is
  * its turn, or strafe when it has no turn mode. Saying it this way makes an unplayable layout
  * impossible to express instead of something to detect and warn about.
  *
  * Room-scale correct (ADR-006): teleport moves the play-space origin so the HMD lands on the
- * target, obtained via the owner's IFXR_LocomotionOwner — never a concrete pawn cast, so it works
+ * target, obtained via the owner's IFXR_LocomotionOwner - never a concrete pawn cast, so it works
  * with any project's pawn. Yields to interaction: a hand currently holding an interactable drives
  * no locomotion.
  *
@@ -75,12 +75,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
 	bool IsAimingTeleport() const { return Phase == ETeleportPhase::Aiming; }
 
-	/** Current comfort-vignette intensity 0..1 — bind to a post-process/overlay if not using Vignette Material. */
+	/** Current comfort-vignette intensity 0..1 - bind to a post-process/overlay if not using Vignette Material. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Locomotion")
 	float GetVignetteIntensity() const { return VignetteIntensity; }
 
 protected:
-	//~ Hands — the whole control layout. Each hand's stick is described independently: forward drives
+	//~ Hands - the whole control layout. Each hand's stick is described independently: forward drives
 	//~ its movement, sideways its turn. Set one hand to None for a rig where only the other may move
 	//~ (common in guided training); set both the same to give the player either hand.
 
@@ -100,12 +100,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Hands", meta = (DisplayName = "Right Turn Mode"))
 	EFXR_TurnMode RightHandTurn = EFXR_TurnMode::Snap;
 
-	//~ Smooth Move — only the tuning; which hand smooth-moves is set per hand above.
-	/** Frame the move stick is relative to (Hip approximates to Head — the rig has no hip tracker). */
+	//~ Smooth Move - only the tuning; which hand smooth-moves is set per hand above.
+	/** Frame the move stick is relative to (Hip approximates to Head - the rig has no hip tracker). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Smooth Move")
 	EFXR_MoveDirectionSource MoveDirectionSource = EFXR_MoveDirectionSource::HeadRelative;
 
-	/** Smooth-move speed (cm/s) — 250 ≈ 2.5 m/s. */
+	/** Smooth-move speed (cm/s) - 250 ~ 2.5 m/s. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Smooth Move", meta = (ClampMin = "1.0"))
 	float SmoothMoveSpeed = 250.f;
 
@@ -114,7 +114,7 @@ protected:
 	EFXR_TeleportAim AimStyle = EFXR_TeleportAim::ProjectileArc;
 
 	/**
-	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration — a
+	 * How the view crosses to the destination. Fade blacks out and back over Fade Duration - a
 	 * short Fade Duration (~0.06 s) is the "blink" comfort option, which is why there is no
 	 * separate Blink mode. Dash slides the play space there with the world visible, and is the only
 	 * one that creates optical flow, so it is the only one that vignettes. Instant cuts.
@@ -126,7 +126,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "50.0"))
 	float MaxDistance = 1000.f;
 
-	/** Projectile-arc launch speed (cm/s) — higher throws the arc farther and flatter. */
+	/** Projectile-arc launch speed (cm/s) - higher throws the arc farther and flatter. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "50.0", EditCondition = "AimStyle == EFXR_TeleportAim::ProjectileArc"))
 	float ArcLaunchSpeed = 900.f;
 
@@ -144,11 +144,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport")
 	TEnumAsByte<ECollisionChannel> TeleportTraceChannel = ECC_WorldStatic;
 
-	/** View transition length (s) — the fade for Fade, the slide for Dash. Blink and Instant ignore it. */
+	/** View transition length (s) - the fade for Fade, the slide for Dash. Blink and Instant ignore it. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Teleport", meta = (ClampMin = "0.0", EditCondition = "Transition == EFXR_TeleportTransition::Fade || Transition == EFXR_TeleportTransition::Dash"))
 	float FadeDuration = 0.15f;
 
-	//~ Turning — the feel of a turn; which hand turns, and how, is set per hand above.
+	//~ Turning - the feel of a turn; which hand turns, and how, is set per hand above.
 	/** Degrees per snap. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", ClampMax = "180.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Snap || RightHandTurn == EFXR_TurnMode::Snap"))
 	float SnapAngle = 30.f;
@@ -157,10 +157,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Smooth || RightHandTurn == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
 
-	//~ Climbing — automatic wherever a FXR_ClimbHold exists; there is no switch to turn it on.
+	//~ Climbing - automatic wherever a FXR_ClimbHold exists; there is no switch to turn it on.
 	/**
-	 * Downward acceleration (cm/s²) applied after letting go above the floor. Climbing is the only
-	 * thing in the rig that puts the player in the air, so this is the only place gravity applies —
+	 * Downward acceleration (cm/s^2) applied after letting go above the floor. Climbing is the only
+	 * thing in the rig that puts the player in the air, so this is the only place gravity applies -
 	 * walking off a ledge does not fall, by design.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Climbing", meta = (ClampMin = "0.0"))
@@ -173,7 +173,7 @@ protected:
 	//~ Comfort
 	/**
 	 * Peripheral vignette during artificial motion. Dynamic scales with speed; Always is a constant
-	 * narrowed FOV. This chooses *how much* vignette to ask for — a Vignette Material (or your own
+	 * narrowed FOV. This chooses how much vignette to ask for - a Vignette Material (or your own
 	 * overlay bound to Get Vignette Intensity) is what actually draws it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Comfort")
@@ -190,12 +190,12 @@ protected:
 	bool bVignetteOnSmoothMove = true;
 
 	//~ Hand Tracking (gesture teleport when the hand is the active source; controllers ignore these)
-	//~ Pinch and hold to aim, release to teleport — the Meta Interaction SDK convention the Quest
+	//~ Pinch and hold to aim, release to teleport - the Meta Interaction SDK convention the Quest
 	//~ system UI already teaches, and the same shape as the stick path (hold to aim, let go to go).
 	//~
-	//~ It is the *middle-finger* pinch (IFXR_Interactor::GetNavigateValue), because index pinch is
+	//~ It is the middle-finger pinch (IFXR_Interactor::GetNavigateValue), because index pinch is
 	//~ grab. Two fingers, two verbs: a failed reach can never teleport you, and standing beside a
-	//~ prop never costs you the ability to travel. There is likewise no palm-orientation gate — the
+	//~ prop never costs you the ability to travel. There is likewise no palm-orientation gate - the
 	//~ palm normal is perpendicular to the aim direction, so any such gate fights aiming near.
 
 	/** Middle-finger pinch strength that raises the arc. Releasing below it teleports. */
@@ -207,16 +207,16 @@ protected:
 	TObjectPtr<UInputMappingContext> LocomotionContext;
 
 	/**
-	 * One Axis2D action per hand — bind the left thumbstick to one and the right to the other, and
-	 * never touch the mapping context again. What a stick *does* is read off Left/Right Hand
-	 * Movement and Turn Hand above, so changing the hand layout is a detail-panel edit.
+	 * One Axis2D action per hand: bind the left thumbstick to one and the right to the other. What
+	 * each stick does comes from Left/Right Hand Movement and Turn Hand above, so changing the layout
+	 * is a details panel edit, not an input mapping change.
 	 *
-	 * An action per hand rather than per mode is what makes that honest: Enhanced Input cannot say
-	 * which hand actuated a shared action, so a per-mode action bound to both sticks would let the
-	 * left stick start the right hand's teleport.
+	 * Per hand rather than per mode because Enhanced Input can't tell which stick triggered a
+	 * shared action, so a per-mode action on both sticks would let the left stick start the right
+	 * hand's teleport.
 	 *
-	 *   Y (forward)  → that hand's movement mode (teleport aim, or smooth-move forward)
-	 *   X (sideways) → turning, if that hand is the turn hand; strafe while smooth-moving
+	 *   Y (forward)  -> that hand's movement mode (teleport aim, or smooth-move forward)
+	 *   X (sideways) -> turning, if that hand is the turn hand; strafe while smooth-moving
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input")
 	TObjectPtr<UInputAction> LeftStickAction;
@@ -226,7 +226,7 @@ protected:
 
 	/**
 	 * Forward push at or above which the teleport arc appears. Thresholding here rather than in the
-	 * mapping keeps it directional — Enhanced Input actuates on magnitude, which would let pulling
+	 * mapping keeps it directional - Enhanced Input actuates on magnitude, which would let pulling
 	 * the stick back teleport as well.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Input", meta = (ClampMin = "0.05", ClampMax = "1.0"))
@@ -238,7 +238,7 @@ protected:
 	//~ Visuals (all optional; the arc and reticle fall back to debug lines).
 	//~
 	//~ Held softly rather than as hard defaults. A hard reference from this CDO loads the asset at
-	//~ startup for every project whether or not it teleports, and — the part that actually bites —
+	//~ startup for every project whether or not it teleports, and - the part that actually bites -
 	//~ roots it, so tooling cannot rebuild it: MaterialEditingLibrary asserts on !IsRooted() and takes
 	//~ the editor down. Resolved at the point of use instead.
 	/**
@@ -253,7 +253,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TSoftObjectPtr<UMaterialInterface> ValidMaterial;
 
-	/** Material on the reticle when the target is rejected — off-nav, too steep, or blocked. */
+	/** Material on the reticle when the target is rejected - off-nav, too steep, or blocked. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TSoftObjectPtr<UMaterialInterface> InvalidMaterial;
 
@@ -264,7 +264,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals")
 	TSoftObjectPtr<UStaticMesh> ArcMesh;
 
-	/** Arc thickness (cm radius). Thin reads as a beam; thick reads as a tube. */
+	/** Arc thickness (cm radius). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.05"))
 	float ArcWidth = 1.5f;
 
@@ -278,19 +278,19 @@ protected:
 
 	/**
 	 * Nudge along the surface normal (cm). The reticle already sits on the traced surface rather
-	 * than on the NavMesh — which bakes above the floor — so this is only for art tweaks, and may
+	 * than on the NavMesh - which bakes above the floor - so this is only for art tweaks, and may
 	 * go negative to sink a thick marker in.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "-50.0", ClampMax = "50.0"))
 	float ReticleGroundOffset = 1.f;
 
-	/** Uniform scale on the reticle mesh. The ring is authored at 20 cm radius — roughly a footprint. */
+	/** Uniform scale on the reticle mesh. The ring is authored at 20 cm radius - roughly a footprint. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Visuals", meta = (ClampMin = "0.01"))
 	float ReticleScale = 1.f;
 
 	/**
 	 * Post-process material driven each frame with the vignette intensity, through the scalar named
-	 * below. **The vignette draws nothing until this is set** — Vignette Mode only computes the
+	 * below. The vignette draws nothing until this is set - Vignette Mode only computes the
 	 * intensity. Assign a post-process material, or leave this empty and bind Get Vignette Intensity
 	 * to your own overlay.
 	 */
@@ -364,9 +364,9 @@ private:
 	void ProcessSmoothMove(float DeltaTime);
 
 	/**
-	 * Drag the play space so a hand holding a FXR_ClimbHold stays put in the world — the hand is
-	 * the fixed point and the rig moves, which is what pulling yourself up actually is.
-	 * Returns true while a hold is being climbed, so the stick modes know to stand down.
+	 * Move the play space so a hand holding an FXR_ClimbHold stays fixed in the world: the hand is
+	 * the anchor and the rig moves, which is how pulling yourself up works. Returns true while
+	 * climbing, so the stick modes stand down.
 	 */
 	bool ProcessClimb(float DeltaTime);
 
@@ -376,13 +376,13 @@ private:
 	/** The hold this hand is on, or null. */
 	UFXR_ClimbHold* GetClimbHoldFor(EFXR_HandSide Side) const;
 
-	/** Where the given hand grips in world space — the anchor a climb is measured against. */
+	/** Where the given hand grips in world space - the anchor a climb is measured against. */
 	FVector GetClimbHandLocation(EFXR_HandSide Side) const;
 	void ProcessHandTeleportGesture();
 	bool IsHandTracking(EFXR_HandSide Side) const;
 	void UpdateVignette(float DeltaTime);
 	void ApplyVignetteToMaterial();
-	/** Yaw the tracking origin about the HMD (head stays put, world spins — ADR-006). Shared by turn + landing. */
+	/** Yaw the tracking origin about the HMD (head stays put, world spins - ADR-006). Shared by turn + landing. */
 	void ApplyYaw(float DeltaYawDegrees);
 	void DrawAim();
 
@@ -414,7 +414,7 @@ private:
 	ETeleportPhase Phase = ETeleportPhase::Idle;
 	bool bLocomotionEnabled = true;
 	bool bTurnEnabled = true;
-	// Runtime gates behind SetTeleportEnabled — separate from the authored hand assignment, so a
+	// Runtime gates behind SetTeleportEnabled - separate from the authored hand assignment, so a
 	// gameplay or SOP lock can suspend a mode without forgetting which hand the designer gave it.
 	bool bTeleportEnabled = true;
 	bool bInputBound = false;
@@ -428,7 +428,7 @@ private:
 	FVector TargetLocation = FVector::ZeroVector;
 	bool bTargetValid = false;
 	float TargetFacingYaw = 0.f;
-	/** Whether TargetFacingYaw was actually asked for — a centred stick under Thumbstick Choose is not. */
+	/** Whether TargetFacingYaw was actually asked for - a centred stick under Thumbstick Choose is not. */
 	bool bApplyLandingFacing = false;
 	float FadeElapsed = 0.f;
 
@@ -445,14 +445,14 @@ private:
 	FVector DashEndOrigin = FVector::ZeroVector;
 	float DashElapsed = 0.f;
 
-	/** Latest thumbstick per hand, indexed by EFXR_HandSide — the one place input lands. */
+	/** Latest thumbstick per hand, indexed by EFXR_HandSide - the one place input lands. */
 	FVector2D StickAxis[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
-	/** Snap re-arm per hand, indexed by EFXR_HandSide — each stick flicks and re-centres on its own. */
+	/** Snap re-arm per hand, indexed by EFXR_HandSide - each stick flicks and re-centres on its own. */
 	bool bTurnArmed[2] = { true, true };
-	/** Which hand owns the teleport arc in flight — resolved when aiming starts, held until it ends. */
+	/** Which hand owns the teleport arc in flight - resolved when aiming starts, held until it ends. */
 	EFXR_HandSide AimingHand = EFXR_HandSide::Right;
 
-	// Comfort: per-frame smooth-motion factors (0 for teleport/snap — those never vignette) feed the
+	// Comfort: per-frame smooth-motion factors (0 for teleport/snap - those never vignette) feed the
 	// eased VignetteIntensity, which drives the assigned material and Get Vignette Intensity.
 	float VignetteIntensity = 0.f;
 	float SmoothMoveFactor = 0.f;
@@ -463,7 +463,7 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> VignetteMID;
 
 	// Built at BeginPlay only when a Reticle Mesh is assigned, so a project that never sets one pays
-	// nothing. Created with NewObject rather than as a default subobject — a component's default
+	// nothing. Created with NewObject rather than as a default subobject - a component's default
 	// subobject does not survive Blueprint SCS instancing.
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> ReticleComponent;
@@ -473,7 +473,7 @@ private:
 	TArray<TObjectPtr<UStaticMeshComponent>> ArcSegments;
 
 	/**
-	 * Where the reticle is drawn — the *traced surface*, which is not the same point as
+	 * Where the reticle is drawn - the traced surface, which is not the same point as
 	 * TargetLocation. NavMesh projection lands on the nav surface, and that is baked above the
 	 * floor, so a reticle placed on it hovers.
 	 */

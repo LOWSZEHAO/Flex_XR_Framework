@@ -5,7 +5,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// FFXR_ConstraintSolver is pure, stateless C++ (ADR-001) — these tests pin down its geometry
+// FFXR_ConstraintSolver is pure, stateless C++ (ADR-001) - these tests pin down its geometry
 // and its determinism, the property SOP replay depends on.
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_SolverProjectToAxisTest,
@@ -49,7 +49,7 @@ bool FFXR_SolverProjectToRotationPlaneTest::RunTest(const FString& Parameters)
 		TestNearlyEqual(TEXT("Projected Z is stripped"), static_cast<float>(InPlane.Z), 0.f, KINDA_SMALL_NUMBER);
 	}
 
-	// A hand exactly on the axis has no lever arm — the singularity the MinLeverArm guard rejects.
+	// A hand exactly on the axis has no lever arm - the singularity the MinLeverArm guard rejects.
 	{
 		float LeverArm = -1.f;
 		FFXR_ConstraintSolver::ProjectToRotationPlane(FVector::ZeroVector, FVector::UpVector, FVector(0.f, 0.f, 40.f), LeverArm);
@@ -96,7 +96,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFXR_SolverDeterminismTest,
 
 bool FFXR_SolverDeterminismTest::RunTest(const FString& Parameters)
 {
-	// Identical inputs must produce bitwise-identical outputs across repeated calls — the
+	// Identical inputs must produce bitwise-identical outputs across repeated calls - the
 	// deterministic-solver guarantee SOP replay is built on (ADR-001).
 	const FVector Pivot(12.5f, -3.75f, 90.f);
 	const FVector Axis = FVector(0.3f, -0.4f, 0.86f).GetSafeNormal();
@@ -117,7 +117,7 @@ bool FFXR_SolverDeterminismTest::RunTest(const FString& Parameters)
 			FFXR_ConstraintSolver::SignedAngleAroundAxis(From, To, Axis) != FirstAngle ||
 			FFXR_ConstraintSolver::ProjectToAxis(Pivot, Axis, Hand) != FirstAxisProj)
 		{
-			AddError(FString::Printf(TEXT("Solver output diverged on repeat call %d — determinism broken."), Index));
+			AddError(FString::Printf(TEXT("Solver output diverged on repeat call %d - determinism broken."), Index));
 			return false;
 		}
 	}

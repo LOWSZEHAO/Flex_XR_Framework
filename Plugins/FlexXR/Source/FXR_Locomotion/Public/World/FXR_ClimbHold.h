@@ -9,20 +9,18 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_ClimbHoldEvent);
 
 /**
- * UFXR_ClimbHold — a surface the player can pull themselves along: a ladder rung, a ledge, a pipe.
+ * UFXR_ClimbHold - something the player can climb by grabbing it: a ladder rung, a ledge, a pipe.
  *
- * Deliberately almost empty. It is an interactable like any other (ADR-003: subclass the base, no
- * interface), and grabbing it is ordinary FXR_Grab detection — this class only marks the hold as
- * *climbable* so UFXR_Locomotion recognises it. The play space is moved by the locomotion
- * component, never from here, because ADR-005 puts every metre the player travels through one
- * arbiter; a hold that moved the rig itself would be a second locomotion system.
+ * Almost empty on purpose. It's a normal interactable (ADR-003) and grabbing it uses the normal
+ * FXR_Grab detection; this class just marks it as climbable so UFXR_Locomotion knows. The rig is
+ * moved by the locomotion component, not from here, so all player movement goes through one
+ * place (ADR-005).
  *
- * Both hands may hold it at once, and hand-over-hand across separate holds works because each
- * grab re-anchors against wherever that hand now is.
+ * Both hands can hold it at once, and hand-over-hand across holds works because each grab
+ * re-anchors to where that hand is.
  *
- * Its Debug Draw reach sphere shows in the level viewport as well as in play, matching the teleport
- * anchor and blocker: a hold is placed by reaching for it, so its reach has to be visible while you
- * position it. The Phase 2 interactables use selection-gated viewport visualizers instead.
+ * The reach sphere debug draw shows in the editor viewport too (like the teleport anchor and
+ * blocker), since you place a hold by judging where a hand can reach it.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_LOCOMOTION_API UFXR_ClimbHold : public UFXR_InteractableBase
@@ -49,7 +47,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|ClimbHold")
 	int32 GetHandCount() const { return HandCount; }
 
-	/** A hand took hold of this — the first one, or a second joining it. */
+	/** A hand took hold of this - the first one, or a second joining it. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|ClimbHold")
 	FFXR_ClimbHoldEvent OnGrabbed;
 
