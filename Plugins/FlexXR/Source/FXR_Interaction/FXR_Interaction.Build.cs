@@ -15,7 +15,7 @@ public class FXR_Interaction : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"FXR_Core",
-			// UFXR_InteractionSettings derives from UDeveloperSettings, whose UCLASS lives here —
+			// UFXR_InteractionSettings derives from UDeveloperSettings, whose UCLASS lives here -
 			// header access alone links against nothing.
 			"DeveloperSettings"
 		});

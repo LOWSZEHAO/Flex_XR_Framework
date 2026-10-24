@@ -11,7 +11,7 @@ class UFXR_InputConfig;
 struct FInputActionValue;
 
 /**
- * UFXR_ControllerInteractor — motion-controller input source.
+ * UFXR_ControllerInteractor - motion-controller input source.
  *
  * Reads Select/Use from EnhancedInput (grip -> Select, trigger -> Use, mapped in a
  * UFXR_InputConfig). The owning rig parents this under a UMotionControllerComponent, so

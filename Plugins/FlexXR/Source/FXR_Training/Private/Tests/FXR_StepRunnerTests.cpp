@@ -7,8 +7,8 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// FFXR_StepRunner is free of UObject and world for exactly this: the order a procedure runs in and
-// what every touch means are rules, and rules can be pinned down without a level running.
+// The runner has no UObject/world dependencies, so its ordering and judging rules can be tested
+// without a level.
 
 namespace FXR_StepRunnerTests
 {

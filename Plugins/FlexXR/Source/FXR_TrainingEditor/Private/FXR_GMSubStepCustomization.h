@@ -9,12 +9,8 @@
 class IPropertyHandle;
 
 /**
- * Details for one sub-step's setup in the GM: its Sub Step Id is picked from a list of the step's
- * own sub-steps.
- *
- * A customization rather than a GetOptions for the same reason as the event picker: the list
- * depends on the row this sits in - the step it is under - and GetOptions can only see the asset.
- * A list of every sub-step in the procedure would let one be set up under the wrong step.
+ * Details panel for a GM sub-step: the Sub Step Id is a dropdown of the parent step's own
+ * sub-steps. Same reason as the event picker: GetOptions can't see which step row it's under.
  */
 class FFXR_GMSubStepCustomization : public IPropertyTypeCustomization
 {
@@ -28,10 +24,10 @@ public:
 		IPropertyTypeCustomizationUtils& Utils) override;
 
 private:
-	/** The Step Id of the step this row sits under, or None. */
+	/** Step Id of the step this row belongs to, or None. */
 	FName GetOwningStepId() const;
 
-	/** Rebuild the list from the owning step's sub-steps as they are now. */
+	/** Rebuild the list from the parent step's current sub-steps. */
 	void RefreshOptions();
 
 	FText GetSubStepText() const;

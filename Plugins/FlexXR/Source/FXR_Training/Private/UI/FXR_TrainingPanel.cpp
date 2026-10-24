@@ -24,13 +24,13 @@
 
 namespace
 {
-	/** Montserrat has no check mark (verified against its cmap), so a done row is a green disc. */
+	/** Montserrat has no check mark glyph, so a finished row is a green disc instead. */
 	const FString Chevron = TEXT("›");
 
-	/** The clock in the foot. Twice a second, so a rolling second never looks stuck. */
+	/** Clock update rate. Twice a second so the seconds never look stuck. */
 	constexpr float ClockPeriod = 0.5f;
 
-	/** "2", or "2 of 3" when there is a limit to count against. */
+	/** "2", or "2 of 3" when there's a limit. */
 	FText MistakeCountText(int32 Count, int32 Limit)
 	{
 		return Limit > 0
@@ -44,7 +44,7 @@ namespace
 		return UEnum::GetDisplayValueAsText(Mode);
 	}
 
-	/** Collapsed, not Hidden: a hidden widget keeps its space and leaves a hole where it was. */
+	/** Collapsed, not Hidden: Hidden still takes up space. */
 	void SetShown(UWidget* Widget, bool bShown, ESlateVisibility WhenShown = ESlateVisibility::SelfHitTestInvisible)
 	{
 		if (Widget)
@@ -64,8 +64,8 @@ void UFXR_TrainingPanel::NativePreConstruct()
 {
 	Super::NativePreConstruct();
 
-	// The designer only. At runtime the session drives every widget, and the editor never calls
-	// NativeConstruct on a design-time preview, so nothing here can leak into a run.
+	// Designer preview only. The editor doesn't call NativeConstruct for the preview, so none of this
+	// runs in game.
 	if (IsDesignTime())
 	{
 		FillDesignPreview();
@@ -74,19 +74,17 @@ void UFXR_TrainingPanel::NativePreConstruct()
 
 void UFXR_TrainingPanel::FillDesignPreview()
 {
-	// Whichever screen the switcher is on. Changing its Active Widget Index in the designer rebuilds
-	// the preview, which runs this again.
+	// Use whatever screen the switcher is on in the designer. Changing it re-runs the preview.
 	const int32 Index = ScreenSwitcher ? ScreenSwitcher->GetActiveWidgetIndex() : 0;
 	const EFXR_PanelScreen Previewed = static_cast<EFXR_PanelScreen>(FMath::Clamp(Index, 0, 3));
 
-	// The same chrome rule as ApplyScreen, applied without moving the switcher and without firing
-	// OnScreenChanged into a Blueprint graph from inside the editor.
+	// Same chrome rule as ApplyScreen, but without moving the switcher or firing OnScreenChanged
+	// in the editor.
 	SetShown(TopBar, Previewed == EFXR_PanelScreen::Start || Previewed == EFXR_PanelScreen::Procedure);
 	SetShown(StepMeter, Previewed == EFXR_PanelScreen::Procedure);
 
-	// The design page's own sample content, so the preview can be held up against it board for
-	// board. Culture-invariant: a trainee never sees any of this, and none of it should be gathered
-	// for translation.
+	// Sample content matching the design mockup. Culture-invariant so it never ends up in
+	// localization.
 	const FText Course = INVTEXT("Fire safety");
 	const FText Procedure = INVTEXT("Extinguisher drill");
 	const bool bRunning = Previewed == EFXR_PanelScreen::Procedure;
@@ -99,19 +97,19 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		StatusPip->SetBrush(FXR_PanelStyle::Dot(bRunning ? FXR_PanelStyle::Green() : FXR_PanelStyle::Text4(), 14.f));
 	}
 
-	// ── Start ───────────────────────────────────────────────────────────────────────────────────
+	// -- Start -----------------------------------------------------------------------------------
 	if (StartTitleLabel) { StartTitleLabel->SetText(Procedure); }
 	if (StartStepsValue) { StartStepsValue->SetText(INVTEXT("5")); }
 	if (StartModeValue) { StartModeValue->SetText(INVTEXT("Exam")); }
 
-	// ── Explanation ─────────────────────────────────────────────────────────────────────────────
+	// -- Explanation -----------------------------------------------------------------------------
 	if (ExplanationLabel)
 	{
 		ExplanationLabel->SetText(INVTEXT("A fire has started in the waste bin beside the workbench.\n\n"
 			"Collect the extinguisher from the wall bracket before the smoke reaches the ceiling."));
 	}
 
-	// The foot is left on whichever state the designer chose, and the pip follows it.
+	// Keep whatever foot state the designer picked, and match the pip to it.
 	const bool bPlaying = ExplainFootSwitcher
 		&& ExplainFootSwitcher->GetActiveWidgetIndex() == static_cast<int32>(EFXR_ExplainState::Playing);
 	if (ExplainPip)
@@ -121,20 +119,20 @@ void UFXR_TrainingPanel::FillDesignPreview()
 	if (ExplainAudioBar) { ExplainAudioBar->SetPercent(0.42f); }
 	if (ExplainTimeLabel) { ExplainTimeLabel->SetText(INVTEXT("0:12")); }
 
-	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
+	// -- Procedure -------------------------------------------------------------------------------
 	if (StepTitleLabel) { StepTitleLabel->SetText(INVTEXT("Grip the safety pin and pull it free of the handle.")); }
 
-	// Left on whichever body the designer chose, so flipping ProcedureBodySwitcher previews Exam.
+	// Leave the body switcher where the designer put it, so flipping it previews the Exam layout.
 	if (ExamProgressLabel) { ExamProgressLabel->SetText(INVTEXT("2 / 5")); }
 	if (ExamMistakesValue) { ExamMistakesValue->SetText(INVTEXT("1 of 3")); }
 	if (ModeLabel) { ModeLabel->SetText(INVTEXT("Training")); }
 	if (ElapsedLabel) { ElapsedLabel->SetText(INVTEXT("1:46")); }
 
-	// Filled whichever foot is showing, so flipping FootSwitcher to the mistake shows a real one.
+	// Fill the mistake text too, so flipping FootSwitcher shows a real message.
 	if (MistakeLabel) { MistakeLabel->SetText(INVTEXT("Pin first \u2014 the handle will not move.")); }
 
 	{
-		// Five steps with the third open: the meter is the procedure, the page is that one step.
+		// Five steps with the third one open.
 		TArray<FFXR_StepRecord> Sample;
 		Sample.SetNum(5);
 		for (int32 Step = 0; Step < Sample.Num(); ++Step)
@@ -165,7 +163,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		}
 #endif
 
-		// The same calls a run makes, so what the designer shows is what the code draws.
+		// Same calls as at runtime.
 		BuildMeter(Sample.Num());
 		RefreshMeter(Sample);
 
@@ -173,7 +171,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 		RefreshRows(Open.SubSteps);
 	}
 
-	// ── Complete ────────────────────────────────────────────────────────────────────────────────
+	// -- Complete --------------------------------------------------------------------------------
 	{
 		FFXR_SessionReport Sample;
 		Sample.ProcedureName = Procedure;
@@ -209,7 +207,7 @@ void UFXR_TrainingPanel::FillDesignPreview()
 			Sample.Mistakes.SetNum(bTraining ? 0 : 2);
 		}
 
-		// RefreshComplete reads nothing but the report, so it can draw the sample as it is.
+		// RefreshComplete only reads Report, so it can draw the sample directly.
 		Report = Sample;
 		RefreshComplete();
 	}
@@ -227,15 +225,14 @@ void UFXR_TrainingPanel::NativeConstruct()
 	}
 	else
 	{
-		// Already bound, so BindToSession will not run and the widgets have never been written.
+		// Already bound, so BindToSession won't run; refresh once so the widgets get filled.
 		Refresh();
 	}
 }
 
 void UFXR_TrainingPanel::NativeDestruct()
 {
-	// Unbinds and kills both timers. A widget torn down mid-complaint must not come back on a timer
-	// that outlived it, and a clock with no panel to write to is a tick for nothing.
+	// Unbind and stop both timers so nothing fires on a destroyed widget.
 	StopClock();
 	BindToSession(nullptr);
 
@@ -244,7 +241,7 @@ void UFXR_TrainingPanel::NativeDestruct()
 
 void UFXR_TrainingPanel::BindButtons()
 {
-	// Cleared first so a reconstruct cannot stack a second binding on the same button.
+	// Remove first so reconstructing doesn't add a second binding.
 	if (BeginButton)
 	{
 		BeginButton->OnClicked.RemoveAll(this);
@@ -295,8 +292,7 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 	Report = FFXR_SessionReport();
 	bFinished = false;
 
-	// The rows belong to the session that was being followed. Dropped rather than reused: a new
-	// graph has different steps, and a stale row is worse than a missing one.
+	// Drop the old rows; a different procedure will have different steps.
 	Rows.Reset();
 	MeterSegments.Reset();
 	PageStep = INDEX_NONE;
@@ -312,8 +308,7 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 	InSession->OnMistake.AddDynamic(this, &UFXR_TrainingPanel::HandleMistake);
 	InSession->OnSessionFinished.AddDynamic(this, &UFXR_TrainingPanel::HandleFinished);
 
-	// A panel built after the run started would otherwise sit blank until the next step opened,
-	// which on a long step is most of the time a trainee spends looking at it.
+	// If the run is already going, fill the panel now instead of waiting for the next step.
 	if (InSession->IsRunning())
 	{
 		Instruction = InSession->GetActiveInstruction();
@@ -331,9 +326,9 @@ void UFXR_TrainingPanel::BindToSession(UFXR_TrainingSession* InSession)
 	Refresh();
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// Reading the run
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Progress
+// -----------------------------------------------------------------------------------------------
 
 FText UFXR_TrainingPanel::GetProgressText() const
 {
@@ -360,14 +355,13 @@ float UFXR_TrainingPanel::GetProgressFraction() const
 	return static_cast<float>(Current->GetStepsCompleted()) / Total;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// The briefing, which the runner has no opinion about
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Briefing
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingPanel::ShowExplanation(const FText& Body)
 {
-	// An empty body would put up a blank screen that nothing can dismiss, which looks exactly like
-	// a frozen panel. Refused out loud instead.
+	// An empty briefing would be a blank screen nothing can dismiss. Refuse it and log.
 	if (Body.IsEmpty())
 	{
 		UE_LOG(LogFXR, Warning, TEXT("%s was asked to show an explanation with no text."), *GetName());
@@ -409,24 +403,23 @@ void UFXR_TrainingPanel::DismissExplanation()
 	Refresh();
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 // Session events
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingPanel::HandleStepActivated(FName InStepId, FText InInstruction)
 {
 	StepId = InStepId;
 	Instruction = InInstruction;
 
-	// A new step is its own answer to the last complaint.
+	// A new step clears the last mistake message.
 	ClearMistake();
 	StartClock();
 
 	const UFXR_TrainingSession* Current = Session.Get();
 	const int32 Total = Current ? Current->GetStepTotal() : 0;
 
-	// Completed plus one, not an index into the graph: a procedure that allows steps in any order
-	// has no single current step, and what a trainee reads here is how far through they are.
+	// Step number shown to the trainee: steps done + 1.
 	const int32 Number = Current ? Current->GetStepsCompleted() + 1 : 0;
 
 	Refresh();
@@ -435,8 +428,7 @@ void UFXR_TrainingPanel::HandleStepActivated(FName InStepId, FText InInstruction
 
 void UFXR_TrainingPanel::HandleSubStepActivated(FName InStepId, FName InSubStepId)
 {
-	// The page and its heading stay; the open row moves down one. A complaint about the last part is
-	// answered by moving on to the next, the same as between steps.
+	// Same page, the open row just moves down. Clear the last mistake message like a step change does.
 	ClearMistake();
 	Refresh();
 }
@@ -447,8 +439,7 @@ void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
 
 	if (Current && Current->GetMode() == EFXR_DeliveryMode::Exam)
 	{
-		// No hints in an exam. The author's message says what went wrong, which is the answer, so
-		// the trainee is told only that it counted - and, when there is a limit, how close it is.
+		// No hints in Exam: just say a mistake counted, and how many are left if there's a limit.
 		const int32 Count = Current->GetMistakes().Num();
 		const int32 Limit = Current->GetMaxMistakes();
 		MistakeText = Limit > 0
@@ -470,8 +461,7 @@ void UFXR_TrainingPanel::HandleMistake(FFXR_Mistake Mistake)
 		return;
 	}
 
-	// Re-armed rather than stacked: a second slip extends the dwell instead of taking the message
-	// down while the trainee is still making it.
+	// Restart the timer on each new mistake instead of stacking timers.
 	World->GetTimerManager().SetTimer(MistakeTimer, this, &UFXR_TrainingPanel::ClearMistake, MistakeDwellSeconds, false);
 }
 
@@ -485,7 +475,7 @@ void UFXR_TrainingPanel::HandleFinished(FFXR_SessionReport InReport)
 	ClearMistake();
 	StopClock();
 
-	// A briefing left up would hide the report behind it.
+	// Close any briefing so it doesn't cover the report.
 	ExplanationBody = FText::GetEmpty();
 
 	Refresh();
@@ -499,8 +489,7 @@ void UFXR_TrainingPanel::ClearMistake()
 		World->GetTimerManager().ClearTimer(MistakeTimer);
 	}
 
-	// Silent when there was nothing up, so a bind or a step change does not fire a hide at a panel
-	// that is already hiding it.
+	// Nothing to clear, so don't fire OnMistakeCleared.
 	if (MistakeText.IsEmpty())
 	{
 		return;
@@ -512,9 +501,9 @@ void UFXR_TrainingPanel::ClearMistake()
 	OnMistakeCleared();
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 // Buttons
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingPanel::HandleBeginClicked()
 {
@@ -526,8 +515,7 @@ void UFXR_TrainingPanel::HandleBeginClicked()
 		{
 			Current->StartSession();
 
-			// StartSession fires OnStepActivated for the entry step, which refreshes everything
-			// except the fact that a finished run is no longer finished.
+			// StartSession refreshes through OnStepActivated, but bFinished still needs resetting here.
 			bFinished = false;
 			Report = FFXR_SessionReport();
 			Refresh();
@@ -539,8 +527,7 @@ void UFXR_TrainingPanel::HandleDoneClicked()
 {
 	OnRetryRequested.Broadcast();
 
-	// Same call as Begin, deliberately: "Try again" is a new run of the same graph, and a report
-	// that could be dismissed into a blank panel would be a dead end.
+	// Try again = start a new run of the same procedure.
 	if (bButtonsDriveSession)
 	{
 		HandleBeginClicked();
@@ -551,8 +538,8 @@ void UFXR_TrainingPanel::HandleExplainPlayClicked()
 {
 	OnExplanationAudioToggled.Broadcast(true);
 
-	// Moved to Playing on the panel's own authority so the transport appears on the press rather
-	// than on a round trip. Whoever owns the sound corrects it with SetExplanationAudio.
+	// Switch to Playing right away so the button feels instant. Whoever plays the sound can
+	// correct it with SetExplanationAudio.
 	ExplainState = EFXR_ExplainState::Playing;
 	RefreshExplanation();
 }
@@ -571,13 +558,13 @@ void UFXR_TrainingPanel::HandleExplainConfirmClicked()
 	DismissExplanation();
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 // Screens
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 EFXR_PanelScreen UFXR_TrainingPanel::ResolveScreen() const
 {
-	// A briefing is the one thing the session has no opinion about, so it wins while it is up.
+	// A briefing overrides everything else while it's up.
 	if (!ExplanationBody.IsEmpty())
 	{
 		return EFXR_PanelScreen::Explanation;
@@ -602,8 +589,7 @@ void UFXR_TrainingPanel::ApplyScreen(EFXR_PanelScreen NewScreen)
 		ScreenSwitcher->SetActiveWidgetIndex(static_cast<int32>(Screen));
 	}
 
-	// The bar and the meter sit above the switcher so one copy serves every screen that wants
-	// them. The two that do not are the two that are about one thing at a time.
+	// The bar and meter sit above the switcher and are shared. Explanation and Complete don't use them.
 	const bool bWantsChrome = Screen == EFXR_PanelScreen::Start || Screen == EFXR_PanelScreen::Procedure;
 	SetShown(TopBar, bWantsChrome);
 	SetShown(StepMeter, Screen == EFXR_PanelScreen::Procedure);
@@ -635,8 +621,7 @@ void UFXR_TrainingPanel::RefreshChrome()
 		CrumbRootLabel->SetText(Course);
 	}
 
-	// A standalone procedure has no course, and a crumb with a trailing separator and nothing after
-	// it reads as a missing value rather than as an absent one.
+	// No course: hide the crumb and its separator so it doesn't look like a missing value.
 	SetShown(CrumbRootLabel, !Course.IsEmpty());
 	SetShown(CrumbSeparator, !Course.IsEmpty());
 
@@ -655,8 +640,7 @@ void UFXR_TrainingPanel::RefreshChrome()
 
 	if (StatusLabel)
 	{
-		// Terse during a run, because the bar is glanced at rather than read. The spelled-out form
-		// is what ProgressLabel is for.
+		// Short form for the top bar. ProgressLabel has the long form.
 		StatusLabel->SetText(bRunning
 			? FText::Format(NSLOCTEXT("FlexXR", "PanelStatusRunning", "{0} / {1}"),
 				FText::AsNumber(Current->GetStepsCompleted()),
@@ -696,8 +680,7 @@ void UFXR_TrainingPanel::RefreshExplanation()
 
 	if (ExplainPip)
 	{
-		// Lit while it is speaking, quiet once it has been heard: the pip is the element bound to
-		// the highlight pulse, so it says "this panel is talking about that object, now".
+		// Lit while the audio is playing.
 		const bool bLive = ExplainState == EFXR_ExplainState::Playing;
 		ExplainPip->SetBrush(FXR_PanelStyle::Dot(
 			bLive ? FXR_PanelStyle::Amber() : FXR_PanelStyle::Text4(), 16.f));
@@ -713,8 +696,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 {
 	const UFXR_TrainingSession* Current = Session.Get();
 
-	// Exam shows progress and the mistake count and nothing else. The list and the heading are not
-	// hidden so much as never chosen: the switcher holds two bodies, and an exam gets the other one.
+	// Exam uses the other body of the switcher: progress and mistakes only.
 	const bool bExam = Current && Current->GetMode() == EFXR_DeliveryMode::Exam;
 
 	if (ProcedureBodySwitcher)
@@ -758,8 +740,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 
 	SetShown(MistakeCard, HasMistake());
 
-	// The foot carries the run's facts and gives that space up to a complaint, rather than pushing
-	// the instruction off the panel to make room for one.
+	// The mistake message replaces the foot instead of pushing the content around.
 	if (FootSwitcher)
 	{
 		FootSwitcher->SetActiveWidgetIndex(HasMistake() ? 1 : 0);
@@ -780,13 +761,12 @@ void UFXR_TrainingPanel::RefreshProcedure()
 		return;
 	}
 
-	// One report for everything below: it carries the steps, their sub-steps, labels and statuses in
-	// run order. Built on change, not per frame.
+	// One report gives everything below (steps, sub-steps, statuses). Only built on change.
 	const FFXR_SessionReport Snapshot = Current->BuildReport();
 	const int32 Open = Snapshot.Steps.IndexOfByPredicate(
 		[](const FFXR_StepRecord& Step) { return Step.Status == EFXR_StepStatus::Active; });
 
-	// The heading is the open step's instruction: the title of its page.
+	// Heading = the open step's instruction.
 	if (StepTitleLabel)
 	{
 		StepTitleLabel->SetText(!Snapshot.Steps.IsValidIndex(Open)
@@ -796,7 +776,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 				: Snapshot.Steps[Open].Instruction));
 	}
 
-	// The meter is the whole procedure, so its length is settled when a run starts.
+	// One segment per step; built once per run.
 	if (MeterSegments.Num() != Snapshot.Steps.Num())
 	{
 		BuildMeter(Snapshot.Steps.Num());
@@ -804,8 +784,7 @@ void UFXR_TrainingPanel::RefreshProcedure()
 
 	RefreshMeter(Snapshot.Steps);
 
-	// The list is one step's page, so it is rebuilt when the open step changes. A sub-step being
-	// ticked off only restyles it.
+	// Rows are rebuilt when the open step changes; ticking off a sub-step only restyles them.
 	const TArray<FFXR_SubStepRecord> Lines = Snapshot.Steps.IsValidIndex(Open)
 		? Snapshot.Steps[Open].SubSteps
 		: TArray<FFXR_SubStepRecord>();
@@ -824,32 +803,29 @@ void UFXR_TrainingPanel::RefreshComplete()
 	const bool bFailed = Report.Outcome == EFXR_SessionOutcome::Failed;
 	const bool bPassed = Report.Outcome == EFXR_SessionOutcome::Completed;
 
-	// Training cannot go wrong, so it has nothing to grade: a finished run is a full green ring with
-	// a tick, which says "done" without pretending to be a score.
+	// Training has nothing to grade, so a finished run shows a full green ring with a tick.
 	const bool bTrainingDone = bPassed && Report.Mode == EFXR_DeliveryMode::Training;
 
-	// The ring always means the score. Only its colour carries the verdict, so there is nothing to
-	// re-learn between a pass and a failure.
+	// The ring is always the score; its colour shows pass/fail.
 	const FLinearColor Verdict = bFailed
 		? FXR_PanelStyle::Red()
 		: (bPassed ? FXR_PanelStyle::Green() : FXR_PanelStyle::Text3());
 
-	// Red is the event; a red headline is not readable, so text takes the lighter tint of it.
+	// Plain red text is hard to read on the panel, so text uses a lighter red.
 	const FLinearColor VerdictText = bFailed
 		? FXR_PanelStyle::Danger()
 		: (bPassed ? FXR_PanelStyle::Green() : FXR_PanelStyle::Text3());
 
 	if (ScoreRing)
 	{
-		// Out of 100. Scoring Weights can start a run somewhere else, in which case the arc is
-		// still a fraction of 100 rather than of that starting score.
+		// Out of 100, even if Scoring Weights uses a different starting score.
 		ScoreRing->SetValue(bTrainingDone ? 1.f : FMath::Clamp(Report.Score / 100.f, 0.f, 1.f));
 		ScoreRing->SetSliderProgressColor(Verdict);
 	}
 
 	if (ScoreLabel)
 	{
-		// A stopped run was never judged, so it shows no score rather than a zero that reads as one.
+		// A stopped run shows a dash, not 0.
 		ScoreLabel->SetText(Report.Outcome == EFXR_SessionOutcome::Stopped
 			? FText::FromString(TEXT("\u2014"))
 			: FText::AsNumber(FMath::RoundToInt(Report.Score)));
@@ -876,8 +852,7 @@ void UFXR_TrainingPanel::RefreshComplete()
 		CompleteTitleLabel->SetText(Report.ProcedureName);
 	}
 
-	// One line a passed run does not need. Only a failure has something to explain, and there are
-	// three ways to fail an exam. It names the narrowest thing that failed: the sub-step, if it was one.
+	// Only failures get a reason line. Name the sub-step if the failure happened in one.
 	const FText FailedName = Report.FailedSubStepName.IsEmpty() ? Report.FailedStepName : Report.FailedSubStepName;
 
 	FText Reason;
@@ -938,9 +913,9 @@ void UFXR_TrainingPanel::RefreshComplete()
 	SetShown(CompletionCard, bFinished);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// The meter and the page
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Meter and rows
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingPanel::BuildMeter(int32 StepCount)
 {
@@ -955,9 +930,8 @@ void UFXR_TrainingPanel::BuildMeter(int32 StepCount)
 
 	for (int32 Index = 0; Index < StepCount; ++Index)
 	{
-		// The meter's height lives in its segments' brushes. The bound widget is the box itself so
-		// that collapsing it takes the whole meter with it, which leaves nothing else to carry a
-		// height - and SetDesiredSizeOverride cannot, for the reason given on FXR_PanelStyle::Band.
+		// Segment height comes from the brush (SetDesiredSizeOverride doesn't stick on widgets built in
+		// code, see FXR_PanelStyle::Band). The bound widget is the box, so collapsing it hides the meter.
 		UImage* Segment = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 		Segment->SetBrush(FXR_PanelStyle::Band(FXR_PanelStyle::Track(), FXR_PanelStyle::MeterH));
 
@@ -967,8 +941,7 @@ void UFXR_TrainingPanel::BuildMeter(int32 StepCount)
 			BoxSlot->SetHorizontalAlignment(HAlign_Fill);
 			BoxSlot->SetVerticalAlignment(VAlign_Fill);
 
-			// The gap belongs between segments, not after the last one, or the meter stops short of
-			// the panel edge by exactly one gap.
+			// Gap only between segments, not after the last one.
 			if (Index < StepCount - 1)
 			{
 				BoxSlot->SetPadding(FMargin(0.f, 0.f, FXR_PanelStyle::MeterGap, 0.f));
@@ -1011,8 +984,7 @@ void UFXR_TrainingPanel::BuildRows(const TArray<FFXR_SubStepRecord>& Lines)
 	{
 		const FFXR_SubStepRecord& Line = Lines[Index];
 
-		// A 3 px band between rows rather than a border on one side, which a single brush cannot
-		// express — and 3 px because a hairline crawls without temporal AA.
+		// 3 px divider between rows. Thinner lines shimmer in VR without temporal AA.
 		if (Index > 0)
 		{
 			UImage* Rule = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
@@ -1029,8 +1001,7 @@ void UFXR_TrainingPanel::BuildRows(const TArray<FFXR_SubStepRecord>& Lines)
 		UHorizontalBox* RowLine = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 		Entry.Row->AddChild(RowLine);
 
-		// A border sizes to its content, so the disc needs to be told how big it is. The brush
-		// rounds to half its own height, which at a square box is a circle with no arithmetic.
+		// SizeBox gives the disc its size; the pill brush makes it a circle.
 		USizeBox* NumeralBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 		NumeralBox->SetWidthOverride(FXR_PanelStyle::NumeralSize);
 		NumeralBox->SetHeightOverride(FXR_PanelStyle::NumeralSize);
@@ -1079,8 +1050,7 @@ void UFXR_TrainingPanel::BuildRows(const TArray<FFXR_SubStepRecord>& Lines)
 
 void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 {
-	// A step without sub-steps is its heading and nothing else. The list's card would still draw an
-	// empty outline, so the scroll holding it goes with it.
+	// No sub-steps: hide the list entirely, otherwise the empty card still draws an outline.
 	SetShown(StepScroll, !Lines.IsEmpty(), ESlateVisibility::Visible);
 
 	UWidget* ScrollTo = nullptr;
@@ -1095,7 +1065,7 @@ void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 
 		if (Entry.Row)
 		{
-			// The open row is tinted rather than outlined, so the list keeps a single edge.
+			// Open row is tinted instead of outlined.
 			Entry.Row->SetBrush(FXR_PanelStyle::Box(
 				bOpen ? FXR_PanelStyle::ActiveRow() : FLinearColor::Transparent, 0.f));
 			Entry.Row->SetPadding(bOpen
@@ -1105,9 +1075,8 @@ void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 
 		if (Entry.Numeral)
 		{
-			// A disc when the line has a verdict, a ring while it does not. Montserrat carries no
-			// check mark, so a finished line is a green disc with its own number rather than a tick
-			// — and a missing-glyph box would be worse than no tick at all.
+			// Disc for open/done, ring for pending. No check mark glyph in Montserrat, so done rows keep
+			// their number on a green disc.
 			Entry.Numeral->SetBrush(bOpen
 				? FXR_PanelStyle::Dot(FXR_PanelStyle::Blue(), FXR_PanelStyle::NumeralSize)
 				: (bDone
@@ -1130,9 +1099,7 @@ void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 			Entry.TextLabel->SetColorAndOpacity(FSlateColor(
 				bDone ? FXR_PanelStyle::Text2() : FXR_PanelStyle::Text()));
 
-			// Every row is one line except the open one, which opens to its full text. The trainee
-			// is on this line; this line is the one that has to be readable. A closed row ellipses
-			// rather than being cut, so a truncated line says that it is truncated.
+			// Only the open row wraps to show its full text; the rest are one line with an ellipsis.
 			Entry.TextLabel->SetAutoWrapText(bOpen);
 			Entry.TextLabel->SetTextOverflowPolicy(
 				bOpen ? ETextOverflowPolicy::Clip : ETextOverflowPolicy::Ellipsis);
@@ -1146,17 +1113,16 @@ void UFXR_TrainingPanel::RefreshRows(const TArray<FFXR_SubStepRecord>& Lines)
 		}
 	}
 
-	// Centred, not merely brought into view. The minimum scroll that satisfies "visible" puts the
-	// open row hard against the bottom edge, under the fade, which is the one place it must not be.
+	// Centre the open row. Just "bring into view" leaves it at the bottom edge under the fade.
 	if (ScrollTo && StepScroll)
 	{
 		StepScroll->ScrollWidgetIntoView(ScrollTo, true, EDescendantScrollDestination::Center);
 	}
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 // The clock
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingPanel::StartClock()
 {
@@ -1166,8 +1132,7 @@ void UFXR_TrainingPanel::StartClock()
 		return;
 	}
 
-	// The one thing on this panel that has to tick. Everything else is written when it changes, and
-	// a timer costs a fraction of what a property binding on every widget would.
+	// The only thing on the panel that ticks. Everything else updates on change.
 	World->GetTimerManager().SetTimer(ClockTimer, this, &UFXR_TrainingPanel::TickClock, ClockPeriod, true);
 }
 
@@ -1196,7 +1161,7 @@ void UFXR_TrainingPanel::TickClock()
 	}
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 FText UFXR_TrainingPanel::BuildSummaryText() const
 {

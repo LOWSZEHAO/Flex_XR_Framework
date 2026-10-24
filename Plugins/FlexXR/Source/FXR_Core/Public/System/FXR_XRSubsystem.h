@@ -12,7 +12,7 @@
 DECLARE_MULTICAST_DELEGATE_OneParam(FFXR_OnModeChanged, EFXR_Mode);
 
 /**
- * UFXR_XRSubsystem — the platform / session brain of FXR_Core.
+ * UFXR_XRSubsystem - the platform / session brain of FXR_Core.
  *
  * Resolves device capabilities (hands? controllers? standalone? passthrough?) at
  * startup, owns the active EFXR_Mode (VR / MR), and signals when the active interactor

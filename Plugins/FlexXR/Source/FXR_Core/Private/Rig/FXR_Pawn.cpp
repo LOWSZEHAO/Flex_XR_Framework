@@ -43,7 +43,7 @@ AFXR_Pawn::AFXR_Pawn()
 	RightHandRoot->SetupAttachment(VROrigin);
 
 	// The pawn owns the motion controllers (never nest a default subobject inside another
-	// component — Blueprint subclassing then mismatches the attach-parent). The controller
+	// component - Blueprint subclassing then mismatches the attach-parent). The controller
 	// interactors parent under them and inherit the tracked pose.
 	LeftMotionController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("LeftMotionController"));
 	LeftMotionController->SetupAttachment(LeftHandRoot);
@@ -256,7 +256,7 @@ void AFXR_Pawn::DrawDebugInteractors()
 		Interactor->GetGrabSphere(Center, Radius);
 		DrawDebugSphere(World, Center, Radius, 12, Color, false, -1.f, 0, 0.5f);
 
-		// Poke tip (green) — the fingertip probe driving FXR_Press; tune Poke Local Offset against it.
+		// Poke tip (green) - the fingertip probe driving FXR_Press; tune Poke Local Offset against it.
 		FVector PokeLocation;
 		float PokeRadius = 0.f;
 		Interactor->GetPokeTip(PokeLocation, PokeRadius);

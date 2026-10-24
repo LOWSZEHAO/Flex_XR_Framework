@@ -94,7 +94,7 @@ UFXR_TrainingSession* UFXR_TrainingSession::FindInWorld(const UObject* WorldCont
 		}
 	}
 
-	// One session is the ordinary case. Two is a decision nothing here is entitled to make silently.
+	// Normally there's one. With more than one, use the first and warn instead of guessing silently.
 	if (Found > 1)
 	{
 		UE_LOG(LogFXRTraining, Warning,
@@ -104,9 +104,9 @@ UFXR_TrainingSession* UFXR_TrainingSession::FindInWorld(const UObject* WorldCont
 	return First;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 // Running
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingSession::StartSession()
 {
@@ -143,9 +143,8 @@ void UFXR_TrainingSession::StartSession()
 		}
 	}
 
-	// Bound before Start, because Start opens the first entry and that callback is what fires it.
-	// The step-level broadcasts bracket the sub-step ones: the step opens, then its first sub-step;
-	// its last sub-step is ticked off, then the step completes.
+	// Bound before Start, since Start opens the first entry. Step events wrap the sub-step ones:
+	// step opens, then its first sub-step; last sub-step completes, then the step.
 	Runner.OnEntryActivated = [this](int32 EntryIndex)
 	{
 		FireEntryEvents(EntryIndex);
@@ -189,14 +188,13 @@ void UFXR_TrainingSession::StartSession()
 
 	Runner.OnFinished = [this]()
 	{
-		// Built before the highlight comes down, so the report describes the run and not the cleanup.
+		// Build the report before clearing the highlight.
 		const FFXR_SessionReport Report = BuildReport();
 		ReleaseAll();
 		OnSessionFinished.Broadcast(Report);
 	};
 
-	// Exam opens what it was told to before the first step arrives, so that step's own events land
-	// on the world the rest of the run will see.
+	// Fire the Exam auto-start events before the first step, so its own events run on top of them.
 	if (Mode == EFXR_DeliveryMode::Exam)
 	{
 		FireExamStartEvents();
@@ -222,9 +220,9 @@ void UFXR_TrainingSession::HandleBusEvent(const FFXR_InteractionEvent& Event)
 	Runner.HandleEvent(Event);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// The GM's events
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// GM events
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingSession::FireEntryEvents(int32 EntryIndex)
 {
@@ -346,9 +344,9 @@ void UFXR_TrainingSession::ValidateEvents(const TArray<FFXR_CompiledStep>& Entri
 	}
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// Training's highlight
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Highlight
+// -----------------------------------------------------------------------------------------------
 
 void UFXR_TrainingSession::SetGuidance(int32 EntryIndex, bool bOn)
 {
@@ -364,7 +362,7 @@ void UFXR_TrainingSession::SetGuidance(int32 EntryIndex, bool bOn)
 		return;
 	}
 
-	// Exam shows no hints, and the highlight is the loudest one there is.
+	// No highlight in Exam.
 	const bool bWant = bOn && bHighlightCurrentStep && Mode == EFXR_DeliveryMode::Training;
 
 	for (const FName Id : Entries[EntryIndex].Objects)
@@ -406,9 +404,9 @@ void UFXR_TrainingSession::ReleaseAll()
 	GuidedIds.Reset();
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// Reading the run
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Report and queries
+// -----------------------------------------------------------------------------------------------
 
 bool UFXR_TrainingSession::IsFirstOfStep(int32 EntryIndex) const
 {
@@ -502,8 +500,7 @@ FText UFXR_TrainingSession::GetProcedureName() const
 		return FText::GetEmpty();
 	}
 
-	// An unnamed procedure is far more likely to be unfinished authoring than a choice, and a blank
-	// title on a wall reads as a bug. The asset name is a poor title and a useful one.
+	// No name usually means it hasn't been filled in yet. Show the asset name instead of a blank title.
 	return Steps->DisplayName.IsEmpty() ? FText::FromName(Steps->GetFName()) : Steps->DisplayName;
 }
 
@@ -525,8 +522,7 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 	Report.DurationSeconds = Runner.GetElapsedSeconds();
 	Report.Mistakes = Runner.GetMistakes();
 
-	// Ordered so the sharper answer wins: a failed run has also not reached the end, and a report
-	// taken mid-session is neither. A run with no steps never started.
+	// Order matters: a failed run also didn't reach the end, and a mid-run report is neither.
 	if (Runner.Failed())
 	{
 		Report.Outcome = EFXR_SessionOutcome::Failed;
@@ -548,9 +544,9 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 	Report.StepsTotal = GetStepTotal();
 	Report.Steps.Reserve(Report.StepsTotal);
 
-	// Entries folded back into steps. A step is complete only when every entry in it is, and it is
-	// as far along as the furthest entry it reached: that entry's close time is the step's, which is
-	// "still open" for a step stopped halfway and the moment of failure for one that failed.
+	// Group entries back into steps. A step is complete when all its entries are. Its close time is
+	// the close time of the furthest entry it reached (still -1 if stopped mid-step, the failure time
+	// if it failed).
 	bool bAllComplete = true;
 	for (int32 Index = 0; Index < Entries.Num(); ++Index)
 	{
@@ -635,10 +631,8 @@ FFXR_SessionReport UFXR_TrainingSession::BuildReport() const
 		}
 	}
 
-	// The score is earned by finishing, and it is an Exam measure: Training cannot go wrong, so the
-	// panel shows a tick there instead. A failed run scores nothing - partial credit on a failed exam
-	// is a mixed message - and a stopped run is not a verdict, so it has no score either. A run still
-	// going keeps its provisional score for anything watching it live.
+	// Score only counts for a completed (or still running) run. Training shows a tick instead of a
+	// score. A failed run scores 0 and a stopped run has no score.
 	const bool bEarned = Report.Outcome == EFXR_SessionOutcome::Completed
 		|| Report.Outcome == EFXR_SessionOutcome::InProgress;
 	Report.Score = bEarned ? FMath::Max(0.f, Score) : 0.f;

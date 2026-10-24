@@ -5,11 +5,10 @@
 #include "CoreMinimal.h"
 
 /**
- * IFXR_AnchorProvider — the MR-readiness seam for spatial anchors (architecture §10).
+ * IFXR_AnchorProvider - placeholder interface for spatial anchors (planned MR phase).
  *
- * The abstraction behind which OpenXR spatial-anchor extensions will sit in the MR phase,
- * so anchored SOP scenes can pin to real-world locations. Native (non-UObject) interface;
- * no runtime implementation yet — declared now so the seam is stable.
+ * OpenXR spatial-anchor support will sit behind this so SOP scenes can be pinned to real-world
+ * locations. No implementation yet; it's declared now so the API is in place.
  */
 class FXR_CORE_API IFXR_AnchorProvider
 {

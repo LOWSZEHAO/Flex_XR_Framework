@@ -6,8 +6,8 @@
 #include "ComponentVisualizer.h"
 
 /**
- * Viewport gizmo for UFXR_Press. Drawn from the press component's own transform — the pressable
- * face disc (+Z outward), the travel depth, and the activation (click) depth — so it tracks the
+ * Viewport gizmo for UFXR_Press. Drawn from the press component's own transform - the pressable
+ * face disc (+Z outward), the travel depth, and the activation (click) depth - so it tracks the
  * component as it is placed on the button cap.
  */
 class FFXR_PressVisualizer : public FComponentVisualizer

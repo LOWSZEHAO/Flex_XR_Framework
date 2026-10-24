@@ -22,7 +22,7 @@ void UFXR_Latch::BeginPlay()
 	{
 		DrivenRestWorld = Driven->GetComponentTransform();
 
-		// A latch is a constrained mechanism (door/drawer/lever) — always kinematically driven along
+		// A latch is a constrained mechanism (door/drawer/lever) - always kinematically driven along
 		// its rail, never free-falling. Force physics off so gravity can't fight the solver or drop the
 		// mesh before it's grabbed (drop-a-component-works; no manual "uncheck Simulate Physics" step).
 		if (Driven->IsSimulatingPhysics())
@@ -33,7 +33,7 @@ void UFXR_Latch::BeginPlay()
 	else
 	{
 		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_Latch '%s' on '%s': no driven mesh resolved — attach the latch UNDER the mesh it should move (the mesh must be the latch's parent, or the actor's root). It will not respond to grabs."),
+			TEXT("FXR_Latch '%s' on '%s': no driven mesh resolved - attach the latch UNDER the mesh it should move (the mesh must be the latch's parent, or the actor's root). It will not respond to grabs."),
 			*GetName(), *GetNameSafe(GetOwner()));
 	}
 	// Start pose: begin at the authored StartValue (0 = rest), snapped to a state if detented.
@@ -124,7 +124,7 @@ void UFXR_Latch::OnUpdate(IFXR_Interactor* Interactor, float DeltaTime)
 		const FVector InPlane = FFXR_ConstraintSolver::ProjectToRotationPlane(Pivot, Axis, HandLocation, LeverArm);
 		if (LeverArm < MinLeverArm)
 		{
-			// Singularity guard: hand too close to the axis — hold the last valid angle.
+			// Singularity guard: hand too close to the axis - hold the last valid angle.
 			CurrentValue = LastValidValue;
 		}
 		else
@@ -172,14 +172,14 @@ void UFXR_Latch::OnEnd(EFXR_EndReason Reason)
 
 UFXR_HandPose* UFXR_Latch::GetActiveHandPose(EFXR_HandSide Side) const
 {
-	// Single-hand mechanism for now — the one driving hand wears the handle's pose.
+	// Single-hand mechanism for now - the one driving hand wears the handle's pose.
 	return ActiveHandPose.Get();
 }
 
 bool UFXR_Latch::GetHandAttachTransform(EFXR_HandSide Side, FTransform& OutTransform) const
 {
 	// Pin the hand to the handle (eased per the grip point's snap mode) so it tracks the object as
-	// the latch moves. Snap mode None — or no grip point — keeps the hand on the controller.
+	// the latch moves. Snap mode None - or no grip point - keeps the hand on the controller.
 	if (ActiveGripPoint.IsValid() && HandSnapMode != EFXR_GripSnapMode::None)
 	{
 		OutTransform = EasedHandTransform;
@@ -292,19 +292,19 @@ void UFXR_Latch::CheckForErrors()
 		return;
 	}
 
-	// Catches the most common setup mistake: the mesh parented *under* the latch (the rule looks up,
+	// Catches the most common setup mistake: the mesh parented under the latch (the rule looks up,
 	// not down), so nothing gets driven. The latch must be a child of the mesh, or the mesh the root.
 	if (!ResolveDrivenComponent())
 	{
 		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_Latch '%s' on '%s': no driven mesh — attach the latch under the mesh it moves (mesh = the latch's parent, or the actor root). Nothing will move."),
+			TEXT("FXR_Latch '%s' on '%s': no driven mesh - attach the latch under the mesh it moves (mesh = the latch's parent, or the actor root). Nothing will move."),
 			*GetName(), *OwnerActor->GetName());
 	}
 
 	if (MinLimit >= MaxLimit)
 	{
 		UE_LOG(LogFXR, Warning,
-			TEXT("FXR_Latch '%s' on '%s': Min Limit (%.1f) >= Max Limit (%.1f) — no travel range."),
+			TEXT("FXR_Latch '%s' on '%s': Min Limit (%.1f) >= Max Limit (%.1f) - no travel range."),
 			*GetName(), *OwnerActor->GetName(), MinLimit, MaxLimit);
 	}
 
@@ -322,7 +322,7 @@ void UFXR_Latch::CheckForErrors()
 	OwnerActor->GetComponents<UFXR_GripPoint>(GripPoints);
 	for (const UFXR_GripPoint* GripPoint : GripPoints)
 	{
-		// Only this latch's own points matter — a sibling Grab's edge points are not lever handles.
+		// Only this latch's own points matter - a sibling Grab's edge points are not lever handles.
 		if (!GripPoint || !GripPoint->IsOwnedBy(this))
 		{
 			continue;
@@ -332,7 +332,7 @@ void UFXR_Latch::CheckForErrors()
 		if (LeverArm < MinLeverArm)
 		{
 			UE_LOG(LogFXR, Warning,
-				TEXT("FXR_Latch '%s' on '%s': grip point '%s' is %.1f cm from the rotation axis, within MinLeverArm (%.1f cm) — gripping there will jitter near the rotation singularity. Move the grip point outward."),
+				TEXT("FXR_Latch '%s' on '%s': grip point '%s' is %.1f cm from the rotation axis, within MinLeverArm (%.1f cm) - gripping there will jitter near the rotation singularity. Move the grip point outward."),
 				*GetName(), *OwnerActor->GetName(), *GripPoint->GetName(), LeverArm, MinLeverArm);
 		}
 	}

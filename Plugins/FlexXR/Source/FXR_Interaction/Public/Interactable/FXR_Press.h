@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFXR_PressDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PressValueChanged, float, PressValue);
 
 /**
- * UFXR_Press — poke interactions: buttons, keypads, touchscreens (§4).
+ * UFXR_Press - poke interactions: buttons, keypads, touchscreens.
  *
  * Fingertip-depth driven: the interaction driver feeds each hand's poke tip (the tracked index
  * tip, or a tuned controller offset) to presses in range; the cap follows the fingertip along
@@ -25,7 +25,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_PressValueChanged, float, Press
  *
  * The component's own transform is the button's rest face: its +Z is the face normal (points
  * out of the button, toward the approaching finger); pressing travels along -Z. Attach it
- * under the cap mesh it moves — rest transforms are cached at BeginPlay (circular-parenting
+ * under the cap mesh it moves - rest transforms are cached at BeginPlay (circular-parenting
  * trap pre-solved, same as FXR_Latch). Not grabbable: poke-only.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
@@ -58,7 +58,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Press")
 	bool IsPressed() const { return bPressed; }
 
-	/** Depth crossed the activation point — the click. */
+	/** Depth crossed the activation point - the click. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Press")
 	FFXR_PressDelegate OnPressed;
 
@@ -66,7 +66,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Press")
 	FFXR_PressDelegate OnReleased;
 
-	/** Fires as the normalized depth changes — bind for partial-press visuals, audio or analog input. */
+	/** Fires as the normalized depth changes - bind for partial-press visuals, audio or analog input. */
 	UPROPERTY(BlueprintAssignable, Category = "FlexXR|Press")
 	FFXR_PressValueChanged OnPressValueChanged;
 
@@ -76,7 +76,7 @@ public:
 	float GetActivationFraction() const { return ActivationFraction; }
 
 protected:
-	/** Face disc + live depth + click threshold — a press has no grab radius, so the base sphere would mislead. */
+	/** Face disc + live depth + click threshold - a press has no grab radius, so the base sphere would mislead. */
 	virtual void DrawInteractionDebug() const override;
 
 	/** Full press travel (cm) along the component's -Z. */
@@ -92,7 +92,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.05", ClampMax = "1.0"))
 	float ActivationFraction = 0.7f;
 
-	/** Fraction below which OnReleased fires — keep under Activation Fraction for hysteresis. */
+	/** Fraction below which OnReleased fires - keep under Activation Fraction for hysteresis. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Press", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ReleaseFraction = 0.4f;
 
@@ -140,15 +140,15 @@ private:
 	uint64 LastPokeFrame = 0;
 	uint64 LastOverFaceFrame = 0;
 
-	// A fingertip must be seen in front of the face before it may press: without this, a finger
-	// entering from the side or behind reads as an instant deep press and the cap snaps to it.
-	// Tracked per hand — the driver offers every fingertip to every press each frame, so the hand
-	// that is nowhere near this button must not cancel the other hand's approach.
+	// A fingertip has to be seen in front of the face before it can press; otherwise a finger
+	// coming in from the side or behind counts as an instant deep press and the cap snaps down.
+	// Tracked per hand, since the driver offers every fingertip to every press each frame and the
+	// other hand mustn't cancel this one's approach.
 	bool bPokeArmed[2] = { false, false };
 	float LastBroadcastValue = 0.f;
 
 #if WITH_EDITOR
-	// Rest transforms are captured when the preview starts, exactly as BeginPlay does at runtime —
+	// Rest transforms are captured when the preview starts, exactly as BeginPlay does at runtime -
 	// the press is a child of the cap, so reading them live would chase the moving mesh.
 	bool bPreviewCaptured = false;
 	float PreviewTime = 0.f;

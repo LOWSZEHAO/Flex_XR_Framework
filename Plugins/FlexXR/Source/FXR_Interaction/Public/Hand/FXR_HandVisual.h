@@ -13,15 +13,13 @@ class UFXR_HandPose;
 class UFXR_InteractableBase;
 
 /**
- * UFXR_HandVisual — displayed hand mesh for one rig hand; the first pass of the §5.2
- * hand presentation pipeline.
+ * UFXR_HandVisual - the displayed hand mesh for one rig hand.
  *
- * Follows the active interactor's grip pose each tick and exposes a smoothly-blended
- * GripAlpha / TriggerAlpha (0..1) for the hand Anim BP to drive an open->grab blend.
- * Set its Skeletal Mesh + Anim Class in the details panel and add it to AFXR_Pawn.
+ * Follows the active interactor's grip pose and exposes smoothed GripAlpha / TriggerAlpha (0..1)
+ * for the hand Anim BP's open/grab blend. Set Skeletal Mesh and Anim Class and add it to AFXR_Pawn.
  *
- * A testing-grade stand-in: the full pipeline (UFXR_HandPose retargeting, tension model,
- * fingertip IK) replaces the raw follow + alpha later, but the alpha concept carries over.
+ * Simple version for now. The planned pipeline (UFXR_HandPose retargeting, fingertip IK) would
+ * replace the raw follow, but keep the alpha values.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_HandVisual : public USkeletalMeshComponent
@@ -33,19 +31,19 @@ public:
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Smoothed grip (Select) blend 0..1 — bind the hand Anim BP's open->grab pose to this. */
+	/** Smoothed grip (Select) blend 0..1 - bind the hand Anim BP's open->grab pose to this. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetGripAlpha() const { return GripAlpha; }
 
-	/** Smoothed trigger (Use) blend 0..1 — for index-finger / point poses. */
+	/** Smoothed trigger (Use) blend 0..1 - for index-finger / point poses. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetTriggerAlpha() const { return TriggerAlpha; }
 
-	/** Blended per-finger curls for the hand Anim BP — the held grip point's authored pose, else a uniform grip-driven curl. */
+	/** Blended per-finger curls for the hand Anim BP - the held grip point's authored pose, else a uniform grip-driven curl. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	FFXR_FingerCurls GetFingerCurls() const { return FingerCurls; }
 
-	/** Overall grasp (strongest finger curl) — convenience for Anim BPs still driven by a single grasp alpha. */
+	/** Overall grasp (strongest finger curl) - convenience for Anim BPs still driven by a single grasp alpha. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetGrasp() const;
 
@@ -58,7 +56,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
 	FTransform GripPoseOffset;
 
-	/** Mesh offset when driven by hand tracking — the tracked palm frame differs from the controller grip, so it needs its own alignment. */
+	/** Mesh offset when driven by hand tracking - the tracked palm frame differs from the controller grip, so it needs its own alignment. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")
 	FTransform HandTrackingPoseOffset;
 

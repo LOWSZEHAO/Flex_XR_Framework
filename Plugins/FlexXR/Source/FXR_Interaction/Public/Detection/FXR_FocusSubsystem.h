@@ -13,17 +13,13 @@ class UFXR_InteractableBase;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FFXR_FocusChanged, UFXR_InteractableBase*, Interactable, EFXR_FocusState, State, EFXR_HandSide, Hand);
 
 /**
- * UFXR_FocusSubsystem — the single source of truth for what each hand is paying attention to
- * (design 5.6): hovered, focused, selected.
+ * UFXR_FocusSubsystem - what each hand is hovering, focusing or holding.
  *
- * It stores and broadcasts; it does not detect. The interaction driver already owns the interactors
- * and already ticks per hand, so it computes hover from the same scoring pass that decides grabs and
- * publishes the result here — which is what guarantees the object that lights up is the object you
- * would actually take. A second system re-deriving hover could disagree with the first, and would
- * pay a second world query per hand per frame to do it.
+ * It only stores and broadcasts. The interaction driver computes hover in the same scoring pass
+ * that decides grabs and publishes it here, so the highlighted object is always the one you'd
+ * grab, and there's no second world query per hand per frame.
  *
- * Consumers (highlight, ray targets, spatial UI, locomotion's yielding rule) read this rather than
- * asking the world themselves.
+ * Highlight, ray targets, UI and locomotion's yielding rule all read from this.
  */
 UCLASS()
 class FXR_INTERACTION_API UFXR_FocusSubsystem : public UWorldSubsystem
@@ -35,7 +31,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Focus")
 	UFXR_InteractableBase* GetHovered(EFXR_HandSide Hand) const;
 
-	/** What this hand has acted on — held or ray-selected — or null. */
+	/** What this hand has acted on - held or ray-selected - or null. */
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Focus")
 	UFXR_InteractableBase* GetSelected(EFXR_HandSide Hand) const;
 
@@ -47,7 +43,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Focus")
 	bool IsHoveredByAnyHand(const UFXR_InteractableBase* Interactable) const;
 
-	//~ Publishing side — called by the interaction driver, not by gameplay code.
+	//~ Publishing side - called by the interaction driver, not by gameplay code.
 	/** Set (or clear, with null) what this hand is in reach of. No-op if unchanged. */
 	void SetHovered(EFXR_HandSide Hand, UFXR_InteractableBase* Interactable);
 

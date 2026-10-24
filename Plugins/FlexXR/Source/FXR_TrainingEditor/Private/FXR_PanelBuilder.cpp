@@ -41,34 +41,22 @@
 #include "WidgetBlueprintFactory.h"
 
 /**
- * THE PANEL, AND WHY IT IS SHAPED LIKE THIS
+ * Panel layout notes.
  *
- * Four screens — Start, Explanation, Procedure, Complete — as the four children of one Widget
- * Switcher in one asset. They share a surface, a bar, a type scale and a foot, and four assets
- * would be four copies of all of it that drift apart the first time one is edited.
+ * Four screens (Start, Explanation, Procedure, Complete) as children of one Widget Switcher in one
+ * asset, so they share the frame, top bar, fonts and foot.
  *
- * Every size and colour comes from `FXR_PanelStyle.h`, which explains the one identity the whole
- * design rests on: 900 x 870 px at a 90 cm panel width makes one pixel one millimetre.
+ * Sizes and colours come from FXR_PanelStyle.h (900 x 870 px at 90 cm wide = 1 px per mm).
  *
- * Naming a widget here is what binds it. `New<T>(Tree, TEXT("StatusLabel"))` marks it as a
- * Blueprint variable, which is what `meta = (BindWidgetOptional)` on UFXR_TrainingPanel resolves
- * against; everything built without a name stays out of the Blueprint's variable list, so what a
- * designer sees is the dozen things that are actually driven rather than sixty boxes.
+ * A widget created with a name (New<T>(Tree, TEXT("StatusLabel"))) becomes a Blueprint variable,
+ * which is what BindWidgetOptional on UFXR_TrainingPanel binds to. Everything else stays unnamed so
+ * the variable list only shows what's actually driven.
  *
- *
- * FOUR PLACES THE DESIGN COULD NOT BE TRANSLATED, AND WHAT HAPPENED INSTEAD
- *
- * - **Frosted glass.** `backdrop-filter: blur(30px)` has no equivalent for a world-space widget:
- *   there is no scene colour behind the quad to blur. The translucent fill and the bright inner
- *   ring carry the look without it.
- * - **The check mark.** Montserrat contains no U+2713 — verified against the font's own cmap, not
- *   assumed — so a completed step is its number on a green disc rather than a tick. A
- *   missing-glyph box would be worse than no tick.
- * - **The list's bottom fade.** A gradient needs a texture or a material. The list card's ring
- *   already gives the list an edge, so the fade is simply absent.
- * - **Line clamping.** UMG has no `line-clamp`, so a closed row is one line that ellipses and the
- *   open row wraps freely. A very long instruction grows its row rather than being cut at four
- *   lines.
+ * Differences from the mockup:
+ * - No frosted glass blur (not possible on a world-space widget); translucent fill + inner ring.
+ * - No check mark glyph in Montserrat, so finished rows show their number on a green disc.
+ * - No fade at the bottom of the list (would need a texture or material).
+ * - No line clamping in UMG: closed rows are one line with an ellipsis, the open row wraps.
  */
 
 namespace
@@ -80,7 +68,7 @@ namespace
 	const FString PanelAssetName = TEXT("WBP_FXR_TrainingPanel");
 	const FString FontAssetName = TEXT("F_Montserrat");
 
-	/** Montserrat's three weights, as the typeface names FXR_PanelStyle asks for. */
+	/** Montserrat's three weights, using the typeface names FXR_PanelStyle expects. */
 	struct FFaceSpec
 	{
 		const TCHAR* Typeface;
@@ -93,20 +81,17 @@ namespace
 		{ TEXT("ExtraBold"), TEXT("Montserrat-ExtraBold.ttf") },
 	};
 
-	/** Glyphs confirmed present in all three faces. Anything not on this list is not used. */
+	/** Glyphs checked to exist in all three faces. */
 	const FString PlayGlyph = TEXT("▶");
 
-	// ── assets ──────────────────────────────────────────────────────────────────────────────────
+	// -- assets ----------------------------------------------------------------------------------
 
 	FString ObjectPathFor(const FString& Dir, const FString& Name)
 	{
 		return Dir / Name + TEXT(".") + Name;
 	}
 
-	/**
-	 * Saved without a prompt: this is a tool, and a dialog here is the difference between a script
-	 * that runs unattended and one that quietly waits forever.
-	 */
+	/** Save without a dialog, so the tool can run unattended. */
 	void SaveAsset(UObject* Asset)
 	{
 		if (!Asset)
@@ -119,12 +104,9 @@ namespace
 		FEditorFileUtils::PromptForCheckoutAndSave({ Package }, /*bCheckDirty*/ false, /*bPromptToSave*/ false);
 	}
 
-	// ── widget helpers ──────────────────────────────────────────────────────────────────────────
+	// -- widget helpers --------------------------------------------------------------------------
 
-	/**
-	 * Make a widget. Giving it a name is what makes it a Blueprint variable, and therefore what
-	 * makes the runtime panel able to find and drive it.
-	 */
+	/** Create a widget. Giving it a name makes it a Blueprint variable the runtime panel can bind to. */
 	template <typename T>
 	T* New(UWidgetTree& Tree, const TCHAR* Name = nullptr)
 	{
@@ -163,11 +145,11 @@ namespace
 		return Border;
 	}
 
-	/** A flat rule. Three pixels, for the reason given in FXR_PanelStyle. */
+	/** A 3 px rule (see FXR_PanelStyle). */
 	UImage* Rule(UWidgetTree& Tree, const FLinearColor& Colour, float Thickness = RuleW)
 	{
-		// Sized by its brush. SetDesiredSizeOverride is a no-op on an image that has not been
-		// constructed into Slate yet, which every image built here is - see FXR_PanelStyle::Band.
+		// Sized through the brush; SetDesiredSizeOverride does nothing before the widget is
+		// constructed (see FXR_PanelStyle::Band).
 		UImage* Image = New<UImage>(Tree);
 		Image->SetBrush(Band(Colour, Thickness));
 		return Image;
@@ -190,7 +172,7 @@ namespace
 		return Size;
 	}
 
-	//~ Slot helpers. A vertical slot's Fill is what the design writes as `flex: 1`.
+	//~ Slot helpers. Fill on a vertical slot is the mockup's `flex: 1`.
 
 	UVerticalBoxSlot* Stack(UVerticalBox* Box, UWidget* Widget, const FMargin& Padding = FMargin(0.f),
 		bool bFill = false, EHorizontalAlignment HAlign = HAlign_Fill)
@@ -224,18 +206,15 @@ namespace
 		return Slot;
 	}
 
-	/** Push everything above it upwards, which is the design's `.spacer`. */
+	/** Pushes everything above it up (the mockup's `.spacer`). */
 	void PushUp(UWidgetTree& Tree, UVerticalBox* Box)
 	{
 		Stack(Box, New<USpacer>(Tree), FMargin(0.f), true);
 	}
 
 	/**
-	 * A pill button with a label.
-	 *
-	 * 122 px tall, which is well past the 80 px floor anything laser-targetable needs: there is no
-	 * magnetism, snapping or dwell on this stack, so a target has to be large enough to hit with a
-	 * ray held in a hand at arm's length.
+	 * Pill button with a label. 122 px tall, well above the ~80 px minimum for something you aim at
+	 * with a hand ray (there's no snapping or dwell here).
 	 */
 	UButton* PillButton(UWidgetTree& Tree, const TCHAR* Name, const TCHAR* LabelName,
 		const FLinearColor& Face, const FLinearColor& Ink, const FText& Text,
@@ -272,25 +251,21 @@ namespace
 		return Value;
 	}
 
-	/** The separator between definition rows, added only between them. */
+	/** Separator, only added between rows. */
 	void DefRule(UWidgetTree& Tree, UVerticalBox* Into)
 	{
 		Stack(Into, Rule(Tree, Divider()));
 	}
 
 	/**
-	 * Check every BindWidgetOptional on UFXR_TrainingPanel against the tree that was just built,
-	 * and say so out loud.
+	 * Check every BindWidgetOptional on UFXR_TrainingPanel against the tree that was just built, by
+	 * name and class, and log the result.
 	 *
-	 * UMG resolves an optional binding silently. A name that does not match, or one that matches a
-	 * widget of the wrong type, leaves the pointer null and reports nothing at all - and the symptom
-	 * is a panel that comes up looking right and then never updates. This builder is the thing that
-	 * chooses those names, so it is the right place to prove they line up, by the same two tests
-	 * UMG itself applies: the name, and then the class.
+	 * UMG fails these silently: a wrong name or type just leaves the pointer null and the panel never
+	 * updates. Since the builder picks the names, it checks them.
 	 *
-	 * Names the panel declares but this layout does not use are reported as a count rather than a
-	 * problem. They are deliberate: `InstructionLabel`, `ProgressFill` and the rest exist for
-	 * simpler layouts somebody else builds.
+	 * Unused names are only counted, not treated as errors (InstructionLabel, ProgressFill etc. are
+	 * for other layouts).
 	 */
 	void ReportBindings(UWidgetTree& Tree)
 	{
@@ -350,9 +325,9 @@ namespace
 	}
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// The font
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Font
+// -----------------------------------------------------------------------------------------------
 
 bool UFXR_PanelBuilder::ImportPanelFonts(bool bOverwrite)
 {
@@ -372,7 +347,7 @@ bool UFXR_PanelBuilder::ImportPanelFonts(bool bOverwrite)
 		return true;
 	}
 
-	// ── the three faces ─────────────────────────────────────────────────────────────────────────
+	// -- the three faces -------------------------------------------------------------------------
 	TArray<UFontFace*> Imported;
 
 	for (const FFaceSpec& Spec : Faces)
@@ -402,15 +377,12 @@ bool UFXR_PanelBuilder::ImportPanelFonts(bool bOverwrite)
 		UFontFace* Face = NewObject<UFontFace>(Package, *FaceName, RF_Public | RF_Standalone);
 		Face->SourceFilename = SourceFile;
 
-		// Embedded in the asset rather than streamed. Streaming trades memory for file IO at the
-		// moment a glyph is first drawn, and a hitch while a panel's text appears is the one place
-		// that trade is clearly wrong.
+		// Embedded rather than streamed, so there's no file IO hitch when a glyph is first drawn.
 		Face->LoadingPolicy = EFontLoadingPolicy::Inline;
 		Face->FontFaceData = FFontFaceData::MakeFontFaceData(MoveTemp(Bytes));
 		Face->CacheSubFaces();
 
-		// Without this the asset exists on disk and the content browser does not know, which looks
-		// exactly like an import that failed.
+		// Without this the content browser doesn't see the new asset until restart.
 		FAssetRegistryModule::AssetCreated(Face);
 		Face->MarkPackageDirty();
 		SaveAsset(Face);
@@ -418,19 +390,17 @@ bool UFXR_PanelBuilder::ImportPanelFonts(bool bOverwrite)
 		Imported.Add(Face);
 	}
 
-	// ── the composite ───────────────────────────────────────────────────────────────────────────
+	// -- the composite ---------------------------------------------------------------------------
 	const FString PackageName = FontDir / FontAssetName;
 	UPackage* Package = CreatePackage(*PackageName);
 	Package->FullyLoad();
 
 	UFont* Font = NewObject<UFont>(Package, *FontAssetName, RF_Public | RF_Standalone);
 
-	// Runtime, not Offline. Offline is the old UFont path and bakes glyphs into a texture at fixed
-	// sizes; a panel read from a distance that varies wants the glyph cache instead.
+	// Runtime, not Offline (Offline bakes glyphs at fixed sizes).
 	Font->FontCacheType = EFontCacheType::Runtime;
 
-	// Through the accessor: direct access to CompositeFont was deprecated in 5.7 and the warning is
-	// an error here.
+	// CompositeFont direct access is deprecated in 5.7 (and warnings are errors here).
 	FCompositeFont& Composite = Font->GetMutableInternalCompositeFont();
 	Composite = FCompositeFont();
 	Composite.DefaultTypeface.Fonts.Reset();
@@ -452,14 +422,13 @@ bool UFXR_PanelBuilder::ImportPanelFonts(bool bOverwrite)
 	return true;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────────────────────
-// The panel
-// ───────────────────────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------------------------
+// Panel
+// -----------------------------------------------------------------------------------------------
 
 bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 {
-	// The font first. A panel built before it exists is set in nothing, and every glyph comes out
-	// as a box with a Unicode block name in it — which is exactly the bug this replaces.
+	// Font first, otherwise every glyph renders as a missing-glyph box.
 	if (!ImportPanelFonts(/*bOverwrite*/ false))
 	{
 		UE_LOG(LogFXR, Error, TEXT("The font could not be prepared, so the panel was not built."));
@@ -479,9 +448,8 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			return false;
 		}
 
-		// Rebuilt in place rather than deleted and recreated. Deleting an asset wants a
-		// confirmation that an unattended run cannot give, which is how the material tool learned
-		// to half-succeed; and rebuilding keeps every reference to this panel pointing at it.
+		// Rebuild in place instead of delete + recreate: deleting needs a confirmation dialog, and
+		// rebuilding keeps existing references to the panel valid.
 		Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *ObjectPathFor(UIPath, PanelAssetName));
 		if (!Blueprint)
 		{
@@ -508,16 +476,13 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 	UWidgetTree& Tree = *Blueprint->WidgetTree;
 
 	/**
-	 * Clear out whatever is already in the tree, names and all.
+	 * Empty the existing tree.
 	 *
-	 * Detaching the root is not enough. Every widget stays outered to the WidgetTree under its own
-	 * name, so constructing a new `MistakeCard` when the old one is a different class is a hard
-	 * crash in UObject creation - "Cannot replace existing object of a different class" - rather
-	 * than a tidy failure. Renaming them into the transient package releases the names and lets GC
-	 * take them.
-	 *
-	 * This is also why the factory's own seeded root has to go: it comes from project settings and
-	 * may be any widget type at all.
+	 * Detaching the root isn't enough: the old widgets keep their names inside the WidgetTree, and
+	 * creating a new widget with the same name but a different class crashes ("Cannot replace
+	 * existing object of a different class"). Renaming them into the transient package frees the
+	 * names and lets GC collect them. The factory's default root goes too, since its type comes from
+	 * project settings.
 	 */
 	{
 		TArray<UWidget*> Stale;
@@ -532,21 +497,17 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 
 		Tree.RootWidget = nullptr;
 
-		// The GUID map belongs to the widgets that just went away. Emptying it is what makes the
-		// widget compiler populate it deterministically from the new tree
-		// (WidgetBlueprintCompiler.cpp, ValidateAndFixUpVariableGuids) instead of taking its
-		// self-healing path and ensuring once per widget that one "was added but did not get a
-		// GUID". The determinism matters: those GUIDs are what an external reference to one of
-		// these widgets survives a rename by.
+		// Clear the GUID map too, so the widget compiler rebuilds it deterministically from the new
+		// tree (WidgetBlueprintCompiler.cpp, ValidateAndFixUpVariableGuids) instead of hitting an
+		// ensure for every widget.
 		Blueprint->WidgetVariableNameToGuidMap.Reset();
 	}
 
-	// ── the surface ─────────────────────────────────────────────────────────────────────────────
+	// -- the surface -----------------------------------------------------------------------------
 	UCanvasPanel* Canvas = New<UCanvasPanel>(Tree);
 	Tree.RootWidget = Canvas;
 
-	// An inner ring and no drop shadow. Nothing behind a floating panel catches a shadow, and in
-	// stereo one reads as a sticker laid on the world rather than a thing in it.
+	// Inner ring, no drop shadow. A floating panel has nothing behind it to catch a shadow.
 	UBorder* Backplate = Card(Tree, nullptr,
 		RingedBox(Surface(), PanelRadius, PanelRing(), PanelRingW), FMargin(0.f));
 
@@ -558,17 +519,15 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 	}
 
 	UVerticalBox* Root = New<UVerticalBox>(Tree);
-	// The last line of defence: nothing draws outside the panel. Slate clips to rectangles, not to
-	// the rounded corners, which is enough because the 52 px gutter keeps all content well clear of
-	// a 42 px corner.
+	// Clip everything to the panel. Slate clips to the rectangle, not the rounded corners, but the
+	// 52 px gutter keeps content clear of the 42 px corners anyway.
 	Backplate->SetClipping(EWidgetClipping::ClipToBounds);
 	Backplate->AddChild(Root);
 
-	// ── the bar, shared by Start and Procedure ──────────────────────────────────────────────────
+	// -- top bar, shared by Start and Procedure ---------------------------------------------------
 	//
-	// Above the switcher so one copy serves both, and collapsed as a unit by the runtime panel on
-	// the two screens that are about one thing at a time. The rule belongs inside it: a rule left
-	// behind by a hidden bar is a line across the top of nothing.
+	// Sits above the switcher so both screens use the same one. The runtime panel collapses it on
+	// the other screens; the rule is inside it so it goes too.
 	UVerticalBox* TopBar = New<UVerticalBox>(Tree, TEXT("TopBar"));
 	Stack(Root, TopBar);
 	{
@@ -582,8 +541,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			NSLOCTEXT("FlexXR", "PanelCrumbSep", "/"));
 		Line(Bar, Separator, FMargin(11.f, 0.f, 11.f, 0.f));
 
-		// The leaf takes the slack, so a long procedure name ellipses rather than shoving the
-		// status off the end of the bar.
+		// The procedure name takes the spare width and ellipses, so the status never gets pushed off.
 		UTextBlock* Leaf = Label(Tree, TEXT("CrumbLeafLabel"), TypeCrumb(), Text());
 		Leaf->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 		Line(Bar, Leaf, FMargin(0.f), true);
@@ -599,29 +557,23 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		Stack(TopBar, Rule(Tree, Divider()));
 	}
 
-	// One segment per step, filled by the runtime panel once a graph is compiled. It rides directly
-	// under the bar rather than costing a block of its own.
-	//
-	// No SizeBox around it: the bound widget has to be the one the runtime panel adds children to,
-	// and a box wrapping it would keep its own 6 px after the box inside was collapsed. The height
-	// comes from the segments, which the panel gives an explicit desired height.
+	// One segment per step, filled at runtime, right under the bar. No SizeBox around it: the
+	// runtime adds children to this box directly, and a wrapper would keep its height when the
+	// meter is collapsed. Height comes from the segments.
 	UHorizontalBox* Meter = New<UHorizontalBox>(Tree, TEXT("StepMeter"));
 	Stack(Root, Meter);
 
 	UWidgetSwitcher* Switcher = New<UWidgetSwitcher>(Tree, TEXT("ScreenSwitcher"));
 
-	// ── Start ───────────────────────────────────────────────────────────────────────────────────
+	// -- Start -----------------------------------------------------------------------------------
 	//
-	// The mode is stated, never offered. A trainee who can pick Guided on the way into an exam is
-	// not sitting an exam, so this reads the session and reports it.
+	// Shows the mode but doesn't let the trainee change it.
 	{
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
 
-		// Every screen's body clips. Its content can grow - a title or a briefing wraps to as
-		// many lines as the author wrote - and without a clip the overflow paints straight over
-		// the foot below it, button and all. In a headset that is text hanging in the air past
-		// the edge of the board. Cut is the better failure: it is visible and it is local.
+		// Every body clips. Long titles or briefings would otherwise draw over the foot and
+		// past the edge of the panel.
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
 		Body->SetClipping(EWidgetClipping::ClipToBounds);
 		Stack(Screen, Body, FMargin(Gutter, 36.f, Gutter, 0.f), true);
@@ -649,11 +601,10 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		Stack(Foot, ButtonBox);
 	}
 
-	// ── Explanation ─────────────────────────────────────────────────────────────────────────────
+	// -- Explanation -----------------------------------------------------------------------------
 	//
-	// The eyebrow is a dot and a word in the type colour rather than a highlighter: the dot is the
-	// element bound to the highlight pulse, so the thing naming the panel is the thing tying it to
-	// its object. Audio is a transport, not a fill creeping under text being read.
+	// Eyebrow is a dot + label; the dot pulses with the highlight. Audio gets a small transport
+	// rather than a fill behind the text.
 	{
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
@@ -683,7 +634,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		UWidgetSwitcher* FootSwitch = New<UWidgetSwitcher>(Tree, TEXT("ExplainFootSwitcher"));
 		Stack(Foot, FootSwitch);
 
-		// [0] Idle — the whole width offers to play it.
+		// [0] Idle: full-width play button.
 		{
 			USizeBox* Box = Fixed(Tree, nullptr, 0.f, ButtonH);
 			UButton* Play = New<UButton>(Tree, TEXT("ExplainPlayButton"));
@@ -700,7 +651,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			FootSwitch->AddChild(Box);
 		}
 
-		// [1] Playing — pause, a thin track, elapsed time in tabular figures.
+		// [1] Playing: pause, a thin progress bar, elapsed time.
 		{
 			USizeBox* Box = Fixed(Tree, nullptr, 0.f, ButtonH);
 			UHorizontalBox* Transport = New<UHorizontalBox>(Tree);
@@ -710,8 +661,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			UButton* Pause = New<UButton>(Tree, TEXT("ExplainPauseButton"));
 			Pause->SetStyle(ButtonFace(Fill(), Divider(), RuleW));
 
-			// Two bars rather than a glyph: Montserrat has no pause character, and two rectangles
-			// are a pause icon in every typeface there has ever been.
+			// Two bars instead of a glyph, since Montserrat has no pause character.
 			UHorizontalBox* Bars = New<UHorizontalBox>(Tree);
 			for (int32 Index = 0; Index < 2; ++Index)
 			{
@@ -739,7 +689,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			FootSwitch->AddChild(Box);
 		}
 
-		// [2] Read — the one affirmative button, in the one accent.
+		// [2] Read: continue button.
 		{
 			USizeBox* Box = Fixed(Tree, nullptr, 0.f, ButtonH);
 			Box->AddChild(PillButton(Tree, TEXT("ExplainConfirmButton"), nullptr, Blue(), OnBlue(),
@@ -748,18 +698,16 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		}
 	}
 
-	// ── Procedure ───────────────────────────────────────────────────────────────────────────────
+	// -- Procedure -------------------------------------------------------------------------------
 	//
-	// The meter is one bar per compiled step, the list is those same steps, and the open row is the
-	// only one that opens to its full text. The foot carries the run's facts and gives that space
-	// up to a mistake, rather than pushing the instruction off the panel to make room for one.
+	// Meter = one bar per step, list = the open step's sub-steps. The foot shows mode and time, and
+	// is replaced by the mistake message when there is one.
 	{
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
 
-		// Two bodies over one foot. [0] teaches - the heading and the step list. [1] examines -
-		// progress and the mistake count. The runtime panel picks [1] in Exam, because in an exam
-		// the step list is the answer sheet.
+		// Two bodies over one foot. [0] Training: heading and rows. [1] Exam: progress and mistake
+		// count only, since the steps would give the answers away.
 		UWidgetSwitcher* BodySwitch = New<UWidgetSwitcher>(Tree, TEXT("ProcedureBodySwitcher"));
 		Stack(Screen, BodySwitch, FMargin(0.f), true);
 
@@ -790,19 +738,17 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			RingedBox(Fill2(), ListRadius, Divider(), PanelRingW), FMargin(0.f));
 		ListCard->SetClipping(EWidgetClipping::ClipToBounds);
 
-		// Clear of the scroll rail, so the list's right edge is not under it.
+		// Keep clear of the scroll bar.
 		if (UScrollBoxSlot* CardSlot = Cast<UScrollBoxSlot>(Scroll->AddChild(ListCard)))
 		{
 			CardSlot->SetPadding(FMargin(0.f, 0.f, 18.f, 0.f));
 		}
 
-		// Read, not pressed — so these rows are allowed below the 80 px floor that anything
-		// laser-targetable needs. Nothing in this list is a target.
+		// These rows are read, not clicked, so they can be smaller than the 80 px target size.
 		UVerticalBox* List = New<UVerticalBox>(Tree, TEXT("StepList"));
 		ListCard->AddChild(List);
 
-		// [1] The exam body: the Start screen's shape - an eyebrow, one large figure, a definition
-		// list - so an exam reads as the same panel with the answers taken away, not a new one.
+		// [1] Exam body, same layout as Start (eyebrow, big number, definition list).
 		{
 			UVerticalBox* ExamBody = New<UVerticalBox>(Tree);
 			ExamBody->SetClipping(EWidgetClipping::ClipToBounds);
@@ -827,7 +773,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		UWidgetSwitcher* FootSwitch = New<UWidgetSwitcher>(Tree, TEXT("FootSwitcher"));
 		Stack(Screen, FootSwitch);
 
-		// [0] The run's own facts.
+		// [0] Mode and time.
 		{
 			UVerticalBox* Foot = New<UVerticalBox>(Tree);
 			Stack(Foot, Rule(Tree, Divider()));
@@ -846,7 +792,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			FootSwitch->AddChild(Foot);
 		}
 
-		// [1] The complaint, in the same space.
+		// [1] Mistake message, in the same space.
 		{
 			UVerticalBox* Foot = New<UVerticalBox>(Tree, TEXT("MistakeCard"));
 			Stack(Foot, Rule(Tree, AlarmRule()));
@@ -869,11 +815,10 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		}
 	}
 
-	// ── Complete ────────────────────────────────────────────────────────────────────────────────
+	// -- Complete --------------------------------------------------------------------------------
 	//
-	// One panel for both verdicts. The ring always means the score, so colour and the eyebrow carry
-	// the outcome and nothing has to be re-learned — and a failed run gets the one line a passed run
-	// does not need, saying why it ended.
+	// Same screen for pass and fail. The ring is always the score; colour and the eyebrow show the
+	// outcome, and a failed run gets an extra line with the reason.
 	{
 		UVerticalBox* Screen = New<UVerticalBox>(Tree);
 		Switcher->AddChild(Screen);
@@ -881,12 +826,10 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 		UVerticalBox* Body = New<UVerticalBox>(Tree);
 		Body->SetClipping(EWidgetClipping::ClipToBounds);
 
-		// No bottom padding, like the other three screens. The design pads this body on all four
-		// sides and then sits a padded foot under it, which only works in the browser because the
-		// body there is allowed to shrink below its content (`min-height: 0`). A vertical box has no
-		// equivalent: its content overflows instead, and here it overflowed by exactly that 52 px -
-		// a failed run measures 918 against an 870 panel. The spacer and the foot's own padding
-		// already give the gap the bottom padding was for.
+		// No bottom padding (same as the other screens). The mockup pads all four sides and relies
+		// on min-height: 0 to let the body shrink; a vertical box can't shrink below its content, so
+		// the padding pushed a failed report to 918 px on an 870 px panel. The spacer and foot padding
+		// already provide the gap.
 		Stack(Screen, Body, FMargin(Gutter, Gutter, Gutter, 0.f), true);
 
 		USizeBox* RingBox = Fixed(Tree, nullptr, RingSize, RingSize);
@@ -909,7 +852,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			Ring->WidgetStyle = Style;
 		}
 
-		// A score is not a control. Without this the rig's laser can drag the number it is reading.
+		// Not interactive, otherwise the laser can drag the slider.
 		Ring->SetVisibility(ESlateVisibility::HitTestInvisible);
 
 		if (UOverlaySlot* Slot = RingStack->AddChildToOverlay(Ring))
@@ -927,11 +870,10 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			Slot->SetVerticalAlignment(VAlign_Center);
 		}
 
-		// The tick a finished Training run shows in place of the score - Training cannot go wrong,
-		// so there is nothing to grade. Two strokes rather than a glyph: Montserrat has no check
-		// mark (read off its cmap), and two rounded bars are a tick in any typeface. The points,
-		// relative to the ring's centre, are (-30,0) to (-8,22) to (34,-22); each bar is its segment
-		// plus its own thickness long, so the round caps meet in a rounded joint.
+		// Tick shown instead of the score after a Training run. Drawn as two rounded bars because
+		// Montserrat has no check mark. Points relative to the ring centre: (-30,0) -> (-8,22) ->
+		// (34,-22); each bar is its segment plus its thickness long so the round caps overlap at the
+		// joint.
 		UOverlay* Tick = New<UOverlay>(Tree, TEXT("ScoreTick"));
 		{
 			struct FStroke
@@ -963,7 +905,7 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 			}
 		}
 
-		// The runtime panel decides when it shows; until then it is not there.
+		// Hidden until the runtime panel shows it.
 		Tick->SetVisibility(ESlateVisibility::Collapsed);
 
 		if (UOverlaySlot* Slot = RingStack->AddChildToOverlay(Tick))
@@ -1007,13 +949,12 @@ bool UFXR_PanelBuilder::BuildDefaultTrainingPanel(bool bOverwrite)
 
 	Stack(Root, Switcher, FMargin(0.f), true);
 
-	// Compiled before saving, or the generated widgets have no Blueprint variables yet and the C++
-	// side binds to nothing. Skipping this is what looks like "the panel never updates".
+	// Compile before saving, otherwise the named widgets aren't Blueprint variables yet and the
+	// C++ bindings find nothing.
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
 #if WITH_EDITORONLY_DATA
-	// The designer opens at the physical panel's shape rather than a default square, so what an
-	// author lays out is what a headset shows.
+	// Make the designer preview the panel's real size instead of a default square.
 	if (UUserWidget* Defaults = Blueprint->GeneratedClass
 		? Cast<UUserWidget>(Blueprint->GeneratedClass->GetDefaultObject())
 		: nullptr)

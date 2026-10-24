@@ -6,7 +6,7 @@
 #include "FXR_HighlightTypes.generated.h"
 
 /**
- * What the highlight is *saying*, never how it looks. Training and games name states; the state→style
+ * What the highlight is saying, never how it looks. Training and games name states; the state->style
  * map in project settings decides the visual, so a whole product restyles from one place and no
  * gameplay code ever hardcodes a colour.
  */
@@ -18,14 +18,14 @@ enum class EFXR_HighlightState : uint8
 	/** "You can interact with this." Driven automatically by the focus subsystem. */
 	Hover     UMETA(DisplayName = "Hover"),
 
-	/** "Interact with this NOW." Set deliberately by a training step or game script, and sticky until cleared. */
+	/** "Interact with this now." Set by a training step or game script; stays until cleared. */
 	Guidance  UMETA(DisplayName = "Guidance"),
 
-	/** Acted on — held, or ray-selected. Driven automatically by the focus subsystem. */
+	/** Acted on - held, or ray-selected. Driven automatically by the focus subsystem. */
 	Selected  UMETA(DisplayName = "Selected")
 };
 
-/** How a highlighted object is drawn. Per-tier implementations sit behind these (design §9). */
+/** How a highlighted object is drawn. Each render tier implements these. */
 UENUM(BlueprintType)
 enum class EFXR_HighlightStyle : uint8
 {
@@ -42,7 +42,7 @@ enum class EFXR_HighlightStyle : uint8
 };
 
 /**
- * How the Outline style is drawn. Same silhouette, two entirely different costs — which is the whole
+ * How the Outline style is drawn. Same silhouette, two entirely different costs - which is the whole
  * reason the style is named for what it says rather than for how it is produced.
  */
 UENUM(BlueprintType)
@@ -56,7 +56,7 @@ enum class EFXR_HighlightTier : uint8
 
 	/**
 	 * Inverted hull: the mesh drawn again, pushed along its normals with front faces masked away.
-	 * Costs a draw call per highlighted mesh instead of a full-screen pass — the right trade on a
+	 * Costs a draw call per highlighted mesh instead of a full-screen pass - the right trade on a
 	 * tiler, where post-processing forces a resolve and pays for every pixel whether or not anything
 	 * is highlighted.
 	 */
@@ -67,9 +67,9 @@ enum class EFXR_HighlightTier : uint8
 UENUM(BlueprintType)
 enum class EFXR_HighlightScope : uint8
 {
-	/** Every primitive on the owning actor glows as one object — extinguisher plus pin, handle, hose. */
+	/** Every primitive on the owning actor glows as one object - extinguisher plus pin, handle, hose. */
 	Everything UMETA(DisplayName = "Everything"),
 
-	/** Only the driven mesh: "look at this *part*", which is what SOP guidance on a safety pin needs. */
+	/** Only the driven mesh, e.g. just the pin of an extinguisher. */
 	TargetMesh UMETA(DisplayName = "Target Mesh")
 };

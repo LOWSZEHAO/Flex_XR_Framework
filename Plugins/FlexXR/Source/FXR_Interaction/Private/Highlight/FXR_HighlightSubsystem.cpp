@@ -20,7 +20,7 @@
 
 namespace
 {
-	/** Two bits of state leave six for the fade — 64 levels reads as smooth across a 150 ms ramp. */
+	/** Two bits of state leave six for the fade: 64 levels is smooth enough over a 150 ms fade. */
 	constexpr int32 FXR_StencilStateStride = 4;
 	constexpr int32 FXR_StencilMaxLevel = 63;
 }
@@ -245,7 +245,7 @@ void UFXR_HighlightSubsystem::GatherTargets(const UFXR_InteractableBase* Interac
 	}
 
 	// Everything: the owning actor's primitives, so an extinguisher glows with its pin, handle and
-	// hose as one object. Scoped to this actor — other actors and the hand meshes are not ours.
+	// hose as one object. Scoped to this actor - other actors and the hand meshes are not ours.
 	if (const AActor* Owner = Interactable->GetOwner())
 	{
 		Owner->GetComponents<UPrimitiveComponent>(OutTargets);
@@ -265,8 +265,8 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 		? Interactable->GetOwner()->FindComponentByClass<UFXR_Highlight>()
 		: nullptr;
 
-	// No component is the common case: the style comes straight from project settings, which is what
-	// makes a dropped-in FXR_Grab glow with zero setup.
+	// Usually there's no highlight component and the style comes straight from project settings,
+	// so a plain FXR_Grab glows with no setup.
 	const UFXR_InteractionSettings* Settings = UFXR_InteractionSettings::Get();
 	EFXR_HighlightStyle Style = EFXR_HighlightStyle::None;
 	if (State != EFXR_HighlightState::None)
@@ -312,7 +312,7 @@ void UFXR_HighlightSubsystem::Refresh(UFXR_InteractableBase* Interactable)
 		Record.Style = Style;
 		// The full-screen pass is installed lazily and only where it is the implementation. On the
 		// hull tier no blendable is ever added, so a mobile project never pays for a post-process
-		// chain it does not use — which is most of the point of having the tier.
+		// chain it does not use - which is most of the point of having the tier.
 		if (Style == EFXR_HighlightStyle::Outline)
 		{
 			const UFXR_InteractionSettings* TierSettings = UFXR_InteractionSettings::Get();
@@ -425,7 +425,7 @@ void UFXR_HighlightSubsystem::EnsureOutlineBlendable()
 	UCameraComponent* Camera = ViewTarget ? ViewTarget->FindComponentByClass<UCameraComponent>() : nullptr;
 	if (!Camera)
 	{
-		return; // no local player or no camera yet — retried on the next highlight
+		return; // no local player or no camera yet - retried on the next highlight
 	}
 
 	OutlineMID = UMaterialInstanceDynamic::Create(Source, this);
@@ -543,7 +543,7 @@ void UFXR_HighlightSubsystem::ClearOverlay(UMeshComponent* Mesh)
 	FFXR_OverlayRecord Record;
 	if (!Overlays.RemoveAndCopyValue(Mesh, Record))
 	{
-		return; // never ours — leave it alone
+		return; // never ours - leave it alone
 	}
 	Mesh->SetOverlayMaterial(Record.Original);
 }

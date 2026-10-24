@@ -13,12 +13,12 @@ UFXR_WidgetPointer::UFXR_WidgetPointer()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 
-	// The rig's ray and the fingertip are the source. Left on its default the engine would trace
-	// from this component's own transform, which is a second ray aimed at something else.
+	// Custom source: the hit comes from the rig's ray / fingertip. The default would trace from this
+	// component's own transform, which is a different ray.
 	InteractionSource = EWidgetInteractionSource::Custom;
 
-	// Unused while the source is Custom, but a details panel switched back to World should find the
-	// framework's channel already set rather than the engine's default.
+	// Not used while the source is Custom, but if someone switches it back to World it should
+	// already be on the framework's channel.
 	TraceChannel = FXR_TraceChannel;
 }
 
@@ -28,7 +28,7 @@ void UFXR_WidgetPointer::BeginPlay()
 
 	if (AActor* Owner = GetOwner())
 	{
-		// Created with the pawn and never added at runtime; only their active state changes.
+		// Created with the pawn; only their active state changes at runtime.
 		TArray<UFXR_InteractorComponent*> Found;
 		Owner->GetComponents<UFXR_InteractorComponent>(Found);
 		CachedInteractors.Reset(Found.Num());
@@ -40,19 +40,19 @@ void UFXR_WidgetPointer::BeginPlay()
 		CachedDriver = Owner->FindComponentByClass<UFXR_InteractionDriver>();
 		if (CachedDriver)
 		{
-			// The driver casts the rig's one far ray. Read it after it has run, not a frame late.
+			// Tick after the driver, which casts the far ray, so the hit isn't a frame old.
 			AddTickPrerequisiteComponent(CachedDriver);
 		}
 	}
 
-	// Two pointers, one player: Slate keeps capture and hover per pointer index, so sharing one
-	// would make each hand's hover cancel the other's.
+	// Separate pointer index per hand. Slate tracks hover and capture per index, so with a shared
+	// one each hand would cancel the other's hover.
 	PointerIndex = (Hand == EFXR_HandSide::Left) ? 0 : 1;
 }
 
 void UFXR_WidgetPointer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// Never leave Slate holding a press. It outlives the level, and the next one starts captured.
+	// Always release the press on the way out, or Slate keeps the capture into the next level.
 	SetPressed(false);
 
 	Super::EndPlay(EndPlayReason);
@@ -62,9 +62,8 @@ void UFXR_WidgetPointer::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_WidgetPointer);
 
-	// The order is the whole trick: the hit has to be in place before the engine routes the move
-	// event, and the press has to go after it, or Slate presses what was under the pointer last
-	// frame — which, on a panel whose buttons have just changed, is the wrong one.
+	// Order matters: set the hit before the engine routes the move event, then send the press.
+	// Otherwise Slate presses whatever was under the pointer last frame.
 	UpdateSource();
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	UpdatePress();
@@ -78,13 +77,12 @@ void UFXR_WidgetPointer::UpdateSource()
 
 	IFXR_Interactor* Interactor = GetInteractor();
 
-	// Yields to interaction exactly as locomotion does (ADR-005): a hand carrying a fire
-	// extinguisher is not also a mouse.
+	// A hand that's holding something isn't a pointer, same rule as locomotion (ADR-005).
 	const bool bBusy = CachedDriver && CachedDriver->GetHeldInteractable(Hand) != nullptr;
 
 	if (Interactor && !bBusy)
 	{
-		// Touch first. A hand close enough to press the glass is not pointing at it.
+		// Touch wins: a hand close enough to touch the panel isn't pointing at it.
 		bPokeDriving = (PokeRange > 0.f) && ResolvePoke(Interactor, Hit, Panel);
 		if (!bPokeDriving)
 		{
@@ -97,8 +95,7 @@ void UFXR_WidgetPointer::UpdateSource()
 		bPokeArmed = false;
 	}
 
-	// A panel mid-fade refuses the pointer, so hover leaves with it rather than sitting on a
-	// surface the player can no longer see.
+	// Panels that are fading don't accept the pointer, so hover goes away with the panel.
 	if (Panel && !Panel->IsPointable())
 	{
 		Panel = nullptr;
@@ -106,8 +103,7 @@ void UFXR_WidgetPointer::UpdateSource()
 
 	HoveredPanel = Panel;
 
-	// An empty result is not a blocking hit, which is how the engine is told there is nothing under
-	// this hand — and what makes it drop the hover it was holding.
+	// An empty (non-blocking) hit tells the engine there's nothing under this hand, so it drops hover.
 	SetCustomHitResult(Panel ? Hit : FHitResult());
 }
 
@@ -121,7 +117,7 @@ void UFXR_WidgetPointer::UpdatePress()
 
 	if (bPokeDriving)
 	{
-		// Armed in front of the glass, pressed once the finger is through it.
+		// Armed while in front, pressed once the finger goes through.
 		SetPressed(bPokeArmed && PokeDepth <= 0.f);
 		return;
 	}
@@ -153,8 +149,7 @@ bool UFXR_WidgetPointer::ResolvePoke(IFXR_Interactor* Interactor, FHitResult& Ou
 			continue;
 		}
 
-		// Nearest surface wins, in front or behind: two panels back to back must not fight over one
-		// finger, and the one it is touching is the one it is closest to.
+		// Closest surface wins, in front or behind, so two back-to-back panels don't fight over a finger.
 		const float Distance = FMath::Abs(Depth);
 		if (Distance < BestDistance)
 		{
@@ -165,7 +160,7 @@ bool UFXR_WidgetPointer::ResolvePoke(IFXR_Interactor* Interactor, FHitResult& Ou
 		}
 	}
 
-	// Emptied on the way out: the capacity is worth keeping across frames, the pointers are not.
+	// Emptied after use; keep the capacity, not the pointers.
 	PanelScratch.Reset();
 
 	if (!Best)

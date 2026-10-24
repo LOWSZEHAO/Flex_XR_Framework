@@ -14,20 +14,20 @@ class UFXR_Interactor : public UInterface
 };
 
 /**
- * IFXR_Interactor — the unified input contract every interaction source implements:
+ * IFXR_Interactor - the unified input contract every interaction source implements:
  * motion controller, tracked hand, hand-ray, and desktop-sim mouse. Interaction code
  * queries this and never knows which device is active; the active set hot-swaps at
- * runtime (e.g. controllers set down on Quest → tracked hands).
+ * runtime (e.g. controllers set down on Quest -> tracked hands).
  *
- * These are queried per-tick on hot paths, so they are deliberately plain C++ virtuals,
- * NOT BlueprintNativeEvent (which would cost an Execute_ wrapper on every call).
+ * These are called per tick on hot paths, so they're plain C++ virtuals rather than
+ * BlueprintNativeEvent (which adds an Execute_ wrapper to every call).
  */
 class IFXR_Interactor
 {
 	GENERATED_BODY()
 
 public:
-	/** Concrete source type — for diagnostics / capability UI only; never branch interaction logic on it. */
+	/** Concrete source type - for diagnostics / capability UI only; never branch interaction logic on it. */
 	virtual EFXR_InteractorType GetInteractorType() const = 0;
 
 	/** Which hand this interactor drives. */
@@ -51,7 +51,7 @@ public:
 	/**
 	 * Fingertip probe (design 5.4): the index-tip sphere that drives poke interactions
 	 * (FXR_Press travel). The real tracked fingertip on hand tracking; a tuned offset from the
-	 * controller pose otherwise. First probe of the fingertip set — procedural grip and
+	 * controller pose otherwise. First probe of the fingertip set - procedural grip and
 	 * palm-contact points extend this seam later.
 	 */
 	virtual void GetPokeTip(FVector& OutLocation, float& OutRadius) const = 0;
@@ -59,19 +59,19 @@ public:
 	/** Framework far-ray query shape: origin + normalized direction. */
 	virtual void GetFarRay(FVector& OutOrigin, FVector& OutDirection) const = 0;
 
-	/** Normalized 0..1 select strength — grip on controllers, grab-pinch on tracked hands. */
+	/** Normalized 0..1 select strength - grip on controllers, grab-pinch on tracked hands. */
 	virtual float GetSelectValue() const = 0;
 
-	/** Normalized 0..1 use strength — trigger on controllers, index-squeeze on tracked hands. */
+	/** Normalized 0..1 use strength - trigger on controllers, index-squeeze on tracked hands. */
 	virtual float GetUseValue() const = 0;
 
 	/**
-	 * Normalized 0..1 intent to move the player, for sources with no thumbstick — the middle-finger
+	 * Normalized 0..1 intent to move the player, for sources with no thumbstick - the middle-finger
 	 * pinch on tracked hands. Kept separate from Select so grabbing and locomotion are different
 	 * gestures rather than the same one told apart by proximity.
 	 *
 	 * Zero on controllers and desktop sim: those steer through EnhancedInput, and locomotion reads
-	 * them there. Not pure virtual for that reason — an input source opts in.
+	 * them there. Not pure virtual for that reason - an input source opts in.
 	 */
 	virtual float GetNavigateValue() const { return 0.f; }
 

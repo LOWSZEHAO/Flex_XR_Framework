@@ -14,7 +14,7 @@ void FFXR_InteractableVisualizer::DrawVisualization(const UActorComponent* Compo
 		return;
 	}
 
-	// Grip points are the only grab surface when the interactable owns any (ADR-007) — draw the
+	// Grip points are the only grab surface when the interactable owns any (ADR-007) - draw the
 	// grab zone on the points, not a misleading mesh radius. (Editor-time: resolve by ownership.)
 	bool bHasGripPoints = false;
 	if (const AActor* OwnerActor = Interactable->GetOwner())

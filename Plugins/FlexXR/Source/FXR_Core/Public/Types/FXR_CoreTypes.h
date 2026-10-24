@@ -28,7 +28,7 @@ enum class EFXR_HandSide : uint8
 	Right UMETA(DisplayName = "Right")
 };
 
-/** The concrete input source behind an IFXR_Interactor. Interaction logic never branches on this — it exists for diagnostics and capability UI only. */
+/** The concrete input source behind an IFXR_Interactor. Interaction logic never branches on this - it exists for diagnostics and capability UI only. */
 UENUM(BlueprintType)
 enum class EFXR_InteractorType : uint8
 {
@@ -58,7 +58,7 @@ enum class EFXR_InteractorPreference : uint8
 
 /**
  * The one custom trace channel FlexXR owns (ADR-002), declared as FXR_Interaction in
- * DefaultEngine.ini. Reserved for genuinely mesh-accurate work — FXR_RayTarget traces, fingertip
+ * DefaultEngine.ini. Reserved for genuinely mesh-accurate work - FXR_RayTarget traces, fingertip
  * probes, procedural-grip contact. Grab, Latch and Socket detection never trace at all: they run
  * off the registry, which is why designers configure no collision for grabbing.
  *

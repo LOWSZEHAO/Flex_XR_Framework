@@ -32,7 +32,7 @@ enum class EFXR_TeleportValidation : uint8
 	CustomChannel UMETA(DisplayName = "Custom Channel")
 };
 
-/** Facing applied on landing (rotated about the HMD, not the pawn root — ADR-006). */
+/** Facing applied on landing (rotated about the HMD, not the pawn root - ADR-006). */
 UENUM(BlueprintType)
 enum class EFXR_LandingRotation : uint8
 {
@@ -43,7 +43,7 @@ enum class EFXR_LandingRotation : uint8
 
 /**
  * What one hand's stick forward axis does. Teleport and smooth move both claim it, so a hand can
- * only have one of them — choosing per hand rather than per mode makes that clash impossible to
+ * only have one of them - choosing per hand rather than per mode makes that clash impossible to
  * express instead of merely warned about.
  */
 UENUM(BlueprintType)

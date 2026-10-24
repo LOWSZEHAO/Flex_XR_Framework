@@ -6,58 +6,49 @@
 #include "Engine/DataAsset.h"
 #include "FXR_TrainingSteps.generated.h"
 
-/** One part of a step, done in its turn. */
+/** One part of a step. */
 USTRUCT(BlueprintType)
 struct FFXR_SubStepInfo
 {
 	GENERATED_BODY()
 
-	/**
-	 * Unique within the procedure, step ids included. The GM sets the sub-step up by this, and
-	 * Complete Step names it to tick it off.
-	 */
+	/** Unique across the whole procedure (step ids too). Used by the GM and by Complete Step. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName SubStepId;
 
-	/** Its line on the panel, under the step - "Pull the pin". */
+	/** The row text on the panel, e.g. "Pull the pin". */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FText DisplayName;
 };
 
-/** One step as the trainee reads it. */
+/** One step of the procedure. */
 USTRUCT(BlueprintType)
 struct FFXR_StepInfo
 {
 	GENERATED_BODY()
 
-	/** Unique within the procedure. The GM and the Complete Step node refer to the step by this. */
+	/** Unique within the procedure. The GM and Complete Step use it. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
-	/** What the trainee is asked to do, in their language - the heading of the step's page on the panel. */
+	/** What the trainee has to do. Shown as the heading of the step's page on the panel. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (MultiLine = "true"))
 	FText Instruction;
 
 	/**
-	 * Optional. The parts of this step, done strictly in this order: each Complete Step ticks off the
-	 * one that is open, and the step is finished when the last is.
-	 *
-	 * In the GM they sit under their step the same way, each with its own events and objects, so
-	 * each part opens what it needs as it arrives.
+	 * Optional. Done strictly in order: each Complete Step ticks off the current one, and the step
+	 * finishes with the last. Set up in the GM under the same step.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training", meta = (TitleProperty = "SubStepId"))
 	TArray<FFXR_SubStepInfo> SubSteps;
 };
 
 /**
- * UFXR_TrainingSteps — a procedure as the trainee reads it, and nothing else.
+ * UFXR_TrainingSteps - the text side of a procedure: ids, instructions and sub-steps, in order.
  *
- * The steps run in the order listed. What happens at each one - which objects open, which events
- * fire, what counts as wrong - is the GM's job (UFXR_TrainingGM), which points at this asset. The
- * split is deliberate: this is the content a writer or a translator touches, and the GM is the
- * wiring a designer touches, and neither should have to read past the other's half to do their job.
- *
- * Text only, so the same steps can be wired differently in another level by another GM.
+ * What happens at each step (which objects open, which events fire) lives in the GM
+ * (UFXR_TrainingGM), which points at this asset. Keeping the text separate means it can be edited
+ * or translated without touching the wiring, and the same steps can be reused with another GM.
  */
 UCLASS(BlueprintType)
 class FXR_TRAINING_API UFXR_TrainingSteps : public UDataAsset
@@ -65,14 +56,11 @@ class FXR_TRAINING_API UFXR_TrainingSteps : public UDataAsset
 	GENERATED_BODY()
 
 public:
-	/**
-	 * What this procedure is called - "Extinguisher drill". The panel's title and the report's.
-	 * Falls back to the asset's own name when left empty, so a procedure is never nameless on a wall.
-	 */
+	/** Procedure name, e.g. "Extinguisher drill". Falls back to the asset name if empty. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FText DisplayName;
 
-	/** The course this belongs to - "Fire safety". Optional; the panel's first crumb. */
+	/** Optional course name, e.g. "Fire safety". First part of the panel's breadcrumb. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Training")
 	FText CourseName;
 
@@ -86,6 +74,6 @@ public:
 	/** Step ids in order, for the GM's step dropdown. */
 	TArray<FString> GetStepIdStrings() const;
 
-	/** One step's sub-step ids in order, for the dropdown on that step's sub-step rows in the GM. */
+	/** One step's sub-step ids in order, for the sub-step dropdown in the GM. */
 	TArray<FString> GetSubStepIdStrings(FName StepId) const;
 };

@@ -51,7 +51,7 @@ void UFXR_ClimbHold::ReleaseHand(IFXR_Interactor* Interactor, EFXR_EndReason Rea
 {
 	OnReleased.Broadcast();
 
-	// Only the last hand off ends the hold — letting go with one hand while hanging by the other is
+	// Only the last hand off ends the hold - letting go with one hand while hanging by the other is
 	// the ordinary case, not the end of the climb.
 	if (--HandCount > 0)
 	{

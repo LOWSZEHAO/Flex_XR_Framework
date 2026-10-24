@@ -35,9 +35,8 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 	OutEntries.Reserve(Steps->Steps.Num());
 	OutEvents.Reserve(Steps->Steps.Num());
 
-	// One entry, with its events beside it. Everything is copied rather than pointed at: the session
-	// keeps these for the whole run, and an asset edited during play must not leave it holding
-	// pointers into an array that has moved.
+	// Copies, not pointers: the session keeps these for the whole run, and editing the asset
+	// during play could reallocate the arrays underneath it.
 	auto AddEntry = [this, &OutEntries, &OutEvents, &OutErrors](FFXR_CompiledStep&& Entry, TArray<FFXR_StepAction>&& Events)
 	{
 		const FName Id = Entry.GetCompletionId();
@@ -52,8 +51,7 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 		OutEvents.Add(MoveTemp(Events));
 	};
 
-	// Steps and sub-steps share one set of ids. Complete Step names things by id alone, so an id that
-	// meant two things would leave it guessing.
+	// Steps and sub-steps share one id namespace, since Complete Step only gets an id.
 	TSet<FName> Seen;
 
 	for (int32 Index = 0; Index < Steps->Steps.Num(); ++Index)
@@ -62,8 +60,7 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 
 		if (Info.StepId.IsNone())
 		{
-			// Still run: Complete Step with no id finishes whatever is open, so the procedure can
-			// get past it. But nothing in the GM can be aimed at it, and that is worth saying.
+			// Still runs (Complete Step with no id can finish it), but the GM can't target it.
 			OutErrors.Add(FString::Printf(TEXT("Step %d in %s has no Step Id, so nothing in the GM can be set up for it."),
 				Index, *Steps->GetName()));
 		}
@@ -97,10 +94,8 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 			continue;
 		}
 
-		// A step with sub-steps runs as one entry per sub-step. The step's own setup is shared out
-		// across them: its objects and Critical hold in every part, its timeout runs over all of
-		// them, and its events fire once, as the step arrives - with the first part, ahead of that
-		// part's own.
+		// One entry per sub-step. The step's objects and Critical apply to every sub-step, its
+		// timeout covers the whole step, and its events fire once, with the first sub-step.
 		const int32 EntriesBefore = OutEntries.Num();
 
 		for (int32 SubIndex = 0; SubIndex < Info.SubSteps.Num(); ++SubIndex)
@@ -155,16 +150,15 @@ bool UFXR_TrainingGM::Compile(TArray<FFXR_CompiledStep>& OutEntries, TArray<TArr
 			AddEntry(MoveTemp(Entry), MoveTemp(Events));
 		}
 
-		// Every sub-step was a duplicate, so the step has nothing left in it to complete and simply
-		// does not appear in the run. Said, because it is a step the trainee will never see.
+		// All sub-steps were duplicates, so the step drops out of the run entirely.
 		if (OutEntries.Num() == EntriesBefore)
 		{
 			OutErrors.Add(FString::Printf(TEXT("Step '%s' has no usable sub-steps and is skipped."), *Info.StepId.ToString()));
 		}
 	}
 
-	// The drift the dropdowns exist to prevent, caught for anything that predates them or was typed
-	// by hand: setup the run will never use.
+	// Setup that will never be used: ids that aren't in the Steps asset, or duplicates. The
+	// dropdowns prevent most of this, but old or hand-typed entries can still slip through.
 	TSet<FName> SetupSeen;
 	for (const FFXR_GMStep& Setup : StepSetup)
 	{

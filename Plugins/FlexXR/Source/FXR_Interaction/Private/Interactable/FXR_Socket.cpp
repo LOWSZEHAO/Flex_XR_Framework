@@ -16,9 +16,8 @@
 
 UFXR_Socket::UFXR_Socket()
 {
-	// Starts ticking and then switches itself off on the first tick if there is nothing to do, rather
-	// than starting disabled. Registering with the tick disabled leaves it that way — enabling it
-	// afterwards does not stick — which is what kept the editor debug from ever drawing.
+	// Start with tick enabled and turn it off on the first tick if there's nothing to do. If it
+	// registers with tick disabled, enabling it later doesn't work, and the editor debug never drew.
 	PrimaryComponentTick.bCanEverTick = true;
 
 	// A socket is placed by eye, so its reach and facing have to be visible while authoring rather
@@ -179,7 +178,7 @@ void UFXR_Socket::RefreshOccupancy()
 	UFXR_Grab* Object = Socketed.Get();
 	if (!Object)
 	{
-		// Destroyed out from under us — drop the reference without claiming it was removed.
+		// Destroyed out from under us - drop the reference without claiming it was removed.
 		Socketed = nullptr;
 		return;
 	}
@@ -223,10 +222,9 @@ FTransform UFXR_Socket::GetSeatTransform(const UFXR_Grab* Object) const
 {
 	FTransform Seat = GetComponentTransform();
 
-	// Position and facing come from the socket; scale stays the object's own. Taking the socket's
-	// scale would resize whatever it receives, so an object deliberately scaled in the level would
-	// snap back to its default size the moment it docked. With no object — an Always-mode ghost —
-	// unit scale, for the same reason: a scaled socket must not resize what it advertises.
+	// Position and rotation from the socket, scale stays the object's own (otherwise a scaled object
+	// would snap to its default size when docked). The Always-mode ghost with no object uses unit
+	// scale for the same reason.
 	Seat.SetScale3D(Object ? Object->GetHeldTransform().GetScale3D() : FVector::OneVector);
 	return Seat;
 }
@@ -241,7 +239,7 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 		UPrimitiveComponent* Driven = Object ? Object->GetDrivenComponent() : nullptr;
 		if (!Driven || Object->IsHeld())
 		{
-			// Grabbed straight back out of the seat animation — stop driving it.
+			// Grabbed straight back out of the seat animation - stop driving it.
 			bSeating = false;
 		}
 		else
@@ -262,15 +260,15 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 		}
 	}
 
-	// Outside play the ghost is rebuilt each tick so it stays glued to the socket while it is dragged
-	// around the viewport, which is the whole point of showing it at author time.
+	// Outside play, rebuild the ghost every tick so it follows the socket while it's dragged in the
+	// viewport.
 	const UWorld* World = GetWorld();
 	if (World && !World->IsGameWorld())
 	{
 		RefreshGhost();
 	}
 
-	// Ghost fades rather than blinking on: a preview that pops reads as a rendering fault.
+	// Fade the ghost in instead of popping it.
 	if (!FMath::IsNearlyEqual(GhostAlpha, GhostTarget))
 	{
 		const float Step = FFXR_Motion::FadeStep(DeltaTime, UFXR_MotionSettings::GetFadeDuration());
@@ -283,7 +281,7 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 
 void UFXR_Socket::RefreshTickState()
 {
-	// Ticks only while something is actually moving — a socket sitting idle costs nothing.
+	// Ticks only while something is actually moving - a socket sitting idle costs nothing.
 	// Debug draw keeps it ticking in the editor too, so the reach sphere and facing are visible while
 	// placing the socket rather than only once the game is running.
 	const bool bBusy = bSeating || !FMath::IsNearlyEqual(GhostAlpha, GhostTarget) || IsDrawDebugEnabled();
@@ -437,7 +435,7 @@ void UFXR_Socket::GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) c
 		}
 	}
 
-	// Blueprint-added components never exist on the CDO — they live in the construction script, and
+	// Blueprint-added components never exist on the CDO - they live in the construction script, and
 	// for most props that is where every mesh actually is. Walked from the roots so each one's
 	// transform accumulates down its attachment chain.
 	for (UClass* Current = Class; Current; Current = Current->GetSuperClass())
@@ -491,7 +489,7 @@ void UFXR_Socket::GatherGhostParts(const UFXR_Grab* Approaching, TArray<FGhostPa
 	OutParts.Reset();
 
 	// The carried object itself when there is one, so the preview is literally the thing being
-	// placed — including anything its construction script built, which a class read cannot see.
+	// placed - including anything its construction script built, which a class read cannot see.
 	if (Approaching && Approaching->GetOwner())
 	{
 		GatherFromActor(Approaching, OutParts);
@@ -522,11 +520,11 @@ void UFXR_Socket::ResizeGhostPool(int32 Count)
 		Part->SetCastShadow(false);
 
 		// Flagged as a visualiser so the editor keeps it out of selection, serialisation and anything
-		// that walks an actor's real components — it exists to be looked at, nothing more.
+		// that walks an actor's real components - it exists to be looked at, nothing more.
 		//
 		// Editor-only, and guarded: the flag it sets only exists under WITH_EDITORONLY_DATA, so an
 		// unguarded call compiles happily against the editor and breaks the Android build. Nothing is
-		// lost at runtime — selection and serialisation are editor concerns, and the part is already
+		// lost at runtime - selection and serialisation are editor concerns, and the part is already
 		// transient.
 #if WITH_EDITOR
 		Part->SetIsVisualizationComponent(true);

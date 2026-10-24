@@ -5,14 +5,13 @@
 
 UFXR_InteractionSettings::UFXR_InteractionSettings()
 {
-	// The defaults from design §4: hover reads as "you can touch this", guidance demands attention,
-	// selection confirms. A project may remap all three without touching gameplay code.
+	// Default highlight per state: hover = "you can touch this", guidance = look here now,
+	// selected = confirmed. Projects can remap all three in settings.
 	StateStyles.Add(EFXR_HighlightState::Hover, EFXR_HighlightStyle::Outline);
 	StateStyles.Add(EFXR_HighlightState::Guidance, EFXR_HighlightStyle::InnerBlink);
 	StateStyles.Add(EFXR_HighlightState::Selected, EFXR_HighlightStyle::Sweep);
 
-	// Neutral for hover so it reads as affordance rather than instruction; amber for guidance because
-	// it has to win attention; green for selected to confirm.
+	// Neutral for hover, amber for guidance so it stands out, green for selected.
 	StateColors.Add(EFXR_HighlightState::Hover, FLinearColor(1.f, 1.f, 1.f, 1.f));
 	StateColors.Add(EFXR_HighlightState::Guidance, FLinearColor(1.f, 0.75f, 0.15f, 1.f));
 	StateColors.Add(EFXR_HighlightState::Selected, FLinearColor(0.2f, 1.f, 0.4f, 1.f));
@@ -42,7 +41,7 @@ EFXR_HighlightTier UFXR_InteractionSettings::ResolveTier(const UWorld* World) co
 	}
 
 	// Feature level rather than platform: it is the thing that actually decides whether the outline
-	// pass is affordable, and it follows the editor's mobile preview — so the Quest path can be
+	// pass is affordable, and it follows the editor's mobile preview - so the Quest path can be
 	// looked at on a desktop instead of discovered on device.
 	const bool bMobile = World && World->GetFeatureLevel() <= ERHIFeatureLevel::ES3_1;
 	return bMobile ? EFXR_HighlightTier::MeshHull : EFXR_HighlightTier::PostProcess;

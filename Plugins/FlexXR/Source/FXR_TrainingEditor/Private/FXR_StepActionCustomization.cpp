@@ -15,9 +15,8 @@
 namespace
 {
 	/**
-	 * Functions the Blueprint compiler makes for itself, which nobody means to fire from a procedure:
-	 * the event graph's body, the construction script, bound component and input events, and
-	 * overrides of the engine's own events.
+	 * Functions the Blueprint compiler generates (event graph, construction script, bound
+	 * component/input events, engine event overrides). Not something you'd call from a procedure.
 	 */
 	bool IsCompilerMade(const FString& Name)
 	{
@@ -82,7 +81,7 @@ void FFXR_StepActionCustomization::CustomizeChildren(TSharedRef<IPropertyHandle>
 	ChildBuilder.AddProperty(BlueprintHandle.ToSharedRef());
 	ChildBuilder.AddProperty(TagHandle.ToSharedRef());
 
-	// Picking another Blueprint changes what the list should hold.
+	// A different Blueprint means a different list.
 	BlueprintHandle->SetOnPropertyValueChanged(FSimpleDelegate::CreateSP(this, &FFXR_StepActionCustomization::RefreshOptions));
 	RefreshOptions();
 
@@ -98,8 +97,7 @@ void FFXR_StepActionCustomization::CustomizeChildren(TSharedRef<IPropertyHandle>
 			.OptionsSource(&Options)
 			.OnGenerateWidget(this, &FFXR_StepActionCustomization::MakeOption)
 			.OnSelectionChanged(this, &FFXR_StepActionCustomization::OnOptionChosen)
-			// Rebuilt on opening too, so an event added to the Blueprint since appears without
-			// reopening the asset.
+			// Also rebuilt on open, so newly added events show up without reopening the asset.
 			.OnComboBoxOpening(this, &FFXR_StepActionCustomization::RefreshOptions)
 			[
 				SNew(STextBlock)
@@ -127,8 +125,7 @@ void FFXR_StepActionCustomization::RefreshOptions()
 			{
 				const UFunction* Function = *It;
 
-				// Only what a Blueprint author wrote. The engine's own functions number in the
-				// hundreds and none of them is an event anyone means to fire from a procedure.
+				// Only functions the Blueprint author wrote; the engine's own would flood the list.
 				if (!Cast<UBlueprintGeneratedClass>(Function->GetOwnerClass())
 					|| Function->HasAnyFunctionFlags(FUNC_Delegate)
 					|| Function->NumParms > 0
@@ -179,7 +176,7 @@ TSharedRef<SWidget> FFXR_StepActionCustomization::MakeOption(TSharedPtr<FName> O
 
 void FFXR_StepActionCustomization::OnOptionChosen(TSharedPtr<FName> Option, ESelectInfo::Type How)
 {
-	// Direct is the combo being set from code, not by the author choosing something.
+	// Direct = set from code, not picked by the user.
 	if (Option.IsValid() && EventHandle.IsValid() && How != ESelectInfo::Direct)
 	{
 		EventHandle->SetValue(*Option);

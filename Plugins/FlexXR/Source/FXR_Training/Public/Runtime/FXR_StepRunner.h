@@ -7,89 +7,77 @@
 #include "Types/FXR_TrainingTypes.h"
 
 /**
- * One thing the trainee completes, in the form the runner consumes: a sub-step, or a step that has
- * none. Compiled from the Steps asset and the GM.
+ * One thing to complete: a sub-step, or a step without sub-steps. Built by UFXR_TrainingGM::Compile.
  *
- * A step with three sub-steps arrives as three of these, in order, sharing the step's id and index.
- * The runner works down the list and never needs to know where one step ends and the next begins -
- * grouping entries back into steps is the session's job, for the panel and the report.
+ * A step with three sub-steps becomes three entries in a row with the same StepId and StepIndex.
+ * The runner just walks the flat list; the session groups entries back into steps for the panel
+ * and the report.
  *
- * ADR-004 makes this the stable contract: whatever authors a procedure compiles down to an array of
- * these, and the runner never learns which assets produced it. Note what is absent - nothing here
- * says how an entry finishes. The project decides that, by calling Complete Step from whatever
- * event means "done", so the runner never has to know what a latch or a socket is.
+ * Nothing here says how an entry finishes. The project calls Complete Step when it's done, so the
+ * runner never needs to know about latches, sockets and so on (ADR-004 / ADR-011).
  */
 struct FFXR_CompiledStep
 {
-	/** The step this is, or is part of. */
+	/** The step this entry is, or belongs to. */
 	FName StepId;
 
-	/**
-	 * The step's index in the Steps asset's list. Shared by all of its sub-steps, which is how the
-	 * session groups entries back into steps: a change of index between neighbours is a new step.
-	 */
+	/** Index of the step in the Steps asset. Neighbouring entries with the same index are one step. */
 	int32 StepIndex = INDEX_NONE;
 
-	/** The sub-step this is. None when the entry is a whole step. */
+	/** The sub-step, or None for a whole step. */
 	FName SubStepId;
 
-	/** The sub-step's place in its step's Sub Steps list, or INDEX_NONE when the entry is a whole step. */
+	/** Index in the step's Sub Steps list, or INDEX_NONE for a whole step. */
 	int32 SubStepIndex = INDEX_NONE;
 
-	/** The objects this entry is about. Never wrong while it is open; out of order before it. */
+	/** Objects this entry uses. Fine while it's open, out of order before. */
 	TArray<FName> Objects;
 
-	/** Exam only: open longer than this and the run fails. Zero or less is no limit. */
+	/** Exam only: fail if open longer than this. 0 = no limit. */
 	float TimeoutSeconds = 0.f;
 
-	/**
-	 * Exam only: the whole step's limit, counted from when its first entry opened. Carried by every
-	 * entry of a step with sub-steps; zero on a whole step, whose own limit is TimeoutSeconds.
-	 */
+	/** Exam only: limit for the whole step, counted from its first entry. Only set on sub-steps. */
 	float StepTimeoutSeconds = 0.f;
 
-	/** Exam only: any mistake while this entry is open fails the run. */
+	/** Exam only: any mistake while this is open fails the run. */
 	bool bCritical = false;
 
 	bool IsSubStep() const { return SubStepIndex != INDEX_NONE; }
 
-	/** What Complete Step names to finish this: the sub-step's id, or the step's own when it has none. */
+	/** The id Complete Step needs for this entry: the sub-step id, or the step id. */
 	FName GetCompletionId() const { return IsSubStep() ? SubStepId : StepId; }
 };
 
 /**
- * FFXR_StepRunner — the judge.
+ * FFXR_StepRunner - runs the entries in order and judges what the trainee touches.
  *
- * Deliberately free of UObject, world and tick group: it is fed events, completions and a delta
- * time, and it answers with outcomes. That is what makes it testable without an engine running and
- * a session reproducible, which replay depends on (ADR-004).
+ * No UObjects, no world, no tick group: it gets events, completions and delta time and reports
+ * back through callbacks. That keeps it unit-testable and deterministic for replay (ADR-004).
  *
- * It works down a flat list of entries, strictly in order. It never changes the world - the GM's
- * events do that - and it never decides an entry is done; Complete Step does. What it does decide is
- * what every touch of an exposed object meant, and in Exam, whether the run has failed.
+ * It doesn't change the world (the GM's events do) and doesn't decide when an entry is done
+ * (Complete Step does). It decides whether a touch was a mistake, and in Exam whether the run failed.
  */
 struct FXR_TRAINING_API FFXR_StepRunner
 {
-	/** Begin a run at the first entry. Entries are moved in. */
+	/** Start at the first entry. */
 	void Start(TArray<FFXR_CompiledStep>&& InEntries, EFXR_DeliveryMode InMode, int32 InMaxMistakes = 0);
 
-	/** End the run early. The open entry is left as it is, for the report. */
+	/** End the run early. The open entry stays as it was, for the report. */
 	void Stop();
 
 	/**
-	 * Finish the open entry and open the next, or end the run after the last.
+	 * Finish the open entry and open the next one, or end the run after the last.
 	 *
-	 * With an id, only the entry it names can be finished, and only while it is the one open - so an
-	 * event that fires every time something is grabbed advances the procedure once, where it belongs,
-	 * and does nothing the rest of the time. With no id, it finishes whatever is open. Returns
-	 * whether an entry was finished.
+	 * With an id, it only works if that entry is the open one, so an event that fires on every grab
+	 * only advances things at the right moment. With no id it finishes whatever is open. Returns
+	 * whether anything was finished.
 	 */
 	bool CompleteStep(FName Id);
 
-	/** Judge an interaction. Safe to call when nothing is running. Never completes anything. */
+	/** Judge an interaction. Safe to call when nothing is running. */
 	void HandleEvent(const FFXR_InteractionEvent& Event);
 
-	/** Advance Exam's timeouts. Safe to call when nothing is running. */
+	/** Advance time for Exam timeouts. Safe to call when nothing is running. */
 	void Tick(float DeltaSeconds);
 
 	bool IsRunning() const { return bRunning; }
@@ -99,31 +87,31 @@ struct FXR_TRAINING_API FFXR_StepRunner
 	const TArray<FFXR_CompiledStep>& GetEntries() const { return Entries; }
 	const TArray<FFXR_Mistake>& GetMistakes() const { return Mistakes; }
 
-	/** The open entry, or INDEX_NONE before the run and after it. */
+	/** The open entry, or INDEX_NONE outside a run. */
 	int32 GetCurrentEntry() const { return Current; }
 
 	EFXR_StepStatus GetStatus(int32 EntryIndex) const;
 
-	//~ Per-entry history, kept after an entry closes so a report can be built from it.
+	//~ Per-entry history, kept after the entry closes for the report.
 	float GetOpenedAt(int32 EntryIndex) const;
 	float GetClosedAt(int32 EntryIndex) const;
 	int32 GetMistakeCount(int32 EntryIndex) const;
 
-	/** True when the last entry was finished, rather than the run being stopped or failed. */
+	/** True if the last entry was completed (not stopped or failed). */
 	bool ReachedEnd() const { return bReachedEnd; }
 
-	/** True when the run ended against the trainee. Exam only. */
+	/** True if the run failed. Exam only. */
 	bool Failed() const { return bFailed; }
 
-	/** The entry that ended a failed run, or INDEX_NONE. */
+	/** The entry the run failed on, or INDEX_NONE. */
 	int32 GetFailedEntry() const { return FailedEntry; }
 
 	EFXR_FailReason GetFailReason() const { return FailReason; }
 
-	/** The mistake limit this run is held to. Zero when there is none, which is every Training run. */
+	/** Mistake limit for this run. Always 0 in Training. */
 	int32 GetMaxMistakes() const { return MaxMistakes; }
 
-	//~ Observers. Set once when the session starts; never reassigned per frame.
+	//~ Callbacks, bound once by the session before Start.
 	TFunction<void(int32 /*EntryIndex*/)> OnEntryActivated;
 	TFunction<void(int32 /*EntryIndex*/)> OnEntryCompleted;
 	TFunction<void(const FFXR_Mistake&)> OnMistake;
@@ -139,7 +127,7 @@ private:
 	TArray<FFXR_CompiledStep> Entries;
 	TArray<EFXR_StepStatus> Status;
 
-	//~ Parallel to Entries: a closed entry keeps its record.
+	//~ Parallel to Entries.
 	TArray<float> OpenedAt;
 	TArray<float> ClosedAt;
 	TArray<int32> MistakeCounts;
@@ -149,7 +137,7 @@ private:
 	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Training;
 	float Elapsed = 0.f;
 
-	/** When the open entry's step began - its first entry's open time - for StepTimeoutSeconds. */
+	/** When the current step's first entry opened, for StepTimeoutSeconds. */
 	float StepOpenedAt = 0.f;
 	bool bRunning = false;
 	bool bReachedEnd = false;
@@ -157,6 +145,6 @@ private:
 	int32 FailedEntry = INDEX_NONE;
 	EFXR_FailReason FailReason = EFXR_FailReason::None;
 
-	/** Exam's limit. Zero is no limit, and only an Exam run is ever given one. */
+	/** 0 = no limit. Only set in Exam. */
 	int32 MaxMistakes = 0;
 };

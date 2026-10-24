@@ -19,7 +19,7 @@ void FFXR_TrainingEditorModule::StartupModule()
 
 void FFXR_TrainingEditorModule::ShutdownModule()
 {
-	// The property editor can be gone first on editor exit, and asking for it then would load it.
+	// The property editor may already be unloaded on shutdown; don't load it again just to unregister.
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{
 		FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");

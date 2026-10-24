@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
- * FFXR_ConstraintSolver — pure geometric projection for constrained motion (ADR-001, design 5.1).
+ * FFXR_ConstraintSolver - pure geometric projection for constrained motion (ADR-001, design 5.1).
  *
  * Plain C++: no UObject, no world, no state. Deterministic and unit-testable in isolation.
  * FXR_Latch uses it to project the hand onto a rotational or linear constraint manifold.
@@ -15,7 +15,7 @@ struct FXR_INTERACTION_API FFXR_ConstraintSolver
 {
 	/**
 	 * Hand offset from the pivot projected onto the plane perpendicular to Axis (through the pivot).
-	 * OutLeverArm receives the projected length (the rotational lever arm) — callers guard the
+	 * OutLeverArm receives the projected length (the rotational lever arm) - callers guard the
 	 * axis singularity by rejecting values below a minimum.
 	 */
 	static FVector ProjectToRotationPlane(const FVector& PivotLocation, const FVector& Axis, const FVector& HandLocation, float& OutLeverArm);

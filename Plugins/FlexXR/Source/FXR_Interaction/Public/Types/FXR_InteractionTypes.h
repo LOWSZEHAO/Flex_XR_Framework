@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "FXR_InteractionTypes.generated.h"
 
-/** Why an interaction ended — passed to UFXR_InteractableBase::OnEnd. */
+/** Why an interaction ended - passed to UFXR_InteractableBase::OnEnd. */
 UENUM(BlueprintType)
 enum class EFXR_EndReason : uint8
 {
@@ -15,13 +15,13 @@ enum class EFXR_EndReason : uint8
 	Broken        UMETA(DisplayName = "Broken")
 };
 
-/** What happens to an in-progress hold when its interactable is disabled mid-grab (§4.0). */
+/** What happens to an in-progress hold when its interactable gets disabled. */
 UENUM(BlueprintType)
 enum class EFXR_AlreadyHeldPolicy : uint8
 {
 	// Keep the current hold to its natural end; only block re-grabbing afterwards.
 	FinishNaturally UMETA(DisplayName = "Finish Naturally"),
-	// End the hold immediately — the object is ripped from the hand (disarm, stun, cutscene).
+	// End the hold immediately - the object is ripped from the hand (disarm, stun, cutscene).
 	ForceRelease    UMETA(DisplayName = "Force Release")
 };
 
@@ -29,7 +29,7 @@ enum class EFXR_AlreadyHeldPolicy : uint8
 UENUM(BlueprintType)
 enum class EFXR_RayVisibility : uint8
 {
-	// No beam. Far interaction still works — the hover highlight says what a press would take.
+	// No beam. Far interaction still works - the hover highlight says what a press would take.
 	Never    UMETA(DisplayName = "Never"),
 	// Only while the hand is aimed at something that will answer. The beam becomes a statement
 	// rather than a fixture, and it never points at nothing.
@@ -43,7 +43,7 @@ UENUM(BlueprintType)
 enum class EFXR_DebugDraw : uint8
 {
 	Off   UMETA(DisplayName = "Off"),
-	// The defining shape only — grab radius, latch arc, press face.
+	// The defining shape only - grab radius, latch arc, press face.
 	Basic UMETA(DisplayName = "Basic (shape only)"),
 	// Adds thresholds, limits, direction markers and live state.
 	Full  UMETA(DisplayName = "Full (+ thresholds and live state)")
@@ -72,16 +72,16 @@ UENUM(BlueprintType)
 enum class EFXR_TwoHandMode : uint8
 {
 	// Both hands steer: the object's grip-to-grip axis follows the line between the hands, so
-	// either hand can drive it — rifles, brooms, hoses, wheels.
+	// either hand can drive it - rifles, brooms, hoses, wheels.
 	Shared  UMETA(DisplayName = "Shared (both hands steer)"),
-	// The second hand attaches to its grip but the first hand alone poses the object — for props
+	// The second hand attaches to its grip but the first hand alone poses the object - for props
 	// where a second hand reorienting things would read as a glitch (crates, panels).
 	Support UMETA(DisplayName = "Support (second hand does not steer)")
 };
 
 /**
  * Skeleton-agnostic finger pose: per-finger curl (0 = open, 1 = fully curled) + thumb
- * opposition. Not bone rotations — a hand Anim BP / Control Rig maps these to the active
+ * opposition. Not bone rotations - a hand Anim BP / Control Rig maps these to the active
  * skeleton's finger bones (the per-skeleton "retarget profile"), so one pose works on any mesh.
  */
 USTRUCT(BlueprintType)
@@ -139,7 +139,7 @@ enum class EFXR_SocketGhostMode : uint8
 	OnApproach UMETA(DisplayName = "On Approach"),
 
 	/**
-	 * Whenever the socket is enabled and empty. The mount advertises what belongs in it — right for
+	 * Whenever the socket is enabled and empty. The mount advertises what belongs in it - right for
 	 * a labelled bracket with an obviously missing extinguisher, and noisy anywhere else. Needs a
 	 * Ghost Mesh, since nothing is being carried to borrow a shape from.
 	 */

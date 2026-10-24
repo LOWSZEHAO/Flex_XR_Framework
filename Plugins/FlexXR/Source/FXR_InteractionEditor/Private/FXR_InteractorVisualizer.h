@@ -6,7 +6,7 @@
 #include "ComponentVisualizer.h"
 
 /**
- * Viewport gizmo for UFXR_InteractorComponent (and its concrete subclasses — the visualizer lookup
+ * Viewport gizmo for UFXR_InteractorComponent (and its concrete subclasses - the visualizer lookup
  * walks up the class hierarchy). Draws the framework query shapes so their local offsets can be
  * tuned against the hand mesh at author time: the near grab sphere and the poke-tip probe that
  * drives FXR_Press.

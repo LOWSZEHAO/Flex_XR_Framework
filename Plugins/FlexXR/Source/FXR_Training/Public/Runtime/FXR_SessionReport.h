@@ -46,11 +46,7 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName StepId;
 
-	/**
-	 * What the trainee was asked to do. Carried into the report because a finding needs the
-	 * question as well as the answer: "four of twelve reached for the handle first" only means
-	 * something next to the instruction they were given.
-	 */
+	/** What the trainee was asked to do, kept so a report makes sense on its own. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText Instruction;
 
@@ -61,7 +57,7 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float OpenedAtSeconds = -1.f;
 
-	/** Negative means it never closed, which is the normal state of a step still open at the end. */
+	/** Negative means it never closed (normal for a step that was still open at the end). */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float ClosedAtSeconds = -1.f;
 
@@ -69,7 +65,7 @@ struct FFXR_StepRecord
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float DurationSeconds = 0.f;
 
-	/** Mistakes made while this step was open, its sub-steps' included. The per-step number is the interesting one. */
+	/** Mistakes made while this step was open, including its sub-steps. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 MistakeCount = 0;
 
@@ -79,23 +75,23 @@ struct FFXR_StepRecord
 };
 
 /**
- * How a run turns into a number. Weights rather than a hardcoded formula, because what counts as
- * serious is the customer's judgement: skipping a lockout is not the same as fumbling a latch.
+ * Score weights. Configurable because what counts as serious depends on the procedure: skipping a
+ * lockout isn't the same as fumbling a latch.
  */
 USTRUCT(BlueprintType)
 struct FFXR_ScoringWeights
 {
 	GENERATED_BODY()
 
-	/** Everyone starts here and loses from it. */
+	/** Score at the start. Mistakes subtract from it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0"))
 	float StartingScore = 100.f;
 
-	/** Did something the author named as wrong for the open step. */
+	/** Touched an exposed object no step uses. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0"))
 	float WrongAction = 10.f;
 
-	/** Did something belonging to a step that had not opened. Usually the more serious finding. */
+	/** Touched an object that belongs to a later step. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlexXR|Training", meta = (ClampMin = "0.0"))
 	float OutOfOrder = 15.f;
 
@@ -106,11 +102,7 @@ struct FFXR_ScoringWeights
 };
 
 /**
- * The output of a run: what was done, in what order, how long it took, and what went wrong.
- *
- * This is the thing a training product is actually bought for. A pass or fail is not a finding;
- * "four of twelve operators reached for the handle before the pin" is, and it only exists because
- * the world stayed live enough for them to do it.
+ * Result of a run: what was done, in what order, how long it took, and the mistakes.
  */
 USTRUCT(BlueprintType)
 struct FFXR_SessionReport
@@ -121,11 +113,8 @@ struct FFXR_SessionReport
 	FName GraphName;
 
 	/**
-	 * The procedure and course as a person would read them.
-	 *
-	 * Carried on the report rather than looked up from the graph, so a finished run describes
-	 * itself: a report that outlives its session - saved, exported, shown on a panel after the
-	 * level changed - still knows what it was a report of.
+	 * Procedure and course name, copied in so the report still makes sense after the session or
+	 * level is gone.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText ProcedureName;
@@ -136,7 +125,7 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_DeliveryMode Mode = EFXR_DeliveryMode::Training;
 
-	/** What the run amounted to. See EFXR_SessionOutcome for why this is not a bool. */
+	/** How the run ended. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_SessionOutcome Outcome = EFXR_SessionOutcome::InProgress;
 
@@ -152,7 +141,7 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FName FailedSubStepId;
 
-	/** That sub-step's label. Empty when FailedSubStepId is None. */
+	/** That sub-step's text. Empty when FailedSubStepId is None. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	FText FailedSubStepName;
 
@@ -160,11 +149,11 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	EFXR_FailReason FailReason = EFXR_FailReason::None;
 
-	/** The mistake limit the run was held to. Zero when there was none, which is every non-Exam run. */
+	/** The mistake limit the run had. 0 = none (always 0 in Training). */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 MistakeLimit = 0;
 
-	/** Ran to an end rather than being stopped or failed. Kept as the convenience it reads as. */
+	/** True if the run was completed (not stopped or failed). */
 	bool ReachedEnd() const { return Outcome == EFXR_SessionOutcome::Completed; }
 
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
@@ -173,7 +162,7 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 StepsCompleted = 0;
 
-	/** Total authored steps. Completed can be lower than this without failure: a branch not taken. */
+	/** Number of steps in the procedure. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	int32 StepsTotal = 0;
 
@@ -184,7 +173,7 @@ struct FFXR_SessionReport
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	TArray<FFXR_Mistake> Mistakes;
 
-	/** Clamped to zero at the bottom; a run cannot go negative however badly it went. */
+	/** Clamped at 0. */
 	UPROPERTY(BlueprintReadOnly, Category = "FlexXR|Training")
 	float Score = 0.f;
 };
