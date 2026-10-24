@@ -34,7 +34,6 @@ jobs:
             echo "::error::Trailing whitespace"; exit 1
           fi
 
-# NOTE: Compiling Unreal and running Automation tests requires an engine installation
-# (~100 GB) and is not feasible on GitHub-hosted runners. Automation tests
-# (solver determinism, detection scoring, pose retargeting) run on a self-hosted
-# runner — see Docs/CI.md. This workflow enforces the cheap, portable checks.
+# NOTE: Building Unreal and running the Automation tests needs a full engine install (~100 GB), which
+# isn't practical on GitHub-hosted runners. The tests (FlexXR.*) are run locally from the editor or
+# UnrealEditor-Cmd; this workflow only does the cheap, portable checks.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FlexXR training panel — 900 × 870</title>
+<title>FlexXR training panel - 900 x 870</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- 500/600/800 only, by choice rather than necessity: Montserrat does ship a Regular,
@@ -28,7 +28,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ── page chrome ───────────────────────────────────────────────── */
+  /* -- page chrome ------------------------------------------------- */
   header { padding: 56px 40px 0; max-width: 1480px; margin: 0 auto; }
   .eyebrow {
     font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
@@ -60,7 +60,7 @@
   }
   .note { font-size: 15px; line-height: 1.7; color: var(--ink-2); max-width: 800px; margin: 0 0 24px; }
 
-  /* ── the scene each panel floats in ────────────────────────────── */
+  /* -- the scene each panel floats in ------------------------------ */
   .scene {
     position: relative; border-radius: 18px; overflow: hidden; flex: none;
     background:
@@ -79,15 +79,15 @@
     font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
     color: rgba(255,255,255,0.42);
   }
-  /* The boards are drawn at 900 × 870 and shrunk by transform only — never by
+  /* The boards are drawn at 900 x 870 and shrunk by transform only - never by
      changing type sizes, which would throw away the point of looking at them. */
   .fit { position: relative; z-index: 3; }
   .fit > .w { transform-origin: top left; }
 
-  /* ══════════════════════════════════════════════════════════════════
-     THE PANEL — 900 × 870 px at component scale 0.1 = 90 × 87 cm.
+  /* ==================================================================
+     THE PANEL - 900 x 870 px at component scale 0.1 = 90 x 87 cm.
      1 px = 1 mm. Every number below can be typed into UMG as written.
-     ══════════════════════════════════════════════════════════════════ */
+     ================================================================== */
   .w {
     --t:    #fff;
     --t2:   rgba(235,235,245,0.68);
@@ -115,7 +115,7 @@
     display: flex; flex-direction: column; overflow: hidden;
   }
 
-  /* ── Explanation ────────────────────────────────────────────────── */
+  /* -- Explanation -------------------------------------------------- */
   .gp-body { flex: 1; padding: 56px 52px; display: flex; flex-direction: column; min-height: 0; }
   .gp-kind {
     display: inline-flex; align-items: center; gap: 14px; align-self: flex-start;
@@ -145,7 +145,7 @@
   .gp-wave i { display: block; height: 100%; width: 42%; background: var(--t2); border-radius: 999px; }
   .gp-time { font-size: 26px; color: var(--t3); font-variant-numeric: tabular-nums; }
 
-  /* ── board chrome ───────────────────────────────────────────────── */
+  /* -- board chrome ------------------------------------------------- */
   .bar {
     flex: none; display: flex; align-items: center; gap: 12px; padding: 0 52px; height: 104px;
     border-bottom: 3px solid var(--div);
@@ -169,7 +169,7 @@
   .eyeb { font-size: 20px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); }
   .h1 { font-size: 56px; font-weight: 800; letter-spacing: -0.028em; line-height: 1.06; margin: 14px 0 0; }
   .h2 { font-size: 40px; font-weight: 800; letter-spacing: -0.024em; line-height: 1.1; margin: 10px 0 0; }
-  /* Why the run ended. Only the failed report has one — a pass needs no excuse. */
+  /* Why the run ended. Only the failed report has one. */
   .reason { margin: 14px 0 0; font-size: 24px; line-height: 1.4; color: var(--t2); }
 
   .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; margin-top: 26px; }
@@ -182,7 +182,7 @@
 
   .list { background: var(--fill2); border-radius: 22px; overflow: hidden; box-shadow: inset 0 0 0 2px var(--div);
           margin-right: 18px; }
-  /* Read, not pressed — so these rows are allowed below the 80 px laser floor.
+  /* Read, not pressed - so these rows are allowed below the 80 px laser floor.
      Every row is one clipped line EXCEPT the active one, which opens to its
      full text. The trainee is on step 3; step 3 is what must be readable. */
   .item { display: flex; align-items: center; gap: 16px; padding: 10px 18px; min-height: 60px; }
@@ -200,7 +200,7 @@
   .item--now .it { font-size: 24px; font-weight: 600; -webkit-line-clamp: 4; line-height: 1.26; }
   .it--done { color: var(--t2); }
 
-  /* ── foot: status, or the complaint ─────────────────────────────── */
+  /* -- foot: status, or the complaint ------------------------------- */
   .foot {
     flex: none; height: 134px; padding: 0 52px; display: flex; align-items: center; gap: 16px;
     border-top: 3px solid var(--div);
@@ -217,7 +217,7 @@
   }
   .foot--bad .msg { font-size: 30px; font-weight: 600; color: var(--danger); line-height: 1.2; }
 
-  /* ── complete ───────────────────────────────────────────────────── */
+  /* -- complete ----------------------------------------------------- */
   .done-body { flex: 1; padding: 52px; display: flex; flex-direction: column; align-items: center;
                text-align: center; min-height: 0; }
   .ring { position: relative; width: 200px; height: 200px; flex: none; }
