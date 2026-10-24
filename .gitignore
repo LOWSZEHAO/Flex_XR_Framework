@@ -1,4 +1,4 @@
-# ── Unreal Engine ──────────────────────────────────────────────
+# -- Unreal Engine ----------------------------------------------
 Binaries/
 DerivedDataCache/
 Intermediate/
@@ -32,19 +32,15 @@ Build/
 Plugins/**/Binaries/
 Plugins/**/Intermediate/
 
-# Third-party dev tooling linked in from outside the repo (not part of the framework).
-Plugins/Uplink/
-.mcp.json
-
-# ── OS ─────────────────────────────────────────────────────────
+# -- OS ---------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ── Local / secrets ────────────────────────────────────────────
+# -- Local / secrets --------------------------------------------
 *.local
 .env
 
-# ── Third-party / engine template content (migrate locally, not redistributed) ──
-# UE VR Template "MannequinsXR" hands are Epic sample content — kept out of the repo.
+# -- Third-party / engine template content (migrate locally, not redistributed) --
+# UE VR Template "MannequinsXR" hands are Epic sample content - kept out of the repo.
 Content/XRMannequins/
