@@ -1,6 +1,6 @@
-# ADR-001 — Kinematic-while-held, physics-on-release constraint solver
+# ADR-001 - Kinematic-while-held, physics-on-release constraint solver
 
-**Status:** Accepted · **Date:** 2026-07 · **Phase:** 2
+**Status:** Accepted | **Date:** 2026-07 | **Phase:** 2
 
 ## Context
 FXR_Latch (doors, valves, drawers, levers) and FXR_Use mechanisms need constrained motion driven by the
@@ -26,5 +26,5 @@ physics simulation with inherited velocity (free props).
 
 ## Reversal path
 The solver is plain C++ operating on transforms behind a thin wrapper. A physics-constraint backend could be
-added as an alternative implementation without touching component APIs — but determinism would be lost, and
+added as an alternative implementation without touching component APIs - but determinism would be lost, and
 with it SOP replay.

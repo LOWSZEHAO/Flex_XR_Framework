@@ -1,6 +1,6 @@
-# ADR-002 — Registry-based detection over physics overlap events
+# ADR-002 - Registry-based detection over physics overlap events
 
-**Status:** Accepted · **Date:** 2026-07 · **Phase:** 2
+**Status:** Accepted | **Date:** 2026-07 | **Phase:** 2
 
 ## Context
 Hands must discover nearby interactables every frame. The conventional Unreal approach is overlap events
@@ -14,7 +14,7 @@ winner, with hysteresis and claim locking. A single custom trace channel (`FXR_I
 genuinely mesh-accurate work: ray targeting, fingertip probes, procedural grip.
 
 ## Consequences
-- **Positive:** the detection primitive is the activation radius, not the render mesh — a tiny pin can be
+- **Positive:** the detection primitive is the activation radius, not the render mesh - a tiny pin can be
   forgiving, a huge door isn't grabbable at its far corner; **zero per-object collision setup**, which deletes
   the single most common VR bug class ("wrong collision preset, can't grab"); deterministic evaluation order
   (overlap events fire unpredictably); cheap on Quest (sphere-vs-hash, no physics broadphase churn).
