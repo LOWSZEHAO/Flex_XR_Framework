@@ -95,6 +95,23 @@ const UFXR_HandPose* UFXR_HandVisual::ResolveHeldHandPose() const
 	return nullptr;
 }
 
+void UFXR_HandVisual::ShowPose(const UFXR_HandPose* Pose)
+{
+	// Nothing overwrites these afterwards: with no pawn to take an interactor from, the tick returns
+	// before it touches the alphas or the curls.
+	if (Pose)
+	{
+		FingerCurls = Pose->Curls;
+	}
+	else
+	{
+		FingerCurls = FFXR_FingerCurls();
+		FingerCurls.Thumb = FingerCurls.Index = FingerCurls.Middle = FingerCurls.Ring = FingerCurls.Pinky = 1.f;
+	}
+	GripAlpha = 1.f;
+	TriggerAlpha = 0.f;
+}
+
 float UFXR_HandVisual::GetGrasp() const
 {
 	return FMath::Max(FingerCurls.Index, FMath::Max(FingerCurls.Middle, FMath::Max(FingerCurls.Ring, FingerCurls.Pinky)));

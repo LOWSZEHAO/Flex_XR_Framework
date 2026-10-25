@@ -10,6 +10,7 @@
 #include "FXR_GripPoint.generated.h"
 
 class UFXR_HandPose;
+class UFXR_HandVisual;
 class UFXR_InteractableBase;
 
 /**
@@ -37,9 +38,12 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void OnRegister() override;
+	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 #if WITH_EDITOR
 	virtual void CheckForErrors() override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
 	/** True if this grip point accepts the given hand. */
@@ -138,7 +142,33 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|GripPoint|Debug")
 	bool bDrawDebug = false;
 
+	virtual void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None) override;
+
+#if WITH_EDITORONLY_DATA
+	/**
+	 * Show a hand here in the editor, placed and posed the way the real hand will be when it holds
+	 * this point. A copy of the pawn's own hand (see Hand Preview Pawn in the FlexXR project
+	 * settings), so it matches the mesh and grip offset you play with. A point either hand can use
+	 * shows the right hand. Editor only; nothing is created in game.
+	 */
+	UPROPERTY(EditAnywhere, Category = "FlexXR|GripPoint|Debug")
+	bool bPreviewHand = true;
+#endif
+
 private:
 	/** Owners this point registered with at BeginPlay, kept for symmetric unregistration. */
 	TArray<TWeakObjectPtr<UFXR_InteractableBase>> RegisteredOwners;
+
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(Transient)
+	TObjectPtr<UFXR_HandVisual> PreviewHand;
+#endif
+
+#if WITH_EDITOR
+	/** Create, update or remove the preview hand to match the current settings. */
+	void RefreshPreviewHand();
+
+	/** Put the preview hand where the real one goes: the pawn's grip offset from this point. */
+	void PlacePreviewHand() const;
+#endif
 };

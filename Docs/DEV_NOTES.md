@@ -88,6 +88,14 @@ Attach to the nearest mesh above it instead.
 again) on every call. A welded child moved by its parent is free. So weld after anything stops driving
 it, and detach before anything starts.
 
+**A skeletal mesh only animates in the editor world with Update Animation In Editor on**, and
+`SetUpdateAnimationInEditor` silently does nothing before the component is registered. The Anim BP
+also evaluates once as it registers, so set whatever it reads before `RegisterComponent`.
+
+**A material used on a skeletal mesh needs Used With Skeletal Mesh set.** Otherwise the editor sets
+it the first time the material lands on one and leaves the asset unsaved, which shows up later as a
+mystery save prompt.
+
 **Grab never writes scale.** A grip point under a scaled mesh inherits its scale, and the relative
 transform maths would produce a unit-scale offset that overwrites the object's size.
 

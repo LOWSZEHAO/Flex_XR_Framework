@@ -3,8 +3,18 @@
 #include "Interactable/FXR_GripPoint.h"
 #include "Interactable/FXR_HandPose.h"
 #include "Interactable/FXR_InteractableBase.h"
+#include "Hand/FXR_HandVisual.h"
+#include "Settings/FXR_InteractionSettings.h"
 #include "Types/FXR_LogChannels.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameFramework/Pawn.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
+#include "GameMapsSettings.h"
 #include "DrawDebugHelpers.h"
 
 UFXR_HandPose* UFXR_GripPoint::GetHandPose() const
@@ -70,6 +80,174 @@ void UFXR_GripPoint::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 		}
 	}
 }
+
+void UFXR_GripPoint::OnRegister()
+{
+	Super::OnRegister();
+
+#if WITH_EDITOR
+	RefreshPreviewHand();
+#endif
+}
+
+void UFXR_GripPoint::OnComponentDestroyed(bool bDestroyingHierarchy)
+{
+#if WITH_EDITORONLY_DATA
+	if (PreviewHand)
+	{
+		PreviewHand->DestroyComponent();
+		PreviewHand = nullptr;
+	}
+#endif
+
+	Super::OnComponentDestroyed(bDestroyingHierarchy);
+}
+
+void UFXR_GripPoint::OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)
+{
+	Super::OnUpdateTransform(UpdateTransformFlags, Teleport);
+
+	// The preview hand ignores attachment (see RefreshPreviewHand), so it is moved from here whenever
+	// this point moves, including when something above it does.
+#if WITH_EDITOR
+	if (PreviewHand)
+	{
+		PlacePreviewHand();
+	}
+#endif
+}
+
+#if WITH_EDITOR
+namespace FXR_GripPointPreview
+{
+	// The pawn's hand for one side, as a component template: the FXR_HandVisual on the pawn named in
+	// project settings, else on the default game mode's pawn.
+	const UFXR_HandVisual* FindPawnHand(EFXR_HandSide Side)
+	{
+		UClass* PawnClass = UFXR_InteractionSettings::Get()->HandPreviewPawn.LoadSynchronous();
+		if (!PawnClass)
+		{
+			if (const UClass* GameMode = LoadClass<AGameModeBase>(nullptr, *UGameMapsSettings::GetGlobalDefaultGameMode()))
+			{
+				PawnClass = GameMode->GetDefaultObject<AGameModeBase>()->DefaultPawnClass;
+			}
+		}
+		const AActor* PawnDefaults = PawnClass ? PawnClass->GetDefaultObject<AActor>() : nullptr;
+		if (!PawnDefaults)
+		{
+			return nullptr;
+		}
+
+		// Hands declared in C++ first, then the usual case of hands added in the Blueprint, which only
+		// exist as construction script templates.
+		TArray<UFXR_HandVisual*> Native;
+		PawnDefaults->GetComponents<UFXR_HandVisual>(Native);
+		for (const UFXR_HandVisual* Hand : Native)
+		{
+			if (Hand->GetHandSide() == Side)
+			{
+				return Hand;
+			}
+		}
+
+		for (UClass* Current = PawnClass; Current; Current = Current->GetSuperClass())
+		{
+			const UBlueprintGeneratedClass* Generated = Cast<UBlueprintGeneratedClass>(Current);
+			if (!Generated || !Generated->SimpleConstructionScript)
+			{
+				continue;
+			}
+			for (const USCS_Node* Node : Generated->SimpleConstructionScript->GetAllNodes())
+			{
+				const UFXR_HandVisual* Hand = Node ? Cast<UFXR_HandVisual>(Node->ComponentTemplate) : nullptr;
+				if (Hand && Hand->GetHandSide() == Side)
+				{
+					return Hand;
+				}
+			}
+		}
+		return nullptr;
+	}
+}
+
+void UFXR_GripPoint::RefreshPreviewHand()
+{
+	// Only in the editor's own worlds: never in game, and never while cooking or running a
+	// commandlet, which would load the pawn for nothing.
+	const UWorld* World = GetWorld();
+	const bool bWanted = bPreviewHand && World && !World->IsGameWorld() && GetOwner() && !IsRunningCommandlet();
+
+	const EFXR_HandSide Side = (Handedness == EFXR_GripHandedness::LeftOnly) ? EFXR_HandSide::Left : EFXR_HandSide::Right;
+	const UFXR_HandVisual* Source = bWanted ? FXR_GripPointPreview::FindPawnHand(Side) : nullptr;
+
+	if (PreviewHand && (!Source || PreviewHand->GetHandSide() != Side))
+	{
+		PreviewHand->DestroyComponent();
+		PreviewHand = nullptr;
+	}
+	if (!Source)
+	{
+		return;
+	}
+
+	if (!PreviewHand)
+	{
+		// A copy of the pawn's hand component, made the way the engine makes its editor sprites: owned
+		// by the actor, attached here, transient and flagged as a visualiser so it is never selected,
+		// saved or treated as one of the actor's real components.
+		PreviewHand = NewObject<UFXR_HandVisual>(GetOwner(), Source->GetClass(), NAME_None,
+			(GetFlags() & RF_Transactional) | RF_Transient | RF_TextExportTransient, const_cast<UFXR_HandVisual*>(Source));
+		PreviewHand->CreationMethod = CreationMethod;
+		PreviewHand->bIsEditorOnly = true;
+		PreviewHand->SetIsVisualizationComponent(true);
+		PreviewHand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PreviewHand->SetCastShadow(false);
+
+		// World-space, so an object scaled in its Blueprint doesn't shrink or stretch the hand, the
+		// same as in game where the hand keeps its own size whatever it holds.
+		PreviewHand->SetUsingAbsoluteLocation(true);
+		PreviewHand->SetUsingAbsoluteRotation(true);
+		PreviewHand->SetUsingAbsoluteScale(true);
+		PreviewHand->SetupAttachment(this);
+
+		// Drawn with the socket's ghost material, so it reads as a preview rather than a real hand and
+		// the object stays visible through it.
+		if (UMaterialInterface* Ghost = LoadObject<UMaterialInterface>(nullptr, TEXT("/FlexXR/Materials/M_FXR_Ghost.M_FXR_Ghost")))
+		{
+			for (int32 Slot = 0; Slot < PreviewHand->GetNumMaterials(); ++Slot)
+			{
+				PreviewHand->SetMaterial(Slot, Ghost);
+			}
+		}
+
+		// Posed before registering: the Anim BP is evaluated once as it registers, and would otherwise
+		// show an open hand until it next updates.
+		PreviewHand->ShowPose(HandPose);
+		PreviewHand->RegisterComponent();
+		PreviewHand->SetUpdateAnimationInEditor(true);
+	}
+
+	PreviewHand->ShowPose(HandPose);
+	PlacePreviewHand();
+}
+
+void UFXR_GripPoint::PlacePreviewHand() const
+{
+	// The hold lines this point up with the hand's grip, and the hand mesh sits at the pawn's grip
+	// offset from that. Rotation and position only; the scale stays the hand's own, which is how a
+	// mirrored left hand stays mirrored.
+	const FTransform Hand = PreviewHand->GetGripPoseOffset() * FTransform(GetComponentQuat(), GetComponentLocation());
+	PreviewHand->SetWorldLocationAndRotation(Hand.GetLocation(), Hand.GetRotation());
+}
+
+void UFXR_GripPoint::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Handedness picks the hand, Hand Pose shapes it, Preview Hand turns it on or off.
+	RefreshPreviewHand();
+}
+#endif
 
 FVector UFXR_GripPoint::GetClosestPointTo(const FVector& WorldLocation) const
 {

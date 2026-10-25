@@ -405,6 +405,10 @@ def build_ghost():
         fails.append('ghost->EmissiveColor')
     if not mel.connect_material_property(opacity, '', unreal.MaterialProperty.MP_OPACITY):
         fails.append('ghost->Opacity')
+
+    # FXR_GripPoint's editor hand preview draws a skeletal mesh with it. Set here rather than left to
+    # the editor, which would flag it on first use and leave the material unsaved.
+    mat.set_editor_property('used_with_skeletal_mesh', True)
     finish(mat, full)
 
 

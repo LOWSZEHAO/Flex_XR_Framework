@@ -22,6 +22,8 @@ public class FXR_Interaction : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// The default game mode, for finding the pawn whose hands a grip point previews.
+			"EngineSettings"
 		});
 	}
 }

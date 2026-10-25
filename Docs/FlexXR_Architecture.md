@@ -269,6 +269,7 @@ one.
 - **Left/right at different positions -> add two GripPoints with hand filters** (rifle: right hand on pistol grip, left on foregrip). The scorer filters by hand side, so each hand only lands on its own point. **Both** = symmetric spots (mug handle); pose auto-mirrors for whichever hand arrives.
 - **Rail variant:** an axis extent - hands grab anywhere along a handrail/hose and slide.
 - Runtime scoring (distance + approach angle + side + priority) picks the best point; displayed hand blends into the authored pose over ~100 ms.
+- **Editor hand preview** (`Preview Hand`, on by default): a translucent copy of the pawn's own `FXR_HandVisual` for that side, placed at the pawn's grip offset from the point and posed fully gripped by its own Anim BP. Copying the pawn's hand rather than configuring a preview mesh means the preview cannot drift from what the headset shows. The pawn is `Hand Preview Pawn` in project settings, else the default game mode's pawn. Editor worlds only; nothing is created in game. This is an authoring aid, not the dropped ghost-hand guidance for trainees.
 
 **Presence is authoritative (ADR-007).** A GripPoint owned by an interactable => GripPoints are the **only** way hands attach - the mesh becomes invisible to grab detection. No GripPoint => the mesh's collision is the grab surface (**procedural grip**: fingers sphere-cast and curl until contact). There is deliberately no enum/checkbox for this on the interactable: presence of the asset is the switch, so the invalid state ("grip-points-only with no grip point") is unrepresentable. All grip configuration lives on FXR_GripPoint. Palm-push (contact drive) is unaffected - a GripPoint-only door can still be shoved with an open palm - and the rotational min-lever-arm guard stays for point-free latches.
 
@@ -873,6 +874,11 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   invisible point. A per-socket snap offset was the first idea; I went with the mesh's bounds centre
   instead because an offset has to be set by hand on every socket for every part with a bad pivot,
   and the centre needs no setup at all.
+- **Grip points preview the hand in the editor.** Placing a grip point was guesswork: you saw axes, not
+  where the hand would end up. Each point now shows a translucent copy of the pawn's hand at the grip
+  offset, posed by the pawn's Anim BP. It copies the pawn's `FXR_HandVisual` component rather than
+  taking a mesh and offset of its own, so there is nothing to keep in sync. `M_FXR_Ghost` is now
+  flagged for skeletal meshes so the hand can use it.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not

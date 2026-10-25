@@ -47,6 +47,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FlexXR|Hand")
 	float GetGrasp() const;
 
+	EFXR_HandSide GetHandSide() const { return HandSide; }
+
+	/** Where this mesh sits relative to the controller grip pose, and so relative to a grip point it holds. */
+	const FTransform& GetGripPoseOffset() const { return GripPoseOffset; }
+
+	/**
+	 * Hold a fixed pose instead of following a hand. Used for the hand a grip point previews in the
+	 * editor: fully gripped, the way it looks while holding, with the pose asset's curls if it has one.
+	 */
+	void ShowPose(const UFXR_HandPose* Pose);
+
 protected:
 	/** Which hand this mesh represents. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Hand")

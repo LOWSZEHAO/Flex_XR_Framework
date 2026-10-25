@@ -7,6 +7,7 @@
 #include "Types/FXR_HighlightTypes.h"
 #include "FXR_InteractionSettings.generated.h"
 
+class APawn;
 class UMaterialInterface;
 class UFXR_ScoringPolicy;
 
@@ -133,6 +134,14 @@ public:
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Highlight|Overlay", meta = (AllowedClasses = "/Script/Engine.MaterialInterface"))
 	TSoftObjectPtr<UMaterialInterface> OverlayMaterial;
+
+	/**
+	 * The pawn whose hands grip points preview in the editor. Its FXR_HandVisual components are
+	 * copied as they are, mesh, offset and Anim BP, so the preview matches what you will see in the
+	 * headset. Leave empty to use the default game mode's pawn.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Editor Preview")
+	TSoftClassPtr<APawn> HandPreviewPawn;
 
 	/** The style for a state, falling back to None when the map has no entry. */
 	EFXR_HighlightStyle GetStyleFor(EFXR_HighlightState State) const;
