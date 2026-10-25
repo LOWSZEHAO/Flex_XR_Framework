@@ -157,18 +157,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Turning", meta = (ClampMin = "1.0", EditCondition = "LeftHandTurn == EFXR_TurnMode::Smooth || RightHandTurn == EFXR_TurnMode::Smooth"))
 	float SmoothTurnRate = 90.f;
 
-	//~ Climbing - automatic wherever a FXR_ClimbHold exists; there is no switch to turn it on.
+	//~ Gravity
 	/**
-	 * Downward acceleration (cm/s^2) applied after letting go above the floor. Climbing is the only
-	 * thing in the rig that puts the player in the air, so this is the only place gravity applies -
-	 * walking off a ledge does not fall, by design.
+	 * Fall whenever there is no floor underneath: off a ledge with smooth move, and when play starts
+	 * above the floor (a Player Start sits at a character's capsule height, about 90 cm up, and lands
+	 * on the floor at once). Off, only letting go of a climb falls.
+	 *
+	 * The floor is looked for under the head, so in room scale leaning out over a drop counts as
+	 * stepping off it. It only ever moves you down, or up onto something within 10 cm.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Climbing", meta = (ClampMin = "0.0"))
-	float ClimbFallGravity = 980.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Gravity")
+	bool bGravity = true;
 
-	/** Terminal speed (cm/s) of that fall. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Climbing", meta = (ClampMin = "1.0"))
-	float MaxClimbFallSpeed = 1200.f;
+	/** Downward acceleration (cm/s^2) of a fall, including after letting go of a climb. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Gravity", meta = (ClampMin = "0.0"))
+	float FallGravity = 980.f;
+
+	/** Terminal speed (cm/s) of a fall. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FlexXR|Locomotion|Gravity", meta = (ClampMin = "1.0"))
+	float MaxFallSpeed = 1200.f;
 
 	//~ Comfort
 	/**
@@ -370,8 +377,14 @@ private:
 	 */
 	bool ProcessClimb(float DeltaTime);
 
-	/** Fall to the floor after letting go mid-climb. */
-	void ProcessClimbFall(float DeltaTime);
+	/** Fall to the floor: after letting go mid-climb, and with Gravity on, whenever there is none underneath. */
+	void ProcessFall(float DeltaTime);
+
+	/** Put the play space straight onto the floor below it, for the start of play. */
+	void SnapToGround();
+
+	/** The floor under Probe, looking from 10 cm above it to Below beneath, past anything the trace starts inside. */
+	bool TraceGround(const FVector& Probe, float Below, FHitResult& OutHit) const;
 
 	/** The hold this hand is on, or null. */
 	UFXR_ClimbHold* GetClimbHoldFor(EFXR_HandSide Side) const;
@@ -437,8 +450,8 @@ private:
 	FVector ClimbAnchor[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	bool bClimbing[2] = { false, false };
 	EFXR_HandSide ClimbDriver = EFXR_HandSide::Right;
-	bool bClimbFalling = false;
-	float ClimbFallSpeed = 0.f;
+	bool bFalling = false;
+	float FallSpeed = 0.f;
 
 	// Dash slides the play space instead of cutting, so it needs the endpoints held across frames.
 	FVector DashStartOrigin = FVector::ZeroVector;

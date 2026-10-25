@@ -63,3 +63,16 @@ surface. Walking off a ledge deliberately does not fall.
   Vaulting and jump-from-climb want a velocity model, and belong with the wider movement layer.
 - Climbing does not drive the comfort vignette. The motion is driven by the player's own arm at their own pace,
   which is the case vignettes are least needed for.
+
+## Amendment (2026-10-25) - general gravity
+The post-climb boundary above has been widened. Play started 92 cm in the air on any level with a standard
+Player Start (it sits at a character's capsule centre, while this rig's root is the floor), and smooth moving
+off a ledge left the player standing on nothing. Both are the same "hanging in mid-air" problem the fall was
+added to fix.
+
+`FXR_Locomotion` now has **Gravity**, on by default: the climb fall runs whenever there is no floor under the
+head, and play starts by landing on the floor below the spawn point. It is still only a fall. There is no step
+height beyond settling onto something within 10 cm, no slope limit and no collision response, so the reasoning
+above about not growing a movement layer by accident still holds; this is a deliberate, small step. The cost is
+the one the boundary was protecting against: in room scale, leaning out over a drop counts as stepping off it.
+Turning Gravity off restores the original behaviour.

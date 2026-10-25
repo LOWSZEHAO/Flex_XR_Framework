@@ -100,6 +100,14 @@ void UFXR_Locomotion::BeginPlay()
 			ReticleComponent->RegisterComponent();
 		}
 	}
+
+	// A Player Start sits where a character's capsule centre goes, about 90 cm up, while this rig's
+	// root is the floor of the play space. Landed straight away rather than dropped through the first
+	// half second of play.
+	if (bGravity)
+	{
+		SnapToGround();
+	}
 }
 
 void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -149,13 +157,17 @@ void UFXR_Locomotion::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	const bool bWasClimbing = bClimbing[0] || bClimbing[1];
 	const bool bClimbingNow = ProcessClimb(DeltaTime);
 
-	// Letting go of the last hold above the floor starts a fall - the one place the rig has gravity.
+	// Letting go of the last hold above the floor always falls. With Gravity on, so does anything else
+	// that leaves the player above the floor. Not mid-teleport, which owns the play space until it lands.
 	if (bWasClimbing && !bClimbingNow)
 	{
-		bClimbFalling = true;
-		ClimbFallSpeed = 0.f;
+		bFalling = true;
+		FallSpeed = 0.f;
 	}
-	ProcessClimbFall(DeltaTime);
+	if (!bClimbingNow && (Phase == ETeleportPhase::Idle || Phase == ETeleportPhase::Aiming))
+	{
+		ProcessFall(DeltaTime);
+	}
 
 	// Turning runs whenever the view isn't mid-transition. On hands the turn stick is absent, so this
 	// is a no-op and turning comes from teleport landing rotation instead.
@@ -448,68 +460,109 @@ bool UFXR_Locomotion::ProcessClimb(float DeltaTime)
 
 	// No vignette for climbing: the player is moving themselves with their own arm, which is
 	// comfortable. Vignette is only for smooth move and dash.
-	bClimbFalling = false;
-	ClimbFallSpeed = 0.f;
+	bFalling = false;
+	FallSpeed = 0.f;
 	return true;
 }
 
-void UFXR_Locomotion::ProcessClimbFall(float DeltaTime)
+void UFXR_Locomotion::ProcessFall(float DeltaTime)
 {
-	if (!bClimbFalling)
+	// A fall after a climb runs whatever the setting. Gravity also checks every other frame, which
+	// costs one trace.
+	if (!bFalling && !bGravity)
 	{
 		return;
 	}
+
+	TRACE_CPUPROFILER_EVENT_SCOPE(FXR_Locomotion_Fall);
 
 	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
 	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
 	const USceneComponent* HMD = LocOwner ? LocOwner->GetHMDComponent() : nullptr;
-	UWorld* World = GetWorld();
-	if (!Origin || !HMD || !World)
+	if (!Origin || !HMD)
 	{
-		bClimbFalling = false;
+		bFalling = false;
 		return;
 	}
 
-	ClimbFallSpeed = FMath::Min(ClimbFallSpeed + ClimbFallGravity * DeltaTime, MaxClimbFallSpeed);
-	const float Step = ClimbFallSpeed * DeltaTime;
+	const float Speed = FMath::Min(FallSpeed + FallGravity * DeltaTime, MaxFallSpeed);
+	const float Step = Speed * DeltaTime;
 
-	// Look for floor under the head rather than under the origin: after a climb the two can be far
-	// apart horizontally, and it is the player who has to land somewhere solid.
-	const FVector Probe(HMD->GetComponentLocation().X, HMD->GetComponentLocation().Y, Origin->GetComponentLocation().Z);
+	// Look for floor under the head rather than under the origin: after a climb, and anywhere in room
+	// scale, the two can be far apart horizontally, and it is the player who has to land somewhere solid.
+	const FVector OriginLocation = Origin->GetComponentLocation();
+	const FVector Probe(HMD->GetComponentLocation().X, HMD->GetComponentLocation().Y, OriginLocation.Z);
 
 	FHitResult Hit;
+	if (TraceGround(Probe, Step + 50.f, Hit) && (Probe.Z - Hit.Location.Z) <= Step)
+	{
+		// Standing on something, or about to be. Settled onto it, which also lifts the player onto
+		// anything up to 10 cm higher. Only written when it actually moves, since this runs every frame.
+		if (!FMath::IsNearlyEqual(OriginLocation.Z, Hit.Location.Z, 0.01))
+		{
+			Origin->SetWorldLocation(FVector(OriginLocation.X, OriginLocation.Y, Hit.Location.Z),
+				false, nullptr, ETeleportType::TeleportPhysics);
+		}
+		bFalling = false;
+		FallSpeed = 0.f;
+		return;
+	}
+
+	bFalling = true;
+	FallSpeed = Speed;
+	Origin->AddWorldOffset(FVector(0.f, 0.f, -Step), false, nullptr, ETeleportType::TeleportPhysics);
+}
+
+void UFXR_Locomotion::SnapToGround()
+{
+	const IFXR_LocomotionOwner* LocOwner = Cast<IFXR_LocomotionOwner>(GetOwner());
+	USceneComponent* Origin = LocOwner ? LocOwner->GetTrackingOriginComponent() : nullptr;
+	if (!Origin)
+	{
+		return;
+	}
+
+	// Under the origin, not the head: the headset may not be tracking yet on the first frame. Far
+	// enough for a Player Start; anything further below is left to an ordinary fall.
+	const FVector OriginLocation = Origin->GetComponentLocation();
+	FHitResult Hit;
+	if (TraceGround(OriginLocation, 300.f, Hit))
+	{
+		Origin->SetWorldLocation(FVector(OriginLocation.X, OriginLocation.Y, Hit.Location.Z),
+			false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+bool UFXR_Locomotion::TraceGround(const FVector& Probe, float Below, FHitResult& OutHit) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(GetOwner());
 	const FVector Start = Probe + FVector(0.f, 0.f, 10.f);
-	const FVector End = Probe - FVector(0.f, 0.f, Step + 50.f);
+	const FVector End = Probe - FVector(0.f, 0.f, Below);
 
 	// A trace that starts inside something reports it as a hit right at the start, facing up. That is
 	// not a floor, it is the player standing inside a collision hull, usually the oversized hull of
 	// whatever a ladder leans on. Taken as ground it ended the fall on the spot. So look past anything
 	// the trace starts in. A few passes cover overlapping hulls without looping on a broken level.
-	bool bGround = false;
 	for (int32 Pass = 0; Pass < 4; ++Pass)
 	{
-		bGround = World->LineTraceSingleByChannel(Hit, Start, End, TeleportTraceChannel, Params);
-		if (!bGround || !Hit.bStartPenetrating)
+		if (!World->LineTraceSingleByChannel(OutHit, Start, End, TeleportTraceChannel, Params))
 		{
-			break;
+			return false;
 		}
-		Params.AddIgnoredComponent(Hit.GetComponent());
-		bGround = false;
+		if (!OutHit.bStartPenetrating)
+		{
+			return true;
+		}
+		Params.AddIgnoredComponent(OutHit.GetComponent());
 	}
-
-	if (bGround && (Probe.Z - Hit.Location.Z) <= Step)
-	{
-		Origin->SetWorldLocation(
-			FVector(Origin->GetComponentLocation().X, Origin->GetComponentLocation().Y, Hit.Location.Z),
-			false, nullptr, ETeleportType::TeleportPhysics);
-		bClimbFalling = false;
-		ClimbFallSpeed = 0.f;
-		return;
-	}
-
-	Origin->AddWorldOffset(FVector(0.f, 0.f, -Step), false, nullptr, ETeleportType::TeleportPhysics);
+	return false;
 }
 
 void UFXR_Locomotion::ProcessTurn(float DeltaTime)

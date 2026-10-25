@@ -395,9 +395,10 @@ Fade Duration:           0.15 s            [EditCondition: Transition == Fade or
 Snap Angle:              30°               [EditCondition: either hand snaps]
 Smooth Turn Rate:        90 °/s            [EditCondition: either hand turns smoothly]
 
-── Climbing ─────────────────────────────────────────────────
-Climb Fall Gravity:      980 cm/s²
-Max Climb Fall Speed:    1200 cm/s
+── Gravity ──────────────────────────────────────────────────
+Gravity:                 ☑                 (off = only letting go of a climb falls)
+Fall Gravity:            980 cm/s²
+Max Fall Speed:          1200 cm/s
 
 ── Comfort ──────────────────────────────────────────────────
 Vignette:                Dynamic ▾         (Off / Dynamic / Always)
@@ -889,6 +890,12 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   inside the rock's oversized collision hull, and a line trace that starts inside a shape reports it as
   a hit at the start, facing up. The fall took that as ground and stopped on the spot, so letting go of
   both hands did nothing. The fall now looks past whatever the trace starts in.
+- **General gravity (ADR-009 amendment).** Every level with a standard Player Start began 92 cm in the
+  air, because a Player Start sits at a character's capsule centre and this rig's root is the floor.
+  `FXR_Locomotion` now has a Gravity setting, on by default: the climb fall runs whenever there is no
+  floor under the head, and play starts by landing on the floor below the spawn point. Still only a
+  fall, no step height or slopes. Climb Fall Gravity and Max Climb Fall Speed became Fall Gravity and
+  Max Fall Speed.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not
