@@ -456,65 +456,155 @@ void UFXR_Socket::GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) c
 
 	// Read from the class rather than spawning one: a real extinguisher would run its construction
 	// script, register interactables and start simulating, all to draw a translucent shape.
-	const FTransform RootToActor = CDO->GetRootComponent()
-		? CDO->GetRootComponent()->GetRelativeTransform()
-		: FTransform::Identity;
-
-	TArray<UStaticMeshComponent*> Native;
-	CDO->GetComponents<UStaticMeshComponent>(Native);
-	for (const UStaticMeshComponent* Mesh : Native)
+	// Every scene component template is flattened into actor space first, with its parent, so the
+	// pieces can then be placed against the mesh the grab will actually drive.
+	struct FTemplate
 	{
-		if (ShouldGhost(Mesh))
+		const USceneComponent* Component = nullptr;
+		FName Name;
+		FTransform ToActor = FTransform::Identity;
+		int32 Parent = INDEX_NONE;
+	};
+	TArray<FTemplate> Templates;
+
+	// Components declared in C++. Their attachment is already set on the templates.
+	TArray<USceneComponent*> Native;
+	CDO->GetComponents<USceneComponent>(Native);
+	for (const USceneComponent* Component : Native)
+	{
+		FTransform ToActor = Component->GetRelativeTransform();
+		for (const USceneComponent* Up = Component->GetAttachParent(); Up; Up = Up->GetAttachParent())
 		{
-			OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetRelativeTransform() });
+			ToActor = ToActor * Up->GetRelativeTransform();
 		}
+		Templates.Add({ Component, Component->GetFName(), ToActor, INDEX_NONE });
 	}
+	for (FTemplate& Template : Templates)
+	{
+		const USceneComponent* TemplateParent = Template.Component->GetAttachParent();
+		Template.Parent = Templates.IndexOfByPredicate([TemplateParent](const FTemplate& Other) { return Other.Component == TemplateParent; });
+	}
+	int32 RootIndex = Templates.IndexOfByPredicate([CDO](const FTemplate& Template) { return Template.Component == CDO->GetRootComponent(); });
 
 	// Blueprint-added components never exist on the CDO - they live in the construction script, and
-	// for most props that is where every mesh actually is. Walked from the roots so each one's
-	// transform accumulates down its attachment chain.
+	// for most props that is where every mesh actually is. Base classes first, so a node hung on an
+	// inherited component finds its parent already flattened.
+	TArray<const USimpleConstructionScript*, TInlineAllocator<4>> Scripts;
 	for (UClass* Current = Class; Current; Current = Current->GetSuperClass())
 	{
 		const UBlueprintGeneratedClass* Generated = Cast<UBlueprintGeneratedClass>(Current);
-		const USimpleConstructionScript* Script = Generated ? Generated->SimpleConstructionScript : nullptr;
-		if (!Script)
+		if (Generated && Generated->SimpleConstructionScript)
 		{
-			continue;
+			Scripts.Insert(Generated->SimpleConstructionScript, 0);
 		}
+	}
 
-		TArray<TPair<const USCS_Node*, FTransform>> Pending;
+	for (const USimpleConstructionScript* Script : Scripts)
+	{
+		TArray<TPair<const USCS_Node*, int32>> Pending;
 		for (const USCS_Node* Root : Script->GetRootNodes())
 		{
-			Pending.Add({ Root, FTransform::Identity });
-		}
-
-		while (Pending.Num() > 0)
-		{
-			const TPair<const USCS_Node*, FTransform> Entry = Pending.Pop();
-			const USCS_Node* Node = Entry.Key;
-			if (!Node)
+			if (!Root)
 			{
 				continue;
 			}
 
-			FTransform NodeToActor = Entry.Value;
-			if (const USceneComponent* Scene = Cast<USceneComponent>(Node->ComponentTemplate))
+			// A root node hangs off an inherited component when it names one, otherwise off the
+			// actor's root if there already is one.
+			const FName ParentName = Root->ParentComponentOrVariableName;
+			const int32 Parent = ParentName.IsNone() ? RootIndex
+				: Templates.IndexOfByPredicate([ParentName](const FTemplate& Template) { return Template.Name == ParentName; });
+			Pending.Add({ Root, Parent });
+		}
+
+		while (Pending.Num() > 0)
+		{
+			const TPair<const USCS_Node*, int32> Entry = Pending.Pop();
+			const USCS_Node* Node = Entry.Key;
+			const USceneComponent* Scene = Node ? Cast<USceneComponent>(Node->ComponentTemplate) : nullptr;
+			if (!Scene)
 			{
-				NodeToActor = Scene->GetRelativeTransform() * Entry.Value;
+				continue;
 			}
 
-			if (const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Node->ComponentTemplate))
+			const FTransform ParentToActor = Templates.IsValidIndex(Entry.Value) ? Templates[Entry.Value].ToActor : FTransform::Identity;
+			const int32 Index = Templates.Add({ Scene, Node->GetVariableName(), Scene->GetRelativeTransform() * ParentToActor, Entry.Value });
+
+			// With no native root, the first node to arrive becomes the actor's root.
+			if (RootIndex == INDEX_NONE && Entry.Value == INDEX_NONE)
 			{
-				if (ShouldGhost(Mesh))
-				{
-					OutParts.Add({ Mesh->GetStaticMesh(), NodeToActor });
-				}
+				RootIndex = Index;
 			}
 
 			for (const USCS_Node* Child : Node->GetChildNodes())
 			{
-				Pending.Add({ Child, NodeToActor });
+				Pending.Add({ Child, Index });
 			}
+		}
+	}
+
+	// The seat puts the mesh the grab drives on the socket, so the ghost has to be built around that
+	// same mesh, found the way the grab finds it. Built around the actor root instead, a mesh sitting
+	// off the root (a part under a DefaultSceneRoot) ghosts in one place and seats in another.
+	// A class with no FXR_Grab has nothing to seat, and keeps the actor's own frame.
+	int32 Driven = INDEX_NONE;
+	const int32 GrabIndex = Templates.IndexOfByPredicate([](const FTemplate& Template) { return Template.Component->IsA<UFXR_Grab>(); });
+	if (GrabIndex != INDEX_NONE)
+	{
+		const int32 GrabParent = Templates[GrabIndex].Parent;
+		if (Templates.IsValidIndex(GrabParent) && Templates[GrabParent].Component->IsA<UPrimitiveComponent>())
+		{
+			Driven = GrabParent;
+		}
+		else if (Templates.IsValidIndex(RootIndex) && Templates[RootIndex].Component->IsA<UPrimitiveComponent>())
+		{
+			Driven = RootIndex;
+		}
+		else
+		{
+			// Same fallback as the grab: a simulating primitive, else the first primitive at all.
+			for (int32 Index = 0; Index < Templates.Num(); ++Index)
+			{
+				const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Templates[Index].Component);
+				if (!Primitive)
+				{
+					continue;
+				}
+				if (Driven == INDEX_NONE)
+				{
+					Driven = Index;
+				}
+				if (Primitive->BodyInstance.bSimulatePhysics)
+				{
+					Driven = Index;
+					break;
+				}
+			}
+		}
+	}
+
+	// Relative to the driven mesh's position and facing but not its scale. There is no object to
+	// take a scale from here, so each piece keeps the size it was authored at.
+	FTransform Frame = Templates.IsValidIndex(Driven) ? Templates[Driven].ToActor : FTransform::Identity;
+	Frame.SetScale3D(FVector::OneVector);
+
+	for (int32 Index = 0; Index < Templates.Num(); ++Index)
+	{
+		const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Templates[Index].Component);
+		if (!ShouldGhost(Mesh))
+		{
+			continue;
+		}
+
+		// Only what travels with the hold, the same rule the live preview uses.
+		bool bTravels = (Driven == INDEX_NONE);
+		for (int32 Up = Index; Up != INDEX_NONE && !bTravels; Up = Templates[Up].Parent)
+		{
+			bTravels = (Up == Driven);
+		}
+		if (bTravels)
+		{
+			OutParts.Add({ Mesh->GetStaticMesh(), Templates[Index].ToActor.GetRelativeTransform(Frame) });
 		}
 	}
 }
@@ -617,7 +707,7 @@ void UFXR_Socket::RefreshGhost()
 	{
 		UStaticMeshComponent* Part = GhostParts[Index];
 		Part->SetStaticMesh(Parts[Index].Mesh);
-		Part->SetWorldTransform(Parts[Index].RelativeToRoot * Seat);
+		Part->SetWorldTransform(Parts[Index].RelativeToHeld * Seat);
 		if (GhostMID)
 		{
 			for (int32 Slot = 0; Slot < Part->GetNumMaterials(); ++Slot)

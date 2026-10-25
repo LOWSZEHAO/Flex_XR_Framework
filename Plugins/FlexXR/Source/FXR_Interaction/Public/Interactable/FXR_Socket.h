@@ -177,11 +177,11 @@ private:
 	void RefreshTickState();
 	void ApplyGhostAlpha();
 
-	/** One drawable piece of a ghost: a mesh and where it sits relative to the object's root. */
+	/** One drawable piece of a ghost: a mesh and where it sits relative to the mesh the grab drives. */
 	struct FGhostPart
 	{
 		UStaticMesh* Mesh = nullptr;
-		FTransform RelativeToRoot = FTransform::Identity;
+		FTransform RelativeToHeld = FTransform::Identity;
 	};
 
 	/** Decide what the preview should be showing right now, and start it fading there. */
@@ -193,7 +193,10 @@ private:
 	/** Pieces of a live actor - exact, including anything a construction script built. */
 	void GatherFromActor(const UFXR_Grab* Object, TArray<FGhostPart>& OutParts) const;
 
-	/** Pieces of a class, read from its component templates rather than by spawning one. */
+	/**
+	 * Pieces of a class, read from its component templates rather than by spawning one. Framed on the
+	 * mesh its FXR_Grab would drive, so the ghost lands where the seat puts the object.
+	 */
 	void GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) const;
 
 	/** Whether a mesh belongs in the preview at all. */

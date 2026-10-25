@@ -862,6 +862,11 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   simulating bodies, which missed anything a socket or the distance-grab flight had already parked; those
   bodies were never driven by the next hold and never restored on release. A distance grab also no longer
   overwrites the physics state a socket handed over.
+- **A ghost read from a class is framed on the driven mesh.** With nothing carried (Always mode, or the
+  editor preview from Ghost Actor) the ghost was built around the actor root, while the seat puts the
+  mesh the grab drives on the socket. A part whose mesh sits off its DefaultSceneRoot ghosted in one
+  place and seated in another. The class read now finds the driven mesh the way the grab does and
+  keeps only what travels with it, the same rules as the live preview.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not
