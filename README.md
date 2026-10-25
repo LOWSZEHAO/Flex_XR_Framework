@@ -145,8 +145,14 @@ cd Flex_XR_Framework
 git lfs pull
 ```
 
+Clone it somewhere with a short path (e.g. `C:\Dev\`). The build's intermediate files go a few
+folders deep and a long path can hit Windows' 260 character limit. Use `git clone` with Git LFS
+installed; the assets are stored in LFS and a plain ZIP download may only contain placeholders.
+
 Right-click `FlexXR.uproject` -> Generate Visual Studio project files, open the solution and build
-`Development Editor`. Automation tests are under `FlexXR.*` in the Session Frontend.
+`Development Editor` (or just open the `.uproject` and let it compile the modules). The test level
+is `FlexXR_Development`; the training example is `Content/TrainingExample/L_TrainingExample`.
+Automation tests are under `FlexXR.*` in the Session Frontend.
 
 ---
 
