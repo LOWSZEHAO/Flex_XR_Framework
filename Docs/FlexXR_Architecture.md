@@ -185,6 +185,7 @@ Snap zones - **pairs with FXR_Grab**: grab object -> carry near socket -> **ghos
 - Options: accepted-object tag filter, required orientation alignment (plug must face the right way), lock-in (explicit release action to remove).
 - Events: `OnHoverStart/End`, `OnSocketed`, `OnRemoved`, and seating emits the socket's `InteractionId` ("docked extinguisher on wall mount" is a validatable SOP step).
 - **The socket's own transform is the seat pose** - place the component where the object's origin should end up and point it the way the object should face. No separate offset to author, and the alignment check reads against the same facing.
+- **Snapping is measured from the object's centre**, not its pivot: the distance from the centre of its driven mesh to where that centre sits once seated. Kit parts often have their pivot far off the mesh, and a pivot 25 cm away turns every degree of twist in the hand into distance. The debug zone is drawn around that seated centre (the ghost's, with nothing carried), and the seat slide moves the centre in a straight line while turning about it. No per-socket offset to author.
 - Filtering is by **actor tag**, not gameplay tags: a mount needs a short list of names, and pulling in the GameplayTags module for that would widen `FXR_Interaction`'s dependencies for no gain.
 - **Nearest accepting socket wins**, so two mounts side by side resolve to the one being reached toward. The pass is driven by the interaction driver alongside the poke pass, so sockets never tick per object.
 - **A seated object is attached to the socket**, so a socket on something that moves keeps it (a magazine in a held gun, a part on a swinging door). The seat slide runs in the socket's space, so it tracks a mount that moves mid-slide. Once settled on a movable mesh it is **welded** into that mesh's body, so dropping the gun drops both as one rigid body instead of the seated part shoving the falling gun from the inside. A static mount only attaches. A hand taking the object detaches and unwelds it before the hold moves it.
@@ -867,6 +868,11 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   mesh the grab drives on the socket. A part whose mesh sits off its DefaultSceneRoot ghosted in one
   place and seated in another. The class read now finds the driven mesh the way the grab does and
   keeps only what travels with it, the same rules as the live preview.
+- **Snap by the centre, not the pivot.** Found on the same gun: the handguard's pivot sits 25 cm off
+  the mesh, so the snap zone was drawn at the back of the receiver and the trigger hung on that
+  invisible point. A per-socket snap offset was the first idea; I went with the mesh's bounds centre
+  instead because an offset has to be set by hand on every socket for every part with a bad pivot,
+  and the centre needs no setup at all.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not

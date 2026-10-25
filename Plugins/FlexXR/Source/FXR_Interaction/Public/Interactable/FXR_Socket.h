@@ -101,7 +101,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket")
 	TArray<FName> AcceptedTags;
 
-	/** How close the object has to be before this socket offers to take it. */
+	/**
+	 * How close the object has to be before this socket offers to take it. Measured from the object's
+	 * centre to where that centre sits once seated, not from its pivot, so a mesh whose pivot is off
+	 * to one side still snaps by where the part actually is.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Socket", meta = (ClampMin = "1.0", Units = "cm"))
 	float SocketRadius = 15.f;
 
@@ -173,6 +177,12 @@ private:
 	/** The object has arrived: weld it to the mesh the socket is on, if that mesh can move. */
 	void FinishSeat(UFXR_Grab* Object);
 
+	/** Centre of the object's driven mesh in its own space. Snapping is measured from here, not the pivot. */
+	static FVector GetCentreLocal(const UFXR_Grab* Object);
+
+	/** Where the snap zone is drawn: around the centre of whatever will sit here. */
+	FVector GetZoneCentre() const;
+
 	/** Tick only while something is moving - an idle socket costs nothing. */
 	void RefreshTickState();
 	void ApplyGhostAlpha();
@@ -182,6 +192,7 @@ private:
 	{
 		UStaticMesh* Mesh = nullptr;
 		FTransform RelativeToHeld = FTransform::Identity;
+		bool bDriven = false;
 	};
 
 	/** Decide what the preview should be showing right now, and start it fading there. */
@@ -217,14 +228,20 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> GhostMID;
 
-	// Seat animation. The start is relative to the socket, so the slide follows a socket that moves.
+	// Seat animation. The start is relative to the socket, so the slide follows a socket that moves,
+	// and the object's centre is kept so the slide can run about it rather than about the pivot.
 	TWeakObjectPtr<UFXR_Grab> Seating;
 	FTransform SeatStart = FTransform::Identity;
+	FVector SeatCentre = FVector::ZeroVector;
 	float SeatElapsed = 0.f;
 	bool bSeating = false;
 
 	float GhostAlpha = 0.f;
 	float GhostTarget = 0.f;
+
+	// Centre of the ghost's driven mesh relative to the seat pose, so the zone can be drawn around
+	// the ghost while nothing is being carried.
+	FVector GhostCentre = FVector::ZeroVector;
 
 	// What the seated object's physics were before this socket parked it, handed back so a later
 	// grab can restore simulation on release.

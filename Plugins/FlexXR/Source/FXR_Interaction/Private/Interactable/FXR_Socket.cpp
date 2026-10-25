@@ -73,7 +73,11 @@ bool UFXR_Socket::CanAccept(const UFXR_Grab* Object, float& OutDistanceSq) const
 		}
 	}
 
-	const float DistanceSq = FVector::DistSquared(Driven->GetComponentLocation(), GetComponentLocation());
+	// Between the object's centre and where that centre ends up once seated, not between pivots. A
+	// pivot well off the mesh turns every degree of twist in the hand into distance, and the snap
+	// would hang on an invisible point instead of the part you are holding.
+	const FVector Seated = GetSeatTransform(Object).TransformPosition(GetCentreLocal(Object));
+	const float DistanceSq = FVector::DistSquared(Driven->Bounds.Origin, Seated);
 	if (DistanceSq > FMath::Square(SocketRadius))
 	{
 		return false;
@@ -152,6 +156,7 @@ void UFXR_Socket::Seat(UFXR_Grab* Object)
 	// Eased into place rather than teleported: the seat pose is where it lands, not how it gets there.
 	// The start is kept relative to the socket, so the slide rides along if the socket is moving.
 	SeatStart = Object->GetHeldTransform().GetRelativeTransform(FTransform(GetComponentQuat(), GetComponentLocation()));
+	SeatCentre = GetCentreLocal(Object);
 	SeatElapsed = 0.f;
 	bSeating = SeatDuration > KINDA_SMALL_NUMBER;
 	if (!bSeating)
@@ -248,6 +253,25 @@ void UFXR_Socket::Eject()
 }
 
 
+FVector UFXR_Socket::GetCentreLocal(const UFXR_Grab* Object)
+{
+	// The driven mesh's own bounds, which the engine keeps current as it moves, so reading this every
+	// frame costs nothing. Parts from a modular kit often have their pivot well off the mesh; the
+	// centre is where the part visibly is.
+	const UPrimitiveComponent* Driven = Object ? Object->GetDrivenComponent() : nullptr;
+	return Driven ? Driven->GetComponentTransform().InverseTransformPosition(Driven->Bounds.Origin) : FVector::ZeroVector;
+}
+
+FVector UFXR_Socket::GetZoneCentre() const
+{
+	// Whatever is seated or on its way in, else the ghost, else the socket itself.
+	if (const UFXR_Grab* Object = Socketed.IsValid() ? Socketed.Get() : Preview.Get())
+	{
+		return GetSeatTransform(Object).TransformPosition(GetCentreLocal(Object));
+	}
+	return FTransform(GetComponentQuat(), GetComponentLocation()).TransformPosition(GhostCentre);
+}
+
 FTransform UFXR_Socket::GetSeatTransform(const UFXR_Grab* Object) const
 {
 	FTransform Seat = GetComponentTransform();
@@ -279,12 +303,16 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 
 			// Eased so it settles into the mount instead of arriving at full speed. Blended in the
 			// socket's space and placed against where the socket is now, so a moving mount doesn't
-			// leave the object sliding toward the spot it used to be.
-			const FTransform Seat(GetComponentQuat(), GetComponentLocation());
-			const FTransform SeatLocal(FQuat::Identity, FVector::ZeroVector, SeatStart.GetScale3D());
-			FTransform Current;
-			Current.Blend(SeatStart, SeatLocal, FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f));
-			Object->SetHeldTransform(Current * Seat);
+			// leave the object sliding toward the spot it used to be. The centre travels in a straight
+			// line and the rotation turns about it, so a part whose pivot sits off to one side slides
+			// in rather than swinging round that point.
+			const float Ease = FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f);
+			const FVector Scale = SeatStart.GetScale3D();
+			const FVector StartCentre = SeatStart.TransformPosition(SeatCentre);
+			const FVector EndCentre = SeatCentre * Scale;
+			FTransform Current(FQuat::Slerp(SeatStart.GetRotation(), FQuat::Identity, Ease), FVector::ZeroVector, Scale);
+			Current.SetTranslation(FMath::Lerp(StartCentre, EndCentre, Ease) - Current.TransformVector(SeatCentre));
+			Object->SetHeldTransform(Current * FTransform(GetComponentQuat(), GetComponentLocation()));
 
 			if (Alpha >= 1.f)
 			{
@@ -381,7 +409,9 @@ void UFXR_Socket::DrawInteractionDebug() const
 	const FColor Color = Socketed.IsValid() ? FColor::Green
 		: (IsInteractionEnabled() ? FColor::Orange : FColor::Red);
 
-	const FVector Origin = GetComponentLocation();
+	// Drawn around where the part will sit rather than at the socket, which is only where its pivot
+	// lands. That is the zone you actually have to bring the part into.
+	const FVector Origin = GetZoneCentre();
 	DrawDebugSphere(World, Origin, SocketRadius, 16, Color, false, -1.f, SDPG_World, 0.5f);
 
 	// The seat facing, so a socket that requires alignment can be aimed by eye rather than by trial.
@@ -442,7 +472,8 @@ void UFXR_Socket::GatherFromActor(const UFXR_Grab* Object, TArray<FGhostPart>& O
 		{
 			continue;
 		}
-		OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetComponentTransform().GetRelativeTransform(HeldFrame) });
+		OutParts.Add({ Mesh->GetStaticMesh(), Mesh->GetComponentTransform().GetRelativeTransform(HeldFrame),
+			Mesh == Object->GetDrivenComponent() });
 	}
 }
 
@@ -604,7 +635,7 @@ void UFXR_Socket::GatherFromClass(UClass* Class, TArray<FGhostPart>& OutParts) c
 		}
 		if (bTravels)
 		{
-			OutParts.Add({ Mesh->GetStaticMesh(), Templates[Index].ToActor.GetRelativeTransform(Frame) });
+			OutParts.Add({ Mesh->GetStaticMesh(), Templates[Index].ToActor.GetRelativeTransform(Frame), Index == Driven });
 		}
 	}
 }
@@ -702,12 +733,22 @@ void UFXR_Socket::RefreshGhost()
 	// The seat pose the object will actually take, with each piece placed relative to it exactly as
 	// it sits on the real thing.
 	const FTransform Seat = GetSeatTransform(Approaching);
+	const FTransform SocketFrame(GetComponentQuat(), GetComponentLocation());
+	GhostCentre = FVector::ZeroVector;
 
 	for (int32 Index = 0; Index < Parts.Num(); ++Index)
 	{
 		UStaticMeshComponent* Part = GhostParts[Index];
 		Part->SetStaticMesh(Parts[Index].Mesh);
 		Part->SetWorldTransform(Parts[Index].RelativeToHeld * Seat);
+
+		// Remembered against the socket so the zone can be drawn around the ghost when nothing is
+		// being carried to measure instead.
+		if (Parts[Index].bDriven && Parts[Index].Mesh)
+		{
+			GhostCentre = SocketFrame.InverseTransformPosition(
+				Part->GetComponentTransform().TransformPosition(Parts[Index].Mesh->GetBounds().Origin));
+		}
 		if (GhostMID)
 		{
 			for (int32 Slot = 0; Slot < Part->GetNumMaterials(); ++Slot)
