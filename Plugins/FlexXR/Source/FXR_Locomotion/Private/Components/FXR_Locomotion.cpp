@@ -480,8 +480,24 @@ void UFXR_Locomotion::ProcessClimbFall(float DeltaTime)
 	FHitResult Hit;
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(GetOwner());
-	const bool bGround = World->LineTraceSingleByChannel(
-		Hit, Probe + FVector(0.f, 0.f, 10.f), Probe - FVector(0.f, 0.f, Step + 50.f), TeleportTraceChannel, Params);
+	const FVector Start = Probe + FVector(0.f, 0.f, 10.f);
+	const FVector End = Probe - FVector(0.f, 0.f, Step + 50.f);
+
+	// A trace that starts inside something reports it as a hit right at the start, facing up. That is
+	// not a floor, it is the player standing inside a collision hull, usually the oversized hull of
+	// whatever a ladder leans on. Taken as ground it ended the fall on the spot. So look past anything
+	// the trace starts in. A few passes cover overlapping hulls without looping on a broken level.
+	bool bGround = false;
+	for (int32 Pass = 0; Pass < 4; ++Pass)
+	{
+		bGround = World->LineTraceSingleByChannel(Hit, Start, End, TeleportTraceChannel, Params);
+		if (!bGround || !Hit.bStartPenetrating)
+		{
+			break;
+		}
+		Params.AddIgnoredComponent(Hit.GetComponent());
+		bGround = false;
+	}
 
 	if (bGround && (Probe.Z - Hit.Location.Z) <= Step)
 	{

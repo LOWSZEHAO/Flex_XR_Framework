@@ -885,6 +885,10 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   mesh, so moving a climb hold up a ladder moved nothing: the debug sphere and the grab check both stayed
   at the ladder's base. `GetInteractionLocation` is now virtual and the climb hold returns its own
   position. The base keeps the mesh, because a latch's own transform is its hinge.
+- **Falling ignores geometry you are already inside.** A ladder leaning on a rock put the climber's feet
+  inside the rock's oversized collision hull, and a line trace that starts inside a shape reports it as
+  a hit at the start, facing up. The fall took that as ground and stopped on the spot, so letting go of
+  both hands did nothing. The fall now looks past whatever the trace starts in.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not

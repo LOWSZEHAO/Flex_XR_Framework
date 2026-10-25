@@ -84,6 +84,11 @@ it never simulated, and the object never falls again after release. This bit me 
 parents only, so attaching to a plain scene component (a socket) attaches but silently never welds.
 Attach to the nearest mesh above it instead.
 
+**A line trace that starts inside a shape hits it at the start**, with `bStartPenetrating` set and
+the normal pointing straight up, so it looks exactly like a floor. `bFindInitialOverlaps = false`
+does not help: it only applies to sweeps. Check `bStartPenetrating` and retrace with that component
+ignored.
+
 **Don't move a welded component directly.** Setting its transform rebuilds the weld (unweld and weld
 again) on every call. A welded child moved by its parent is free. So weld after anything stops driving
 it, and detach before anything starts.
