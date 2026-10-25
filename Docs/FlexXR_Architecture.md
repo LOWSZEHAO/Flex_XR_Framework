@@ -457,6 +457,8 @@ A ladder rung, ledge or pipe the player can pull themselves along. Subclasses `U
 grabbing it is ordinary detection with grip points and hand poses; it only marks the hold as climbable. The
 play space is moved by `FXR_Locomotion`, never from here - see ADR-009. Both hands may hold it, and
 hand-over-hand across separate holds works because each grab re-anchors. Letting go above the floor falls.
+Without grip points its reach is centred on the hold component itself, not on the mesh it sits on, so one
+ladder mesh can carry a hold per rung and moving a hold moves where you grab it.
 
 ---
 
@@ -879,6 +881,10 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
   offset, posed by the pawn's Anim BP. It copies the pawn's `FXR_HandVisual` component rather than
   taking a mesh and offset of its own, so there is nothing to keep in sync. `M_FXR_Ghost` is now
   flagged for skeletal meshes so the hand can use it.
+- **A climb hold's reach follows the hold.** Reach without grip points was always centred on the driven
+  mesh, so moving a climb hold up a ladder moved nothing: the debug sphere and the grab check both stayed
+  at the ladder's base. `GetInteractionLocation` is now virtual and the climb hold returns its own
+  position. The base keeps the mesh, because a latch's own transform is its hinge.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not

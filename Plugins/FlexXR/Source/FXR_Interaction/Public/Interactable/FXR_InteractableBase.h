@@ -85,8 +85,13 @@ public:
 	/** Whether thresholds, limits and live state are drawn on top of the basic shape. */
 	bool IsFullDebug() const { return DebugDraw == EFXR_DebugDraw::Full; }
 
-	/** World location used for narrow-phase scoring (the driven component, else this component). */
-	FVector GetInteractionLocation() const;
+	/**
+	 * Centre of this interactable's reach when it has no grip points: the debug sphere, the grab
+	 * check and the approach glow all measure from here. The driven mesh by default, because a
+	 * latch's own transform is its hinge, not its handle. Override when the component's own
+	 * position is the place to reach for, as a climb hold does.
+	 */
+	virtual FVector GetInteractionLocation() const;
 
 	/** Hand pose (finger shape) the given hand should form while this is held, or null. */
 	virtual UFXR_HandPose* GetActiveHandPose(EFXR_HandSide Side) const { return nullptr; }

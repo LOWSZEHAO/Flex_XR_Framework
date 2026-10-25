@@ -36,6 +36,12 @@ public:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
+	/**
+	 * Reach is centred on the hold itself rather than on the mesh it sits on, so moving the
+	 * component moves where you grab, and one mesh can carry several holds (a ladder's rungs).
+	 */
+	virtual FVector GetInteractionLocation() const override { return GetComponentLocation(); }
+
 	//~ Two hands are the point of a climb, so a second one always may join.
 	virtual bool CanBeginSecondary(IFXR_Interactor* Interactor) const override { return true; }
 	virtual void OnBegin(IFXR_Interactor* Interactor) override;
