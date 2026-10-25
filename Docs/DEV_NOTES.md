@@ -80,6 +80,14 @@ dependency gives you the headers and then fails to link.
 has to call `UFXR_Grab::NotifyParkedPhysics`. Otherwise the next grab reads the parked body, thinks
 it never simulated, and the object never falls again after release. This bit me twice.
 
+**Physics only welds to a mesh parent.** `WeldTo` looks for the root body by walking up primitive
+parents only, so attaching to a plain scene component (a socket) attaches but silently never welds.
+Attach to the nearest mesh above it instead.
+
+**Don't move a welded component directly.** Setting its transform rebuilds the weld (unweld and weld
+again) on every call. A welded child moved by its parent is free. So weld after anything stops driving
+it, and detach before anything starts.
+
 **Grab never writes scale.** A grip point under a scaled mesh inherits its scale, and the relative
 transform maths would produce a unit-scale offset that overwrites the object's size.
 

@@ -24,6 +24,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFXR_SocketEvent, UFXR_Grab*, Object
  *
  * The socket's transform is the seat pose: place it where the object's origin should end up,
  * facing the way the object should face. A socket can't be grabbed itself.
+ *
+ * A seated object is attached to the socket, so a socket on something that moves keeps it: put a
+ * magazine in a gun you are holding and it goes where the gun goes. On a movable mesh it is also
+ * welded in once it settles, so dropping the gun drops both as one body.
  */
 UCLASS(ClassGroup = (FlexXR), meta = (BlueprintSpawnableComponent))
 class FXR_INTERACTION_API UFXR_Socket : public UFXR_InteractableBase
@@ -166,6 +170,9 @@ private:
 	/** Seat pose for an object: the socket's position and facing, but the object's own scale. */
 	FTransform GetSeatTransform(const UFXR_Grab* Object) const;
 
+	/** The object has arrived: weld it to the mesh the socket is on, if that mesh can move. */
+	void FinishSeat(UFXR_Grab* Object);
+
 	/** Tick only while something is moving - an idle socket costs nothing. */
 	void RefreshTickState();
 	void ApplyGhostAlpha();
@@ -207,10 +214,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> GhostMID;
 
-	// Seat animation.
+	// Seat animation. The start is relative to the socket, so the slide follows a socket that moves.
 	TWeakObjectPtr<UFXR_Grab> Seating;
 	FTransform SeatStart = FTransform::Identity;
-	FTransform SeatTarget = FTransform::Identity;
 	float SeatElapsed = 0.f;
 	bool bSeating = false;
 

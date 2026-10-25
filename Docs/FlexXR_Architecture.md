@@ -187,6 +187,7 @@ Snap zones - **pairs with FXR_Grab**: grab object -> carry near socket -> **ghos
 - **The socket's own transform is the seat pose** - place the component where the object's origin should end up and point it the way the object should face. No separate offset to author, and the alignment check reads against the same facing.
 - Filtering is by **actor tag**, not gameplay tags: a mount needs a short list of names, and pulling in the GameplayTags module for that would widen `FXR_Interaction`'s dependencies for no gain.
 - **Nearest accepting socket wins**, so two mounts side by side resolve to the one being reached toward. The pass is driven by the interaction driver alongside the poke pass, so sockets never tick per object.
+- **A seated object is attached to the socket**, so a socket on something that moves keeps it (a magazine in a held gun, a part on a swinging door). The seat slide runs in the socket's space, so it tracks a mount that moves mid-slide. Once settled on a movable mesh it is **welded** into that mesh's body, so dropping the gun drops both as one rigid body instead of the seated part shoving the falling gun from the inside. A static mount only attaches. A hand taking the object detaches and unwelds it before the hold moves it.
 - Object-side events (the object learning it was docked, whichever socket took it) are deliberately not on `FXR_Grab` yet: they would grow the most-used component's panel for a case most objects never use. Bind the socket.
 
 
@@ -844,6 +845,23 @@ Later ADRs (005 to 011) cover locomotion, grip points, climbing, the extension s
 ---
 
 ## Changelog
+
+**v0.23 - Sockets on moving objects**
+- **Seating attaches.** A socket used to slide the object to a seat pose captured once and then stop
+  ticking, so a socket on anything that moved left its object hanging in the air. Found building the
+  gun demo: a magazine pushed into a held gun stayed where it was seated. The spec above always said
+  "attaches to socket"; the code now does.
+- **Welded on movable mounts, once settled.** Attached but not welded, the seated part is a separate
+  kinematic body teleported along with its mount, and a mount that falls collides with it. Welding
+  happens after the slide, not during it: moving a welded component directly rebuilds the weld on every
+  call, while a welded child moved by its parent costs nothing.
+- **`UFXR_Grab::AttachHeld` / `DetachHeld`.** The grab owns the attachment, so it can let go the moment
+  a hold or a distance grab begins, before anything moves the object. It records where each part hung
+  before and puts it back.
+- **Parking keeps what is already parked.** `ParkPhysics` used to clear its list and rescan for
+  simulating bodies, which missed anything a socket or the distance-grab flight had already parked; those
+  bodies were never driven by the next hold and never restored on release. A distance grab also no longer
+  overwrites the physics state a socket handed over.
 
 **v0.22 - Exam Only events (ADR-011, decision 4)**
 - **A GM event can be marked Exam Only**, and Training never fires it. Auto Start In Exam alone could not

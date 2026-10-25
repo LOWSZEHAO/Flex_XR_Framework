@@ -87,6 +87,15 @@ public:
 	void ParkPhysics();
 	void RestorePhysics();
 
+	/**
+	 * Let Parent carry the object by attachment until DetachHeld, or until a hand picks it up. This
+	 * is how a socket on something that moves keeps its object, like a magazine in a gun you are
+	 * holding. With bWeld the object's collision becomes part of Parent's body, so if Parent is
+	 * dropped they fall as one. Park physics first.
+	 */
+	void AttachHeld(USceneComponent* Parent, FName SocketName, bool bWeld);
+	void DetachHeld();
+
 	/** World transform of whatever this hold moves - the actor, or just the driven mesh. */
 	FTransform GetHeldTransform() const;
 
@@ -218,6 +227,18 @@ private:
 	 * behind - it has to be driven explicitly, which the solver does for everything else anyway.
 	 */
 	void PlaceParkedBodies(const FTransform& HeldFrame);
+
+	/** A part AttachHeld hung on something, and where it hung before, so detaching puts it back. */
+	struct FCarriedPart
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Part;
+		TWeakObjectPtr<USceneComponent> HomeParent;
+		FName HomeSocket;
+	};
+
+	// The driven mesh first, then any parked bodies riding on it. Empty when nothing carries the object.
+	TArray<FCarriedPart> CarriedParts;
+
 	TWeakObjectPtr<UPrimitiveComponent> HeldComponent;
 	TWeakObjectPtr<UFXR_HandPose> ActiveHandPose;
 

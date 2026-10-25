@@ -18,6 +18,10 @@ void UFXR_Grab::OnBegin(IFXR_Interactor* Interactor)
 
 	PrimaryInteractor = Interactor;
 
+	// A hand moves the object freely, so whatever was carrying it lets go first. That also unwelds
+	// it, before the hold starts moving it.
+	DetachHeld();
+
 	UPrimitiveComponent* Driven = ResolveDrivenComponent();
 	HeldComponent = Driven;
 	if (Driven)
@@ -499,11 +503,16 @@ void UFXR_Grab::BeginDistanceGrab(IFXR_Interactor* Interactor)
 
 	PrimaryInteractor = Interactor;
 	HeldComponent = Driven;
+	DetachHeld();
 
 	// Captured before the body is disabled, so release still restores simulation. OnBegin honours
-	// this on arrival rather than re-reading an already-kinematic body.
-	bRestorePhysics = Driven->IsSimulatingPhysics();
-	bPhysicsCaptured = true;
+	// this on arrival rather than re-reading an already-kinematic body. Skipped when a socket has
+	// already handed over what the body was doing before it parked it.
+	if (!bPhysicsCaptured)
+	{
+		bRestorePhysics = Driven->IsSimulatingPhysics();
+		bPhysicsCaptured = true;
+	}
 	ParkPhysics();
 
 	bFlying = true;
@@ -630,8 +639,6 @@ bool UFXR_Grab::MovesComponent(const USceneComponent* Component) const
 
 void UFXR_Grab::ParkPhysics()
 {
-	ParkedBodies.Reset();
-
 	const AActor* Owner = GetOwner();
 	if (!Owner)
 	{
@@ -639,6 +646,15 @@ void UFXR_Grab::ParkPhysics()
 	}
 
 	const FTransform HeldFrame = GetHeldTransform();
+
+	// Bodies that are already parked stay on the list. They no longer simulate, so the scan below
+	// would miss them, and a part parked by a socket or by the distance-grab flight would be left
+	// behind by the hold that takes over and never restored.
+	ParkedBodies.RemoveAll([](const FParkedBody& Parked) { return !Parked.Body.IsValid(); });
+	for (FParkedBody& Parked : ParkedBodies)
+	{
+		Parked.RelativeToHeld = Parked.Body->GetComponentTransform().GetRelativeTransform(HeldFrame);
+	}
 
 	TArray<UPrimitiveComponent*> Primitives;
 	Owner->GetComponents<UPrimitiveComponent>(Primitives);
@@ -670,6 +686,76 @@ void UFXR_Grab::RestorePhysics()
 		}
 	}
 	ParkedBodies.Reset();
+}
+
+void UFXR_Grab::AttachHeld(USceneComponent* Parent, FName SocketName, bool bWeld)
+{
+	UPrimitiveComponent* Driven = HeldComponent.IsValid() ? HeldComponent.Get() : ResolveDrivenComponent();
+	if (!Driven || !Parent)
+	{
+		return;
+	}
+
+	// Home is only recorded once. A socket attaches on arrival and again to weld once the object has
+	// settled, and the second call must not record the socket as home.
+	if (CarriedParts.IsEmpty())
+	{
+		CarriedParts.Add({ Driven, Driven->GetAttachParent(), Driven->GetAttachSocketName() });
+		for (const FParkedBody& Parked : ParkedBodies)
+		{
+			UPrimitiveComponent* Body = Parked.Body.Get();
+			if (Body && Body != Driven)
+			{
+				CarriedParts.Add({ Body, Body->GetAttachParent(), Body->GetAttachSocketName() });
+			}
+		}
+	}
+
+	for (int32 Index = 0; Index < CarriedParts.Num(); ++Index)
+	{
+		UPrimitiveComponent* Part = CarriedParts[Index].Part.Get();
+		if (!Part)
+		{
+			continue;
+		}
+
+		// The driven mesh hangs on the parent. A parked body stopped following attachment when it
+		// first simulated, so it rides on the driven mesh rather than trusting its old link.
+		USceneComponent* Onto = (Index == 0) ? Parent : Driven;
+		const FName OntoSocket = (Index == 0) ? SocketName : NAME_None;
+		if (bWeld)
+		{
+			// Welding to a parent that is kinematic right now (a gun in your hand) is what I want:
+			// the collision is already part of its body by the time it gets dropped.
+			Part->WeldTo(Onto, OntoSocket, true);
+		}
+		else
+		{
+			Part->AttachToComponent(Onto, FAttachmentTransformRules::KeepWorldTransform, OntoSocket);
+		}
+	}
+}
+
+void UFXR_Grab::DetachHeld()
+{
+	// Riders before the driven mesh, so nothing is left welded through a body that has already gone.
+	for (int32 Index = CarriedParts.Num() - 1; Index >= 0; --Index)
+	{
+		const FCarriedPart& Carried = CarriedParts[Index];
+		UPrimitiveComponent* Part = Carried.Part.Get();
+		if (!Part)
+		{
+			continue;
+		}
+
+		// Detaching unwelds as well, so the part has its own body back before anything moves it.
+		Part->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		if (USceneComponent* Home = Carried.HomeParent.Get())
+		{
+			Part->AttachToComponent(Home, FAttachmentTransformRules::KeepWorldTransform, Carried.HomeSocket);
+		}
+	}
+	CarriedParts.Reset();
 }
 
 void UFXR_Grab::PlaceParkedBodies(const FTransform& HeldFrame)

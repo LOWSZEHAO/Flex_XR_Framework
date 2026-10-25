@@ -49,6 +49,8 @@ Every interaction is a component. Add it to an actor and it works, no collision 
 
 **Socket (`FXR_Socket`)**
 - Snap zones: bring an accepted object close, a ghost shows where it goes, let go and it seats.
+- Works on things that move: a magazine pushed into a gun you're holding stays in the gun, and if
+  you drop the gun they fall together as one body.
 
 **Climbing (`FXR_ClimbHold`)**
 - Grab a rung, ledge or pipe and pull yourself along it. Hand over hand across holds.

@@ -144,14 +144,20 @@ void UFXR_Socket::Seat(UFXR_Grab* Object)
 	// The same set the hold would park, not just the driven mesh: park less and a loose part keeps
 	// simulating and falls off whatever it was docked to.
 	Object->ParkPhysics();
+
+	// Hung on the socket straight away, so whatever the socket is on carries the object from here
+	// on. A magazine pushed into a gun you are holding has to move with the gun, mid-slide too.
+	Object->AttachHeld(this, NAME_None, false);
+
 	// Eased into place rather than teleported: the seat pose is where it lands, not how it gets there.
-	SeatStart = Object->GetHeldTransform();
-	SeatTarget = GetSeatTransform(Object);
+	// The start is kept relative to the socket, so the slide rides along if the socket is moving.
+	SeatStart = Object->GetHeldTransform().GetRelativeTransform(FTransform(GetComponentQuat(), GetComponentLocation()));
 	SeatElapsed = 0.f;
 	bSeating = SeatDuration > KINDA_SMALL_NUMBER;
 	if (!bSeating)
 	{
-		Object->SetHeldTransform(SeatTarget);
+		Object->SetHeldTransform(GetSeatTransform(Object));
+		FinishSeat(Object);
 	}
 
 	// Hand the pre-seat physics state over, or a later grab reads the parked body and the object can
@@ -173,6 +179,28 @@ void UFXR_Socket::Seat(UFXR_Grab* Object)
 	OnSocketed.Broadcast(Object);
 }
 
+void UFXR_Socket::FinishSeat(UFXR_Grab* Object)
+{
+	// Settled, so weld it into the mesh the socket sits on. If that mesh gets dropped with the object
+	// still in it, they fall as one body. Left as its own kinematic body, the seated part would shove
+	// the falling mesh around from the inside. Physics only welds to a mesh, so walk up past any plain
+	// scene components, and don't bother when the mesh can't move anyway.
+	const USceneComponent* Below = this;
+	USceneComponent* Carrier = GetAttachParent();
+	while (Carrier && !Carrier->IsA<UPrimitiveComponent>())
+	{
+		Below = Carrier;
+		Carrier = Carrier->GetAttachParent();
+	}
+
+	const UPrimitiveComponent* CarrierMesh = Cast<UPrimitiveComponent>(Carrier);
+	if (Object && CarrierMesh && CarrierMesh->GetMobility() == EComponentMobility::Movable
+		&& CollisionEnabledHasPhysics(CarrierMesh->GetCollisionEnabled()))
+	{
+		Object->AttachHeld(Carrier, Below->GetAttachSocketName(), true);
+	}
+}
+
 void UFXR_Socket::RefreshOccupancy()
 {
 	UFXR_Grab* Object = Socketed.Get();
@@ -183,8 +211,8 @@ void UFXR_Socket::RefreshOccupancy()
 		return;
 	}
 
-	// Grabbed back out. The grab itself restores physics on its own release, using the state handed
-	// over when it was seated.
+	// Grabbed back out. The grab took it off the socket as the hold began, and restores physics on
+	// its own release using the state handed over when it was seated.
 	if (Object->IsHeld())
 	{
 		Socketed = nullptr;
@@ -210,7 +238,9 @@ void UFXR_Socket::Eject()
 		Object->SetInteractionEnabled(true);
 	}
 
-	// Nobody is holding it, so this socket hands back exactly what it parked.
+	// Nobody is holding it, so this socket hands back exactly what it parked. Detached first, or it
+	// would come free of the socket only to stay stuck to it.
+	Object->DetachHeld();
 	Object->RestorePhysics();
 
 	BroadcastInteractionEvent(EFXR_InteractionPhase::Ended, nullptr);
@@ -247,15 +277,20 @@ void UFXR_Socket::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 			SeatElapsed += DeltaTime;
 			const float Alpha = FMath::Clamp(SeatElapsed / FMath::Max(SeatDuration, KINDA_SMALL_NUMBER), 0.f, 1.f);
 
-			// Eased so it settles into the mount instead of arriving at full speed.
+			// Eased so it settles into the mount instead of arriving at full speed. Blended in the
+			// socket's space and placed against where the socket is now, so a moving mount doesn't
+			// leave the object sliding toward the spot it used to be.
+			const FTransform Seat(GetComponentQuat(), GetComponentLocation());
+			const FTransform SeatLocal(FQuat::Identity, FVector::ZeroVector, SeatStart.GetScale3D());
 			FTransform Current;
-			Current.Blend(SeatStart, SeatTarget, FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f));
-			Object->SetHeldTransform(Current);
+			Current.Blend(SeatStart, SeatLocal, FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f));
+			Object->SetHeldTransform(Current * Seat);
 
 			if (Alpha >= 1.f)
 			{
 				bSeating = false;
 				Seating = nullptr;
+				FinishSeat(Object);
 			}
 		}
 	}
